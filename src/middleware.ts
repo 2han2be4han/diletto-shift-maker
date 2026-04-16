@@ -68,7 +68,8 @@ export const config = {
      * - _next/static, _next/image（Next.js内部）
      * - favicon.ico, *.svg, *.png 等の静的ファイル
      * - api/webhooks（Stripe Webhook は認証不要）
+     * - request/submit（職員の休み希望提出 = ログイン不要）
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/webhooks).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/webhooks|request/submit).*)',
   ],
 };
