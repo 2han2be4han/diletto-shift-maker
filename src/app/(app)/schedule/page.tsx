@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import ScheduleGrid from '@/components/schedule/ScheduleGrid';
 import PdfImportModal from '@/components/schedule/PdfImportModal';

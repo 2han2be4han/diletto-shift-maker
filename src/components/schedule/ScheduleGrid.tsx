@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { format, getDaysInMonth, getDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 

@@ -58,7 +58,7 @@ const emptyPattern = (): PatternItem => ({
 });
 
 /* 送迎パターンのテンプレートセット */
-const PRESET_BUNDLES = [
+const PRESET_BUNDLES: { id: string; name: string; description: string; patterns: PatternItem[] }[] = [
   {
     id: 'school',
     name: '学校プラン',

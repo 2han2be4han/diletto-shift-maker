@@ -1,6 +1,6 @@
 'use client';
 
-import { type ButtonHTMLAttributes, type ReactNode } from 'react';
+import React, { type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 /**
  * ボタン4バリアント（デザインルールブック準拠）
