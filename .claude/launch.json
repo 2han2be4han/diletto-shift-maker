@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shift-maker-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5000,
+      "cwd": "C:\\Users\\2han2\\Projects\\diletto-shift-maker"
+    }
+  ]
+}
