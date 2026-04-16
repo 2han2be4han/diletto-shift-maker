@@ -132,66 +132,248 @@ export default function ExcelPasteModal({
         )}
 
         {step === 'preview' && (
-          <>
-            <div className="flex items-center gap-3 flex-wrap">
-              <Badge variant="success">{parsed.length}件 検出</Badge>
-              <Badge variant="info">{childNames.length}名</Badge>
-            </div>
-
-            <div
-              className="overflow-auto"
-              style={{ maxHeight: '400px', borderRadius: '6px', border: '1px solid var(--rule)' }}
-            >
-              <table className="w-full border-collapse" style={{ fontSize: '0.8rem' }}>
-                <thead>
-                  <tr>
-                    {['児童名', '日付', '迎え', '送り', '備考'].map((h) => (
-                      <th
-                        key={h}
-                        className="sticky top-0 px-3 py-2 text-left font-semibold"
-                        style={{ background: 'var(--ink)', color: '#fff' }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.map((entry, i) => (
-                    <tr key={i} className="hover:bg-[var(--accent-pale)]">
-                      <td className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)', fontWeight: i === 0 || parsed[i - 1].child_name !== entry.child_name ? 600 : 400 }}>
-                        {i === 0 || parsed[i - 1].child_name !== entry.child_name ? entry.child_name : ''}
-                      </td>
-                      <td className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                        {entry.date}
-                      </td>
-                      <td className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--accent)' }}>
-                        {entry.pickup_time || '-'}
-                      </td>
-                      <td className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--green)' }}>
-                        {entry.dropoff_time || '-'}
-                      </td>
-                      <td className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
-                        {entry.area_label || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setStep('paste')}>
-                戻る
-              </Button>
-              <Button variant="primary" onClick={handleConfirm}>
-                この内容で登録する（{parsed.length}件）
-              </Button>
-            </div>
-          </>
+          <ExcelGridPreview
+            parsed={parsed}
+            onParsedChange={setParsed}
+            childNames={childNames}
+            onBack={() => setStep('paste')}
+            onConfirm={handleConfirm}
+          />
         )}
       </div>
     </Modal>
+  );
+}
+
+/* ================================================================
+ * Excel風グリッドプレビュー（児童×日付）
+ * パースされたデータをデイロボ風のグリッドで表示し、セルを直接編集可能
+ * ================================================================ */
+
+function ExcelGridPreview({
+  parsed,
+  onParsedChange,
+  childNames,
+  onBack,
+  onConfirm,
+}: {
+  parsed: ParsedScheduleEntry[];
+  onParsedChange: (entries: ParsedScheduleEntry[]) => void;
+  childNames: string[];
+  onBack: () => void;
+  onConfirm: () => void;
+}) {
+  const [editingCell, setEditingCell] = useState<{ child: string; date: string } | null>(null);
+
+  /* 日付リストを抽出してソート */
+  const dates = [...new Set(parsed.map((e) => e.date))].sort();
+
+  /* 児童×日付のマップを構築 */
+  const cellMap = new Map<string, ParsedScheduleEntry>();
+  parsed.forEach((e) => cellMap.set(`${e.child_name}_${e.date}`, e));
+
+  /* セル編集 */
+  const handleCellUpdate = (
+    childName: string,
+    date: string,
+    field: 'pickup_time' | 'dropoff_time',
+    value: string
+  ) => {
+    const key = `${childName}_${date}`;
+    const existing = cellMap.get(key);
+    if (existing) {
+      onParsedChange(
+        parsed.map((e) =>
+          e.child_name === childName && e.date === date
+            ? { ...e, [field]: value || null }
+            : e
+        )
+      );
+    }
+  };
+
+  /* 行削除 */
+  const handleDeleteChild = (childName: string) => {
+    onParsedChange(parsed.filter((e) => e.child_name !== childName));
+  };
+
+  /* 日付のフォーマット（YYYY-MM-DD → D） */
+  const formatDay = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    const dow = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+    return { day, dow, isWeekend: d.getDay() === 0 || d.getDay() === 6 };
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-3 flex-wrap">
+        <Badge variant="success">{parsed.length}件</Badge>
+        <Badge variant="info">{childNames.length}名</Badge>
+        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>セルをクリックして時間を修正できます</span>
+      </div>
+
+      <div
+        className="overflow-auto"
+        style={{ maxHeight: '450px', borderRadius: '6px', border: '1px solid var(--rule)' }}
+      >
+        <table
+          className="border-collapse"
+          style={{ fontSize: '0.75rem', minWidth: `${dates.length * 72 + 120}px` }}
+        >
+          <thead>
+            <tr>
+              <th
+                className="sticky left-0 z-10 px-2 py-1.5 text-left font-semibold"
+                style={{
+                  background: 'var(--ink)', color: '#fff',
+                  borderRight: '2px solid rgba(255,255,255,0.2)',
+                  minWidth: '100px',
+                }}
+              >
+                氏名
+              </th>
+              {dates.map((date) => {
+                const { day, dow, isWeekend } = formatDay(date);
+                return (
+                  <th
+                    key={date}
+                    className="px-1 py-1.5 text-center font-semibold whitespace-nowrap"
+                    style={{
+                      background: 'var(--ink)', color: isWeekend ? 'rgba(255,255,255,0.5)' : '#fff',
+                      borderRight: '1px solid rgba(255,255,255,0.1)',
+                      minWidth: '64px',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{dow}</div>
+                    <div>{day}</div>
+                  </th>
+                );
+              })}
+              <th
+                className="px-2 py-1.5 text-center font-semibold"
+                style={{ background: 'var(--ink)', color: '#fff', minWidth: '36px' }}
+              >
+                削除
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {childNames.map((childName) => (
+              <tr key={childName}>
+                <td
+                  className="sticky left-0 z-10 px-2 py-1 font-medium whitespace-nowrap"
+                  style={{
+                    background: 'var(--white)',
+                    borderBottom: '1px solid var(--rule)',
+                    borderRight: '2px solid var(--rule-strong)',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  {childName}
+                </td>
+                {dates.map((date) => {
+                  const entry = cellMap.get(`${childName}_${date}`);
+                  const isEditing = editingCell?.child === childName && editingCell?.date === date;
+                  const { isWeekend } = formatDay(date);
+
+                  return (
+                    <td
+                      key={date}
+                      className="px-0.5 py-0.5 text-center cursor-pointer transition-colors hover:bg-[var(--accent-pale)]"
+                      style={{
+                        borderBottom: '1px solid var(--rule)',
+                        borderRight: '1px solid var(--rule)',
+                        background: isWeekend ? 'rgba(0,0,0,0.02)' : 'transparent',
+                        position: 'relative',
+                      }}
+                      onClick={() => setEditingCell(entry ? { child: childName, date } : null)}
+                    >
+                      {entry?.area_label ? (
+                        <span className="text-xs" style={{ color: 'var(--accent)' }}>{entry.area_label}</span>
+                      ) : entry ? (
+                        <div className="flex flex-col leading-tight">
+                          {entry.pickup_time && (
+                            <span style={{ color: 'var(--accent)', fontSize: '0.68rem' }}>迎 {entry.pickup_time}</span>
+                          )}
+                          {entry.dropoff_time && (
+                            <span style={{ color: 'var(--green)', fontSize: '0.68rem' }}>送 {entry.dropoff_time}</span>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {/* インライン編集ポップオーバー */}
+                      {isEditing && entry && (
+                        <div
+                          className="absolute z-20 left-1/2 -translate-x-1/2 top-full mt-1 p-2 flex flex-col gap-1.5 w-36"
+                          style={{
+                            background: 'var(--white)', borderRadius: '6px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)', border: '1px solid var(--rule)',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="text-xs font-semibold" style={{ color: 'var(--ink)' }}>
+                            {childName} {formatDay(date).day}日
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs w-6" style={{ color: 'var(--accent)' }}>迎</span>
+                            <input
+                              type="time"
+                              value={entry.pickup_time || ''}
+                              onChange={(e) => handleCellUpdate(childName, date, 'pickup_time', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs outline-none"
+                              style={{ border: '1px solid var(--rule)', borderRadius: '3px', color: 'var(--ink)' }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs w-6" style={{ color: 'var(--green)' }}>送</span>
+                            <input
+                              type="time"
+                              value={entry.dropoff_time || ''}
+                              onChange={(e) => handleCellUpdate(childName, date, 'dropoff_time', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs outline-none"
+                              style={{ border: '1px solid var(--rule)', borderRadius: '3px', color: 'var(--ink)' }}
+                            />
+                          </div>
+                          <button
+                            onClick={() => setEditingCell(null)}
+                            className="text-xs font-semibold py-0.5 rounded"
+                            style={{ background: 'var(--accent)', color: '#fff', borderRadius: '3px' }}
+                          >
+                            OK
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+                <td
+                  className="px-1 py-1 text-center"
+                  style={{ borderBottom: '1px solid var(--rule)' }}
+                >
+                  <button
+                    onClick={() => handleDeleteChild(childName)}
+                    className="text-xs hover:opacity-70"
+                    style={{ color: 'var(--red)' }}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex gap-2">
+        <Button variant="secondary" onClick={onBack}>
+          戻る
+        </Button>
+        <Button variant="primary" onClick={onConfirm}>
+          この内容で登録する（{parsed.length}件）
+        </Button>
+      </div>
+    </>
   );
 }
 
