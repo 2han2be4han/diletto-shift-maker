@@ -40,6 +40,8 @@ type CellData = {
   date: string;
   pickup_time: string | null;
   dropoff_time: string | null;
+  pickup_method: 'self' | 'pickup';
+  dropoff_method: 'self' | 'dropoff';
   note: string | null;
 };
 
@@ -59,15 +61,22 @@ function generateMockCells(): CellData[] {
         cells.push({
           child_id: child.id,
           date: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-          pickup_time: null, dropoff_time: null, note: '追・休',
+          pickup_time: null, dropoff_time: null,
+          pickup_method: 'pickup', dropoff_method: 'dropoff',
+          note: '追・休',
         });
         continue;
       }
+      /* 10%の確率で「自分で来る」にする */
+      const isSelfPickup = Math.random() < 0.1;
+      const isSelfDropoff = Math.random() < 0.1;
       cells.push({
         child_id: child.id,
         date: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
         pickup_time: pickupTimes[Math.floor(Math.random() * pickupTimes.length)],
         dropoff_time: dropoffTimes[Math.floor(Math.random() * dropoffTimes.length)],
+        pickup_method: isSelfPickup ? 'self' : 'pickup',
+        dropoff_method: isSelfDropoff ? 'self' : 'dropoff',
         note: null,
       });
     }
@@ -150,8 +159,8 @@ export default function SchedulePage() {
     } else {
       setAttendance('absent');
     }
-    setPickupMethod('pickup');
-    setDropoffMethod('dropoff');
+    setPickupMethod(cellData?.pickup_method || 'pickup');
+    setDropoffMethod(cellData?.dropoff_method || 'dropoff');
     setSelectedCell({ childId, date });
   };
 
@@ -264,8 +273,11 @@ export default function SchedulePage() {
               <>
                 {/* 来所予定時間 */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+                  <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
                     来所予定時間
+                    {pickupMethod === 'self' && (
+                      <span className="text-xs font-normal" style={{ color: 'var(--ink-3)' }}>（送迎なし）</span>
+                    )}
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -300,8 +312,11 @@ export default function SchedulePage() {
 
                 {/* 退所予定時間 */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+                  <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
                     退所予定時間
+                    {dropoffMethod === 'self' && (
+                      <span className="text-xs font-normal" style={{ color: 'var(--ink-3)' }}>（送迎なし）</span>
+                    )}
                   </label>
                   <div className="flex items-center gap-2">
                     <input

@@ -23,6 +23,8 @@ type ScheduleCellData = {
   date: string;
   pickup_time: string | null;
   dropoff_time: string | null;
+  pickup_method: 'self' | 'pickup'; // self=自分で来る, pickup=お迎え
+  dropoff_method: 'self' | 'dropoff'; // self=自分で帰る, dropoff=送り
   note: string | null; // 追・休、定・休 など
 };
 
@@ -173,12 +175,28 @@ export default function ScheduleGrid({
                       </span>
                     ) : hasData ? (
                       <div className="flex flex-col gap-0 leading-tight">
-                        <span style={{ color: 'var(--accent)', fontSize: '0.72rem' }}>
-                          迎 {cell.pickup_time}
-                        </span>
-                        <span style={{ color: 'var(--green)', fontSize: '0.72rem' }}>
-                          送 {cell.dropoff_time}
-                        </span>
+                        {cell.pickup_time && (
+                          cell.pickup_method === 'self' ? (
+                            <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
+                              {cell.pickup_time}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--accent)', fontSize: '0.72rem' }}>
+                              迎 {cell.pickup_time}
+                            </span>
+                          )
+                        )}
+                        {cell.dropoff_time && (
+                          cell.dropoff_method === 'self' ? (
+                            <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
+                              {cell.dropoff_time}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--green)', fontSize: '0.72rem' }}>
+                              送 {cell.dropoff_time}
+                            </span>
+                          )
+                        )}
                       </div>
                     ) : null}
                   </td>
