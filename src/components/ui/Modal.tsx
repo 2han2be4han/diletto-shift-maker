@@ -2,14 +2,24 @@
 
 import { type ReactNode, useEffect } from 'react';
 
+type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+
 type ModalProps = {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  size?: ModalSize;
 };
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+const SIZE_CLASSES: Record<ModalSize, string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-lg',
+  lg: 'max-w-3xl',
+  xl: 'max-w-5xl',
+};
+
+export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   /* ESCキーで閉じる */
   useEffect(() => {
     if (!isOpen) return;
@@ -29,13 +39,12 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto"
+        className={`w-full ${SIZE_CLASSES[size]} mx-4 max-h-[85vh] overflow-y-auto`}
         style={{
           background: 'var(--white)',
           borderRadius: '8px',
           boxShadow: '0 20px 48px rgba(0,0,0,0.12)',
         }}
-        /* 背景クリックで閉じないようにする */
         onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}

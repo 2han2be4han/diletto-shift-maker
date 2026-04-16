@@ -32,6 +32,7 @@ type TransportDayViewProps = {
     field: 'pickup' | 'dropoff',
     staffIds: string[]
   ) => void;
+  onAddPattern?: (childName: string, pickupTime: string | null, dropoffTime: string | null) => void;
   disabled?: boolean;
 };
 
@@ -39,6 +40,7 @@ export default function TransportDayView({
   children,
   availableStaff,
   onStaffChange,
+  onAddPattern,
   disabled = false,
 }: TransportDayViewProps) {
   if (children.length === 0) {
@@ -86,6 +88,14 @@ export default function TransportDayView({
             >
               送り担当
             </th>
+            {onAddPattern && (
+              <th
+                className="px-2 py-2 text-center font-semibold"
+                style={{ background: 'var(--ink)', color: '#fff', minWidth: '60px' }}
+              >
+                設定
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -158,6 +168,23 @@ export default function TransportDayView({
                   disabled={disabled}
                 />
               </td>
+
+              {/* パターン登録ボタン */}
+              {onAddPattern && (
+                <td
+                  className="px-2 py-1.5 text-center"
+                  style={{ borderBottom: '1px solid var(--rule)' }}
+                >
+                  <button
+                    onClick={() => onAddPattern(child.name, child.pickupTime, child.dropoffTime)}
+                    className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
+                    style={{ color: 'var(--accent)' }}
+                    title={`${child.name}の送迎パターンに登録`}
+                  >
+                    + 登録
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

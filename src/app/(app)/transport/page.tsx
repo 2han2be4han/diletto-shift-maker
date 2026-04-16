@@ -240,6 +240,10 @@ export default function TransportPage() {
               }))}
               availableStaff={MOCK_STAFF}
               onStaffChange={handleStaffChange}
+              onAddPattern={(childName, pickupTime, dropoffTime) => {
+                // TODO: Supabase連携後にchild_transport_patternsに保存
+                alert(`${childName}の送迎パターンに登録:\n迎え ${pickupTime || '未設定'}\n送り ${dropoffTime || '未設定'}\n\n※ DB連携後に児童設定ページにも反映されます`);
+              }}
               disabled={confirmed}
             />
           </>

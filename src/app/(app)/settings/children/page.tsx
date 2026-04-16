@@ -190,7 +190,7 @@ export default function ChildrenSettingsPage() {
       </div>
 
       {/* 編集モーダル */}
-      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={isNew ? '児童追加' : `${editing?.name} の設定`}>
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={isNew ? '児童追加' : `${editing?.name} の設定`} size="lg">
         {editing && (
           <div className="flex flex-col gap-5">
             {/* 基本情報 */}
