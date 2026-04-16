@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000)",
+      "mcp__72eff97c-5745-4084-95ca-c6438315b490__list_organizations",
+      "Bash(ls \"C:/Users/2han2/Projects/diletto/.env\"*)",
+      "Bash(ls \"C:/Users/2han2/Projects/diletto-gyomu-shindan/.env\"*)",
+      "mcp__72eff97c-5745-4084-95ca-c6438315b490__list_tables",
+      "mcp__72eff97c-5745-4084-95ca-c6438315b490__list_projects",
+      "Bash(grep -r \"login\\\\|auth\\\\|signin\\\\|password\" /c/Users/2han2/Projects/diletto --include=\"*.html\" --include=\"*.css\" --include=\"*.js\" ! -path \"*/node_modules/*\" ! -path \"*/.claude/*\")",
+      "Bash(grep -r \"auth\\\\|signin\" /c/Users/2han2/Projects/diletto --include=\"*.html\" --include=\"*.css\" --include=\"*.js\" ! -path \"*/node_modules/*\" ! -path \"*/.claude/*\")",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(rm -rf .next)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/login)",
+      "Bash(node -e \"console.log\\('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'NOT SET'\\); console.log\\('ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'\\); console.log\\('SERVICE_ROLE:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'NOT SET'\\);\")"
+    ]
+  }
+}
