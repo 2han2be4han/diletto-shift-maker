@@ -13,7 +13,8 @@
       "Bash(taskkill //F //IM node.exe)",
       "Bash(rm -rf .next)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/login)",
-      "Bash(node -e \"console.log\\('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'NOT SET'\\); console.log\\('ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'\\); console.log\\('SERVICE_ROLE:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'NOT SET'\\);\")"
+      "Bash(node -e \"console.log\\('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'NOT SET'\\); console.log\\('ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'\\); console.log\\('SERVICE_ROLE:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'NOT SET'\\);\")",
+      "Bash(ls /c/Users/2han2/Projects/diletto-shift-maker/next.config.*)"
     ]
   }
 }

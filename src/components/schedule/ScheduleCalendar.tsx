@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import type { EventContentArg, DateClickArg } from '@fullcalendar/core';
+import type { EventContentArg } from '@fullcalendar/core';
+import type { DateClickArg } from '@fullcalendar/interaction';
 
 /**
  * 利用予定カレンダー
