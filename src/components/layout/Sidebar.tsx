@@ -25,8 +25,13 @@ const NAV_ITEMS = [
   { href: '/request', label: '休み希望', icon: '✋' },
 ];
 
+const NAV_SETTINGS = [
+  { href: '/settings/tenant', label: 'テナント設定', icon: '🏢' },
+  { href: '/settings/staff', label: '職員管理', icon: '👤' },
+  { href: '/settings/children', label: '児童管理', icon: '🧒' },
+];
+
 const NAV_BOTTOM = [
-  { href: '/settings/tenant', label: '設定', icon: '⚙️' },
   { href: '/billing', label: '契約管理', icon: '💳' },
 ];
 
@@ -92,6 +97,29 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
             </li>
           ))}
         </ul>
+
+        {/* 設定セクション */}
+        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--rule)' }}>
+          <p className="px-3 mb-1 text-xs font-semibold" style={{ color: 'var(--ink-3)' }}>設定</p>
+          <ul className="flex flex-col gap-1">
+            {NAV_SETTINGS.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onClose}
+                  className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                  style={{
+                    color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
+                    background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
+                  }}
+                >
+                  <span className="text-base">{item.icon}</span>
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
 
       {/* 下部ナビ */}

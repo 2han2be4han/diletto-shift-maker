@@ -256,7 +256,7 @@ export default function ChildrenSettingsPage() {
 
                   {/* 迎え */}
                   <div className="grid grid-cols-4 gap-2 items-center">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>迎え</span>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>迎 🚗←</span>
                     <input type="text" value={p.pickup_location} onChange={(e) => updatePattern(i, 'pickup_location', e.target.value)} placeholder="場所" className="outline-none" style={smallInput} />
                     <input type="time" value={p.pickup_time} onChange={(e) => updatePattern(i, 'pickup_time', e.target.value)} className="outline-none" style={smallInput} />
                     <select value={p.pickup_method} onChange={(e) => updatePattern(i, 'pickup_method', e.target.value)} className="outline-none" style={smallInput}>
@@ -266,7 +266,7 @@ export default function ChildrenSettingsPage() {
 
                   {/* 送り */}
                   <div className="grid grid-cols-4 gap-2 items-center">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>送り</span>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>送 🚗→</span>
                     <input type="text" value={p.dropoff_location} onChange={(e) => updatePattern(i, 'dropoff_location', e.target.value)} placeholder="場所" className="outline-none" style={smallInput} />
                     <input type="time" value={p.dropoff_time} onChange={(e) => updatePattern(i, 'dropoff_time', e.target.value)} className="outline-none" style={smallInput} />
                     <select value={p.dropoff_method} onChange={(e) => updatePattern(i, 'dropoff_method', e.target.value)} className="outline-none" style={smallInput}>
