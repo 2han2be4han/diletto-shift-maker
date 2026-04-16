@@ -1,26 +1,50 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+JP:wght@300;400;500;600;700;800;900&display=swap');
 
+/* ===== ShiftPuzzle デザイントークン（ライトテーマ） ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --- カラー --- */
+  --bg: #f5f4f0;
+  --white: #ffffff;
+  --ink: #111111;
+  --ink-2: #5a5a55;
+  --ink-3: #a8a8a0;
+  --accent: #1a3eb8;
+  --gold: #8a6120;
+  --green: #2a7a52;
+  --red: #9b3333;
+
+  /* --- 透過バリアント --- */
+  --accent-pale: rgba(26, 62, 184, 0.07);
+  --accent-mid: rgba(26, 62, 184, 0.15);
+  --green-pale: rgba(42, 122, 82, 0.07);
+  --red-pale: rgba(155, 51, 51, 0.06);
+  --gold-pale: rgba(138, 97, 32, 0.07);
+  --rule: rgba(0, 0, 0, 0.1);
+  --rule-strong: rgba(0, 0, 0, 0.2);
+
+  /* --- トランジション --- */
+  --r: 0.3s ease;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-white: var(--white);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-gold: var(--gold);
+  --font-sans: 'Inter', 'Noto Sans JP', sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  font-weight: 400;
 }
