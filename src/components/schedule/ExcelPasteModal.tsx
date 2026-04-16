@@ -5,6 +5,7 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import type { ParsedScheduleEntry } from '@/types';
+import { parseChildName } from '@/lib/utils/parseChildName';
 
 /**
  * Excelコピペインポートモーダル
@@ -259,7 +260,9 @@ function ExcelGridPreview({
             </tr>
           </thead>
           <tbody>
-            {childNames.map((childName) => (
+            {childNames.map((childName) => {
+              const { name, gradeLabel } = parseChildName(childName);
+              return (
               <tr key={childName}>
                 <td
                   className="sticky left-0 z-10 px-2 py-1 font-medium whitespace-nowrap"
@@ -270,7 +273,17 @@ function ExcelGridPreview({
                     color: 'var(--ink)',
                   }}
                 >
-                  {childName}
+                  <div className="flex items-center gap-1.5">
+                    <span>{name}</span>
+                    {gradeLabel && (
+                      <span
+                        className="text-xs px-1 rounded"
+                        style={{ background: 'var(--accent-pale)', color: 'var(--accent)', fontSize: '0.6rem' }}
+                      >
+                        {gradeLabel}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 {dates.map((date) => {
                   const entry = cellMap.get(`${childName}_${date}`);
@@ -360,7 +373,8 @@ function ExcelGridPreview({
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
