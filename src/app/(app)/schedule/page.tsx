@@ -195,24 +195,24 @@ export default function SchedulePage() {
       <Header
         title="利用予定"
         onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
-
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
-              2026年4月
-            </h2>
-            <Badge variant="info">{MOCK_CHILDREN.length}名登録</Badge>
-          </div>
-          <div className="flex gap-2">
+        actions={
+          <>
             <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>
               Excelから貼り付け
             </Button>
             <Button variant="primary" onClick={() => setPdfModalOpen(true)}>
               PDFインポート
             </Button>
-          </div>
+          </>
+        }
+      />
+
+      <div className="p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
+            2026年4月
+          </h2>
+          <Badge variant="info">{MOCK_CHILDREN.length}名登録</Badge>
         </div>
 
         <ScheduleGrid
