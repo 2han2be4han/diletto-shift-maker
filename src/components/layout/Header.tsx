@@ -1,19 +1,25 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useSidebarToggle } from '@/app/(app)/layout';
 
 type HeaderProps = {
   title: string;
-  onMenuToggle: () => void;
+  onMenuToggle?: () => void;
   actions?: ReactNode;
 };
 
 /**
  * ページヘッダー
- * - タブレット以下: ハンバーガーメニューボタン表示
+ * - タブレット以下: ハンバーガーメニューボタン → サイドバー開閉
  * - デスクトップ: ページタイトル + 右側にアクションボタン
+ *
+ * onMenuToggle未指定時はSidebarContextのtoggleを使用
  */
 export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
+  const { toggle } = useSidebarToggle();
+  const handleToggle = onMenuToggle || toggle;
+
   return (
     <header
       className="flex items-center justify-between gap-4 px-6 py-3 shrink-0"
@@ -22,7 +28,7 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
       <div className="flex items-center gap-4">
         {/* ハンバーガー（タブレット以下のみ表示） */}
         <button
-          onClick={onMenuToggle}
+          onClick={handleToggle}
           className="lg:hidden flex flex-col justify-center items-center w-8 h-8 gap-1.5"
           aria-label="メニューを開く"
         >

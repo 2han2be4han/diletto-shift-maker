@@ -25,10 +25,31 @@ const DEFAULT_AREAS: AreaLabel[] = [
   { emoji: '🍶', name: '学童エリア' },
 ];
 
+/**
+ * 資格種類の定義
+ * - countable: 人員配置基準でカウントされる資格
+ * - non_countable: 配置基準外（児発管・専門職員・加配加算）
+ */
+type QualificationType = {
+  name: string;
+  countable: boolean; // true=有資格者カウント対象
+};
+
+const DEFAULT_QUALIFICATIONS: QualificationType[] = [
+  { name: '保育士', countable: true },
+  { name: '幼稚園教諭', countable: true },
+  { name: '児童指導員', countable: true },
+  { name: '教師', countable: true },
+  { name: '児童発達支援管理責任者', countable: false },
+  { name: '専門職員', countable: false },
+  { name: '加配加算', countable: false },
+];
+
 export default function TenantSettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tenantName, setTenantName] = useState('サンプル事業所');
   const [areas, setAreas] = useState<AreaLabel[]>(DEFAULT_AREAS);
+  const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
   const [requestDeadline, setRequestDeadline] = useState(20);
   const [saved, setSaved] = useState(false);
@@ -123,9 +144,73 @@ export default function TenantSettingsPage() {
             </div>
           </div>
 
+          {/* 資格種類管理 */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>資格種類</label>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              「カウント対象」がONの資格を持つ職員が、シフト生成時の有資格者カウントに含まれます。
+              <br />児発管・専門職員・加配加算などはOFFにしてください。
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {qualifications.map((q, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 px-3 py-2"
+                  style={{
+                    background: q.countable ? 'var(--green-pale)' : 'var(--bg)',
+                    borderRadius: '6px',
+                    border: `1px solid ${q.countable ? 'rgba(42,122,82,0.15)' : 'var(--rule)'}`,
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={q.name}
+                    onChange={(e) => {
+                      const updated = [...qualifications];
+                      updated[i] = { ...q, name: e.target.value };
+                      setQualifications(updated);
+                    }}
+                    className="flex-1 outline-none text-sm bg-transparent"
+                    style={{ color: 'var(--ink)' }}
+                  />
+                  <label className="flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={q.countable}
+                      onChange={(e) => {
+                        const updated = [...qualifications];
+                        updated[i] = { ...q, countable: e.target.checked };
+                        setQualifications(updated);
+                      }}
+                    />
+                    <span style={{ color: q.countable ? 'var(--green)' : 'var(--ink-3)' }}>
+                      カウント対象
+                    </span>
+                  </label>
+                  <button
+                    onClick={() => setQualifications(qualifications.filter((_, j) => j !== i))}
+                    className="text-xs px-1 hover:opacity-70"
+                    style={{ color: 'var(--red)' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <Button
+                variant="secondary"
+                onClick={() => setQualifications([...qualifications, { name: '', countable: true }])}
+              >
+                + 資格追加
+              </Button>
+            </div>
+          </div>
+
           {/* 有資格者最低出勤人数 */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>有資格者の最低出勤人数</label>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              上記で「カウント対象」ONの資格を持つ職員がこの人数以上出勤するようにシフトを生成します。
+            </p>
             <input
               type="number"
               min={1}

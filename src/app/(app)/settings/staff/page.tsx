@@ -25,18 +25,31 @@ type StaffItem = {
   default_start_time: string;
   default_end_time: string;
   transport_areas: string[];
-  is_qualified: boolean;
+  qualifications: string[]; // 資格名の配列
+  is_qualified: boolean; // カウント対象資格を1つ以上持つか（自動計算）
 };
+
+const QUALIFICATION_OPTIONS = [
+  { name: '保育士', countable: true },
+  { name: '幼稚園教諭', countable: true },
+  { name: '児童指導員', countable: true },
+  { name: '教師', countable: true },
+  { name: '児童発達支援管理責任者', countable: false },
+  { name: '専門職員', countable: false },
+  { name: '加配加算', countable: false },
+];
+
+const COUNTABLE_QUALIFICATIONS = QUALIFICATION_OPTIONS.filter((q) => q.countable).map((q) => q.name);
 
 const MOCK_AREAS = ['🍇 藤江', '🌳 豊明', '🏭 大府', '✈ 常滑', '🍶 学童'];
 
 const INITIAL_STAFF: StaffItem[] = [
-  { id: 's1', name: '金田', email: 'kaneda@example.com', role: 'admin', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇 藤江', '🌳 豊明'], is_qualified: true },
-  { id: 's2', name: '加藤', email: 'kato@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇 藤江', '🏭 大府'], is_qualified: true },
-  { id: 's3', name: '鈴木', email: 'suzuki@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🌳 豊明', '✈ 常滑'], is_qualified: false },
-  { id: 's4', name: '田中', email: 'tanaka@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:30', default_end_time: '17:30', transport_areas: ['🍇 藤江'], is_qualified: false },
-  { id: 's5', name: '佐藤', email: 'sato@example.com', role: 'viewer', employment_type: 'part_time', default_start_time: '10:00', default_end_time: '16:00', transport_areas: ['🌳 豊明'], is_qualified: false },
-  { id: 's6', name: '山本', email: 'yamamoto@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🏭 大府', '✈ 常滑'], is_qualified: true },
+  { id: 's1', name: '金田', email: 'kaneda@example.com', role: 'admin', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇 藤江', '🌳 豊明'], qualifications: ['保育士'], is_qualified: true },
+  { id: 's2', name: '加藤', email: 'kato@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇 藤江', '🏭 大府'], qualifications: ['児童指導員'], is_qualified: true },
+  { id: 's3', name: '鈴木', email: 'suzuki@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🌳 豊明', '✈ 常滑'], qualifications: ['児童発達支援管理責任者'], is_qualified: false },
+  { id: 's4', name: '田中', email: 'tanaka@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:30', default_end_time: '17:30', transport_areas: ['🍇 藤江'], qualifications: [], is_qualified: false },
+  { id: 's5', name: '佐藤', email: 'sato@example.com', role: 'viewer', employment_type: 'part_time', default_start_time: '10:00', default_end_time: '16:00', transport_areas: ['🌳 豊明'], qualifications: [], is_qualified: false },
+  { id: 's6', name: '山本', email: 'yamamoto@example.com', role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🏭 大府', '✈ 常滑'], qualifications: ['保育士', '幼稚園教諭'], is_qualified: true },
 ];
 
 const ROLE_LABELS: Record<StaffRole, string> = { admin: '管理者', editor: '編集者', viewer: '閲覧者' };
@@ -46,7 +59,7 @@ const emptyStaff = (): StaffItem => ({
   id: `s${Date.now()}`,
   name: '', email: '', role: 'editor', employment_type: 'full_time',
   default_start_time: '09:00', default_end_time: '17:00',
-  transport_areas: [], is_qualified: false,
+  transport_areas: [], qualifications: [], is_qualified: false,
 });
 
 export default function StaffSettingsPage() {
@@ -135,8 +148,26 @@ export default function StaffSettingsPage() {
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {s.transport_areas.join('  ')}
                   </td>
-                  <td className="px-3 py-2 text-center" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    {s.is_qualified && <Badge variant="success">✓</Badge>}
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
+                    {s.qualifications.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {s.qualifications.map((q) => (
+                          <span
+                            key={q}
+                            className="px-1.5 py-0.5 rounded text-xs"
+                            style={{
+                              background: COUNTABLE_QUALIFICATIONS.includes(q) ? 'var(--green-pale)' : 'var(--bg)',
+                              color: COUNTABLE_QUALIFICATIONS.includes(q) ? 'var(--green)' : 'var(--ink-3)',
+                              fontSize: '0.7rem',
+                            }}
+                          >
+                            {q}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--ink-3)' }}>-</span>
+                    )}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                     <button
@@ -222,16 +253,41 @@ export default function StaffSettingsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={editing.is_qualified}
-                onChange={(e) => setEditing({ ...editing, is_qualified: e.target.checked })}
-                id="qualified"
-              />
-              <label htmlFor="qualified" className="text-sm font-medium" style={{ color: 'var(--ink-2)' }}>
-                有資格者（児童発達支援管理責任者・保育士等）
-              </label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保有資格</label>
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                緑=カウント対象 / グレー=配置基準外
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {QUALIFICATION_OPTIONS.map((q) => {
+                  const has = editing.qualifications.includes(q.name);
+                  return (
+                    <button
+                      key={q.name}
+                      type="button"
+                      onClick={() => {
+                        const updated = has
+                          ? editing.qualifications.filter((n) => n !== q.name)
+                          : [...editing.qualifications, q.name];
+                        const isQualified = updated.some((n) => COUNTABLE_QUALIFICATIONS.includes(n));
+                        setEditing({ ...editing, qualifications: updated, is_qualified: isQualified });
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+                      style={{
+                        background: has
+                          ? (q.countable ? 'var(--green)' : 'var(--ink-3)')
+                          : 'var(--bg)',
+                        color: has ? '#fff' : (q.countable ? 'var(--green)' : 'var(--ink-3)'),
+                        border: `1px solid ${has
+                          ? (q.countable ? 'var(--green)' : 'var(--ink-3)')
+                          : 'var(--rule)'}`,
+                      }}
+                    >
+                      {q.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex gap-2 mt-2">
