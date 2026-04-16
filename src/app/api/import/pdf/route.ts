@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const base64 = Buffer.from(arrayBuffer).toString('base64');
 
     /* Claude APIで解析 */
-    const result = await parsePdfToSchedule(base64, file.type);
+    const result = await parsePdfToSchedule(base64);
 
     return NextResponse.json({
       entries: result.entries,

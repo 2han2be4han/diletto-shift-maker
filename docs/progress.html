@@ -18,6 +18,96 @@
 </head>
 <body>
     <h1>実装進捗表: 送迎管理・連携強化フェーズ</h1>
+
+    <h2>ホットフィックス: データ取得不可 / ビルドエラー（2026-04-16）</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ステップ</th>
+                <th>対応内容</th>
+                <th>対象ファイル</th>
+                <th>ステータス</th>
+                <th>完了率</th>
+                <th>備考</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>原因調査</td>
+                <td>middleware.ts, next.config.ts, ShiftGrid.tsx, parsePdf.ts</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>f3015bd で DEV_SKIP_AUTH が除去された + 921a465 で静的エクスポートが入って API ルートが壊れていた</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>middleware.ts の DEV_SKIP_AUTH 早期 return を復活</td>
+                <td>src/middleware.ts</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>開発中は認証スキップで全ページアクセス可に戻す</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>next.config.ts から output:'export' / basePath を削除</td>
+                <td>next.config.ts</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>API ルート・middleware を殺していた GitHub Pages 用設定を撤去</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>GitHub Pages デプロイ用ワークフロー削除</td>
+                <td>.github/workflows/deploy.yml</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>デプロイ先は Vercel 想定（CLAUDE.md §1）</td>
+            </tr>
+            <tr>
+                <td>5</td>
+                <td>ShiftGrid の dailyCounts 未定義参照を修正</td>
+                <td>src/components/shift/ShiftGrid.tsx</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>dailyWorkingCount に合わせた</td>
+            </tr>
+            <tr>
+                <td>6</td>
+                <td>parsePdf の media_type 型エラー修正</td>
+                <td>src/lib/anthropic/parsePdf.ts, src/app/api/import/pdf/route.ts</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>mediaType を 'application/pdf' リテラル型で固定</td>
+            </tr>
+            <tr>
+                <td>7</td>
+                <td>Supabase クライアント初期化を env 未設定でも壊さないよう修正</td>
+                <td>src/lib/supabase/client.ts, src/lib/supabase/server.ts, src/middleware.ts, src/app/(auth)/login/page.tsx</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>prerender 時の throw を回避。ログイン時のみ実クライアントを生成</td>
+            </tr>
+            <tr>
+                <td>8</td>
+                <td>npm run build / npm run dev の動作確認</td>
+                <td>（全体）</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>build 成功・dev で /login /dashboard /schedule /shift /transport /settings/tenant すべて HTTP 200</td>
+            </tr>
+            <tr>
+                <td>9</td>
+                <td>error-log.md / progress.html 更新</td>
+                <td>error-log.md, docs/progress.html</td>
+                <td class="status-done">完了</td>
+                <td>100%</td>
+                <td>同じ地雷を踏まないよう記録</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>次フェーズ（未着手）</h2>
     <table>
         <thead>
             <tr>
