@@ -37,6 +37,8 @@ export default function RequestPage() {
   const targetMonth = now.getMonth() === 11 ? 1 : now.getMonth() + 2;
 
   const [dayStatuses, setDayStatuses] = useState<Record<string, DayStatus>>({});
+  const [dayComments, setDayComments] = useState<Record<string, string>>({});
+  const [editingDay, setEditingDay] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -58,13 +60,18 @@ export default function RequestPage() {
     return { daysInMonth, firstDow, days };
   }, [targetYear, targetMonth]);
 
-  /* 日付クリック → ステータスを順にトグル */
+  /* 日付クリック → 編集ポップオーバーを開く */
   const handleDayClick = (dateStr: string) => {
     if (submitted) return;
-    const current = dayStatuses[dateStr] || 'none';
-    const cycle: DayStatus[] = ['none', 'public_holiday', 'paid_leave', 'available_day'];
-    const nextIndex = (cycle.indexOf(current) + 1) % cycle.length;
-    setDayStatuses((prev) => ({ ...prev, [dateStr]: cycle[nextIndex] }));
+    setEditingDay(editingDay === dateStr ? null : dateStr);
+  };
+
+  const handleStatusChange = (dateStr: string, status: DayStatus) => {
+    setDayStatuses((prev) => ({ ...prev, [dateStr]: status }));
+  };
+
+  const handleCommentChange = (dateStr: string, comment: string) => {
+    setDayComments((prev) => ({ ...prev, [dateStr]: comment }));
   };
 
   /* 集計 */
@@ -83,6 +90,8 @@ export default function RequestPage() {
 
   const handleReset = () => {
     setDayStatuses({});
+    setDayComments({});
+    setEditingDay(null);
     setNotes('');
     setSubmitted(false);
   };
@@ -156,36 +165,112 @@ export default function RequestPage() {
               const status = dayStatuses[d.dateStr] || 'none';
               const config = STATUS_CONFIG[status];
               const isWeekend = d.dow === 0 || d.dow === 6;
+              const comment = dayComments[d.dateStr] || '';
+              const isEditing = editingDay === d.dateStr;
 
               return (
-                <button
-                  key={d.dateStr}
-                  onClick={() => handleDayClick(d.dateStr)}
-                  disabled={submitted}
-                  className="flex flex-col items-center justify-center py-2 rounded-md transition-all hover:scale-105 disabled:hover:scale-100 disabled:cursor-default"
-                  style={{
-                    background: status !== 'none' ? config.bg : isWeekend ? 'rgba(0,0,0,0.02)' : 'transparent',
-                    border: status !== 'none' ? `1.5px solid ${config.color}` : '1.5px solid transparent',
-                    minHeight: '56px',
-                  }}
-                >
-                  <span
-                    className="text-sm font-semibold"
+                <div key={d.dateStr} className="relative">
+                  <button
+                    onClick={() => handleDayClick(d.dateStr)}
+                    disabled={submitted}
+                    className="w-full flex flex-col items-center justify-center py-2 rounded-md transition-all hover:scale-105 disabled:hover:scale-100 disabled:cursor-default"
                     style={{
-                      color: d.dow === 0 ? 'var(--red)' : d.dow === 6 ? 'var(--accent)' : 'var(--ink)',
+                      background: status !== 'none' ? config.bg : isWeekend ? 'rgba(0,0,0,0.02)' : 'transparent',
+                      border: status !== 'none' ? `1.5px solid ${config.color}` : '1.5px solid transparent',
+                      minHeight: '56px',
                     }}
                   >
-                    {d.day}
-                  </span>
-                  {status !== 'none' && (
                     <span
-                      className="text-xs font-bold mt-0.5"
-                      style={{ color: config.color, fontSize: '0.65rem' }}
+                      className="text-sm font-semibold"
+                      style={{
+                        color: d.dow === 0 ? 'var(--red)' : d.dow === 6 ? 'var(--accent)' : 'var(--ink)',
+                      }}
                     >
-                      {config.label}
+                      {d.day}
                     </span>
+                    {status !== 'none' && (
+                      <span
+                        className="text-xs font-bold mt-0.5"
+                        style={{ color: config.color, fontSize: '0.65rem' }}
+                      >
+                        {config.label}
+                      </span>
+                    )}
+                    {comment && (
+                      <span
+                        className="text-xs mt-0.5 truncate w-full px-1"
+                        style={{ color: 'var(--ink-3)', fontSize: '0.6rem' }}
+                        title={comment}
+                      >
+                        💬
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 編集ポップオーバー */}
+                  {isEditing && (
+                    <div
+                      className="absolute z-20 left-1/2 -translate-x-1/2 mt-1 p-3 flex flex-col gap-2 w-48"
+                      style={{
+                        background: 'var(--white)',
+                        borderRadius: '8px',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                        border: '1px solid var(--rule)',
+                      }}
+                    >
+                      <div className="text-xs font-semibold mb-1" style={{ color: 'var(--ink)' }}>
+                        {format(new Date(d.dateStr), 'M/d（E）', { locale: ja })}
+                      </div>
+
+                      {/* ステータスボタン */}
+                      <div className="flex flex-col gap-1">
+                        {(['none', 'public_holiday', 'paid_leave', 'available_day'] as const).map((s) => (
+                          <button
+                            key={s}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange(d.dateStr, s);
+                            }}
+                            className="text-left px-2 py-1 text-xs font-medium rounded transition-colors"
+                            style={{
+                              background: status === s ? (s === 'none' ? 'var(--bg)' : STATUS_CONFIG[s].bg) : 'transparent',
+                              color: s === 'none' ? 'var(--ink-3)' : STATUS_CONFIG[s].color,
+                              border: status === s ? `1px solid ${s === 'none' ? 'var(--rule)' : STATUS_CONFIG[s].color}` : '1px solid transparent',
+                            }}
+                          >
+                            {s === 'none' ? '指定なし' : STATUS_CONFIG[s].label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* コメント入力 */}
+                      <input
+                        type="text"
+                        value={comment}
+                        onChange={(e) => handleCommentChange(d.dateStr, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="メモ（任意）"
+                        className="w-full px-2 py-1 text-xs outline-none"
+                        style={{
+                          border: '1px solid var(--rule)',
+                          borderRadius: '4px',
+                          color: 'var(--ink)',
+                        }}
+                      />
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingDay(null);
+                        }}
+                        className="text-xs font-semibold py-1 rounded transition-colors"
+                        style={{ background: 'var(--accent)', color: '#fff', borderRadius: '4px' }}
+                      >
+                        OK
+                      </button>
+                    </div>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
