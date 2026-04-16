@@ -117,24 +117,15 @@ export default function RequestPage() {
                     {r.submittedAt || '-'}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <div className="flex gap-1">
-                      {r.status === 'submitted' && (
-                        <button
-                          onClick={() => setDetailStaff(r)}
-                          className="text-xs font-semibold px-2 py-1 rounded hover:bg-[var(--accent-pale)]"
-                          style={{ color: 'var(--accent)' }}
-                        >
-                          詳細
-                        </button>
-                      )}
+                    {r.status === 'submitted' && (
                       <button
-                        onClick={() => handleCopyLink(r.staffId)}
+                        onClick={() => setDetailStaff(r)}
                         className="text-xs font-semibold px-2 py-1 rounded hover:bg-[var(--accent-pale)]"
-                        style={{ color: copiedId === r.staffId ? 'var(--green)' : 'var(--ink-3)' }}
+                        style={{ color: 'var(--accent)' }}
                       >
-                        {copiedId === r.staffId ? 'コピー済み✓' : 'URL'}
+                        詳細
                       </button>
-                    </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -142,7 +133,7 @@ export default function RequestPage() {
           </table>
         </div>
 
-        {/* URL一括コピーエリア */}
+        {/* 共有URLエリア */}
         <div
           className="mt-6 p-4"
           style={{ background: 'var(--white)', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
@@ -151,29 +142,32 @@ export default function RequestPage() {
             提出用リンク（ログイン不要）
           </p>
           <p className="text-xs mb-3" style={{ color: 'var(--ink-3)' }}>
-            各職員に個別の提出URLを送信してください。LINEやメールで送れます。
+            このURLを職員に共有してください。開くと名前を選んで休み希望を提出できます。
           </p>
-          <div className="flex flex-col gap-1">
-            {MOCK_REQUESTS.map((r) => (
-              <div key={r.staffId} className="flex items-center gap-2">
-                <span className="text-xs font-medium w-16" style={{ color: 'var(--ink-2)' }}>
-                  {r.staffName}
-                </span>
-                <code
-                  className="text-xs flex-1 px-2 py-1 rounded truncate"
-                  style={{ background: 'var(--bg)', color: 'var(--ink-3)', border: '1px solid var(--rule)' }}
-                >
-                  {typeof window !== 'undefined' ? `${window.location.origin}/request/submit?staff=${r.staffId}` : `/request/submit?staff=${r.staffId}`}
-                </code>
-                <button
-                  onClick={() => handleCopyLink(r.staffId)}
-                  className="text-xs font-semibold px-2 py-1 rounded shrink-0 hover:bg-[var(--accent-pale)]"
-                  style={{ color: copiedId === r.staffId ? 'var(--green)' : 'var(--accent)' }}
-                >
-                  {copiedId === r.staffId ? '✓' : 'コピー'}
-                </button>
-              </div>
-            ))}
+          <div className="flex items-center gap-2">
+            <code
+              className="text-sm flex-1 px-3 py-2 rounded truncate"
+              style={{ background: 'var(--bg)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
+            >
+              {typeof window !== 'undefined' ? `${window.location.origin}/request/submit` : '/request/submit'}
+            </code>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/request/submit`;
+                navigator.clipboard.writeText(url).then(() => {
+                  setCopiedId('shared');
+                  setTimeout(() => setCopiedId(null), 2000);
+                });
+              }}
+              className="text-sm font-semibold px-4 py-2 rounded shrink-0 transition-colors"
+              style={{
+                background: copiedId === 'shared' ? 'var(--green)' : 'var(--accent)',
+                color: '#fff',
+                borderRadius: '6px',
+              }}
+            >
+              {copiedId === 'shared' ? 'コピー済み ✓' : 'URLをコピー'}
+            </button>
           </div>
         </div>
       </div>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { getDaysInMonth, getDay, format } from 'date-fns';
@@ -10,12 +9,12 @@ import { ja } from 'date-fns/locale';
 /**
  * 休み希望提出ページ（職員向け・ログイン不要）
  *
- * URL: /request/submit?staff=xxx
- * - staffパラメータで職員を識別
- * - ログイン不要の公開URL（LINEやメールで共有）
+ * URL: /request/submit
+ * - 共有URL1つで全職員が利用
+ * - 最初に自分の名前を選択してから入力
  * - カレンダーUIで希望休・有給・出勤可能日を選択→提出
  *
- * TODO: Supabase連携後にDB保存・staff IDバリデーション
+ * TODO: Supabase連携後にDB保存・職員リストをDBから取得
  */
 
 type DayStatus = 'none' | 'public_holiday' | 'paid_leave' | 'available_day';
@@ -29,15 +28,19 @@ const STATUS_CONFIG: Record<DayStatus, { label: string; color: string; bg: strin
 
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-/* 仮の職員名マップ（Supabase連携後はDBから取得） */
-const STAFF_NAMES: Record<string, string> = {
-  s1: '金田', s2: '加藤', s3: '鈴木', s4: '田中', s5: '佐藤', s6: '山本',
-};
+/* 仮の職員リスト（Supabase連携後はDBから取得） */
+const STAFF_LIST = [
+  { id: 's1', name: '金田' },
+  { id: 's2', name: '加藤' },
+  { id: 's3', name: '鈴木' },
+  { id: 's4', name: '田中' },
+  { id: 's5', name: '佐藤' },
+  { id: 's6', name: '山本' },
+];
 
 export default function SubmitRequestPage() {
-  const searchParams = useSearchParams();
-  const staffId = searchParams.get('staff');
-  const staffName = staffId ? STAFF_NAMES[staffId] || '不明な職員' : null;
+  const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
+  const staffName = selectedStaff ? STAFF_LIST.find((s) => s.id === selectedStaff)?.name : null;
 
   const now = new Date();
   const targetYear = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
@@ -84,19 +87,56 @@ export default function SubmitRequestPage() {
     setSubmitted(true);
   };
 
-  /* staffパラメータが無い場合 */
-  if (!staffId || !staffName) {
+  /* ======== 名前選択画面 ======== */
+  if (!selectedStaff) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-center p-8" style={{ background: 'var(--white)', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-          <p className="text-lg font-bold mb-2" style={{ color: 'var(--red)' }}>無効なリンクです</p>
-          <p className="text-sm" style={{ color: 'var(--ink-2)' }}>管理者から正しい提出用URLを受け取ってください。</p>
+      <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+        <header
+          className="flex items-center px-6 py-3"
+          style={{ background: 'var(--white)', borderBottom: '1px solid var(--rule)' }}
+        >
+          <span style={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.12em', color: 'var(--ink)' }}>
+            di<em style={{ fontStyle: 'normal', color: 'var(--accent)' }}>letto</em>
+            {' '}
+            <span style={{ fontSize: '0.6em', fontWeight: 600 }}>ShiftPuzzle</span>
+          </span>
+        </header>
+
+        <div className="p-6 max-w-sm mx-auto mt-10">
+          <div
+            className="p-6"
+            style={{ background: 'var(--white)', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+          >
+            <h1 className="text-lg font-bold mb-1" style={{ color: 'var(--ink)' }}>
+              休み希望の提出
+            </h1>
+            <p className="text-sm mb-6" style={{ color: 'var(--ink-2)' }}>
+              {targetYear}年{targetMonth}月分 — あなたの名前を選んでください
+            </p>
+
+            <div className="flex flex-col gap-2">
+              {STAFF_LIST.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedStaff(s.id)}
+                  className="w-full text-left px-4 py-3 text-base font-medium rounded-lg transition-all active:scale-[0.98] hover:-translate-y-0.5"
+                  style={{
+                    background: 'var(--bg)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--rule)',
+                  }}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  /* 提出完了画面 */
+  /* ======== 提出完了画面 ======== */
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
@@ -111,14 +151,10 @@ export default function SubmitRequestPage() {
             <Badge variant="success">有給 {counts.paid_leave}日</Badge>
             <Badge variant="warning">出勤可 {counts.available_day}日</Badge>
           </div>
-          <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>
             締切日までは何度でも再提出できます。
           </p>
-          <Button
-            variant="secondary"
-            className="mt-4"
-            onClick={() => setSubmitted(false)}
-          >
+          <Button variant="secondary" onClick={() => setSubmitted(false)}>
             修正する
           </Button>
         </div>
@@ -126,9 +162,9 @@ export default function SubmitRequestPage() {
     );
   }
 
+  /* ======== カレンダー入力画面 ======== */
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      {/* ヘッダー（dilettoブランド） */}
       <header
         className="flex items-center justify-between px-6 py-3"
         style={{ background: 'var(--white)', borderBottom: '1px solid var(--rule)' }}
@@ -138,7 +174,16 @@ export default function SubmitRequestPage() {
           {' '}
           <span style={{ fontSize: '0.6em', fontWeight: 600 }}>ShiftPuzzle</span>
         </span>
-        <Badge variant="info">{staffName}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="info">{staffName}</Badge>
+          <button
+            onClick={() => { setSelectedStaff(null); setDayStatuses({}); setDayComments({}); setNotes(''); }}
+            className="text-xs"
+            style={{ color: 'var(--ink-3)' }}
+          >
+            変更
+          </button>
+        </div>
       </header>
 
       <div className="p-6 max-w-lg mx-auto">
