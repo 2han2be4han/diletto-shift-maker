@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import type { GradeType } from '@/types';
+import { getDefaultPickupTimeByGrade } from '@/lib/utils/parseChildName';
 
 /**
  * 児童管理ページ（admin・editor）
@@ -200,7 +201,22 @@ export default function ChildrenSettingsPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>学年</label>
-                <select value={editing.grade_type} onChange={(e) => setEditing({ ...editing, grade_type: e.target.value as GradeType })} className="outline-none" style={inputStyle}>
+                <select
+                  value={editing.grade_type}
+                  onChange={(e) => {
+                    const newGrade = e.target.value as GradeType;
+                    const defaultTime = getDefaultPickupTimeByGrade(newGrade);
+                    /* 学年変更時、空のパターンの迎え時間にデフォルト値を入れる */
+                    const updatedPatterns = editing.patterns.map((p) =>
+                      p.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type) || !p.pickup_time
+                        ? { ...p, pickup_time: defaultTime }
+                        : p
+                    );
+                    setEditing({ ...editing, grade_type: newGrade, patterns: updatedPatterns });
+                  }}
+                  className="outline-none"
+                  style={inputStyle}
+                >
                   {Object.entries(GRADE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
                 </select>
               </div>
@@ -222,11 +238,11 @@ export default function ChildrenSettingsPage() {
               {editing.patterns.map((p, i) => (
                 <div
                   key={i}
-                  className="p-3 flex flex-col gap-2"
+                  className="p-3"
                   style={{ background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--rule)' }}
                 >
-                  {/* 区分 + エリア + 削除 */}
-                  <div className="flex items-center gap-2">
+                  {/* 上段: 区分 + エリア + 削除 */}
+                  <div className="flex items-center gap-2 mb-2">
                     <select
                       value={p.name}
                       onChange={(e) => updatePattern(i, 'name', e.target.value)}
@@ -254,24 +270,33 @@ export default function ChildrenSettingsPage() {
                     </button>
                   </div>
 
-                  {/* 迎え */}
-                  <div className="grid grid-cols-4 gap-2 items-center">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>迎 🚗←</span>
-                    <input type="text" value={p.pickup_location} onChange={(e) => updatePattern(i, 'pickup_location', e.target.value)} placeholder="場所" className="outline-none" style={smallInput} />
-                    <input type="time" value={p.pickup_time} onChange={(e) => updatePattern(i, 'pickup_time', e.target.value)} className="outline-none" style={smallInput} />
-                    <select value={p.pickup_method} onChange={(e) => updatePattern(i, 'pickup_method', e.target.value)} className="outline-none" style={smallInput}>
-                      {Object.entries(METHOD_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                    </select>
-                  </div>
+                  {/* 下段: 迎え｜送り 横並び */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* 迎え側 */}
+                    <div
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded"
+                      style={{ background: 'var(--accent-pale)', border: '1px solid rgba(26,62,184,0.1)' }}
+                    >
+                      <span className="text-xs font-bold shrink-0" style={{ color: 'var(--accent)' }}>迎🚗←</span>
+                      <input type="text" value={p.pickup_location} onChange={(e) => updatePattern(i, 'pickup_location', e.target.value)} placeholder="場所" className="outline-none w-16 text-xs bg-transparent" style={{ color: 'var(--ink)' }} />
+                      <input type="time" value={p.pickup_time} onChange={(e) => updatePattern(i, 'pickup_time', e.target.value)} className="outline-none text-xs bg-transparent w-20" style={{ color: 'var(--ink)' }} />
+                      <select value={p.pickup_method} onChange={(e) => updatePattern(i, 'pickup_method', e.target.value)} className="outline-none text-xs bg-transparent" style={{ color: 'var(--accent)' }}>
+                        {Object.entries(METHOD_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                      </select>
+                    </div>
 
-                  {/* 送り */}
-                  <div className="grid grid-cols-4 gap-2 items-center">
-                    <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>送 🚗→</span>
-                    <input type="text" value={p.dropoff_location} onChange={(e) => updatePattern(i, 'dropoff_location', e.target.value)} placeholder="場所" className="outline-none" style={smallInput} />
-                    <input type="time" value={p.dropoff_time} onChange={(e) => updatePattern(i, 'dropoff_time', e.target.value)} className="outline-none" style={smallInput} />
-                    <select value={p.dropoff_method} onChange={(e) => updatePattern(i, 'dropoff_method', e.target.value)} className="outline-none" style={smallInput}>
-                      {Object.entries(METHOD_LABELS_DROP).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                    </select>
+                    {/* 送り側 */}
+                    <div
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded"
+                      style={{ background: 'var(--green-pale)', border: '1px solid rgba(42,122,82,0.1)' }}
+                    >
+                      <span className="text-xs font-bold shrink-0" style={{ color: 'var(--green)' }}>送🚗→</span>
+                      <input type="text" value={p.dropoff_location} onChange={(e) => updatePattern(i, 'dropoff_location', e.target.value)} placeholder="場所" className="outline-none w-16 text-xs bg-transparent" style={{ color: 'var(--ink)' }} />
+                      <input type="time" value={p.dropoff_time} onChange={(e) => updatePattern(i, 'dropoff_time', e.target.value)} className="outline-none text-xs bg-transparent w-20" style={{ color: 'var(--ink)' }} />
+                      <select value={p.dropoff_method} onChange={(e) => updatePattern(i, 'dropoff_method', e.target.value)} className="outline-none text-xs bg-transparent" style={{ color: 'var(--green)' }}>
+                        {Object.entries(METHOD_LABELS_DROP).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               ))}
