@@ -121,7 +121,6 @@ const INITIAL_CHILDREN: ChildItem[] = [
 ];
 
 export default function ChildrenSettingsPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [children, setChildren] = useState<ChildItem[]>(INITIAL_CHILDREN);
   const [editing, setEditing] = useState<ChildItem | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -165,7 +164,7 @@ export default function ChildrenSettingsPage() {
 
   return (
     <>
-      <Header title="児童管理" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Header title="児童管理" />
 
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
@@ -187,27 +186,48 @@ export default function ChildrenSettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {children.map((c) => (
-                <tr key={c.id} className="hover:bg-[var(--accent-pale)] cursor-pointer" onClick={() => handleEdit(c)}>
-                  <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>{c.name}</td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                    {c.patterns.length}パターン
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <div className="flex flex-wrap gap-1">
-                      {[...new Set(c.patterns.map((p) => p.area_label).filter(Boolean))].map((area) => (
-                        <span key={area} title={area} className="text-sm">{area.split(' ')[0]}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
-                  </td>
-                </tr>
-              ))}
+              {(() => {
+                // エリアごとにグループ化
+                const groups: Record<string, ChildItem[]> = {};
+                children.forEach((c) => {
+                  const primaryArea = c.patterns[0]?.area_label || '未設定';
+                  const emoji = primaryArea.split(' ')[0] || '❓';
+                  if (!groups[emoji]) groups[emoji] = [];
+                  groups[emoji].push(c);
+                });
+
+                return Object.entries(groups).map(([emoji, items]) => (
+                  <React.Fragment key={emoji}>
+                    {/* グループヘッダー */}
+                    <tr style={{ background: 'var(--bg-2)' }}>
+                      <td colSpan={5} className="px-3 py-1.5 font-bold text-xs" style={{ color: 'var(--ink-2)', borderBottom: '1px solid var(--rule)' }}>
+                        {emoji} グループ ({items.length}名)
+                      </td>
+                    </tr>
+                    {items.map((c) => (
+                      <tr key={c.id} className="hover:bg-[var(--accent-pale)] cursor-pointer" onClick={() => handleEdit(c)}>
+                        <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>{c.name}</td>
+                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                          <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
+                        </td>
+                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
+                          {c.patterns.length}パターン
+                        </td>
+                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                          <div className="flex flex-wrap gap-1">
+                            {[...new Set(c.patterns.map((p) => p.area_label).filter(Boolean))].map((area) => (
+                              <span key={area} title={area} className="text-sm">{area.split(' ')[0]}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                          <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ));
+              })()}
             </tbody>
           </table>
         </div>

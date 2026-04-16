@@ -56,7 +56,6 @@ function generateMockSchedule() {
 }
 
 export default function ShiftPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -66,6 +65,11 @@ export default function ShiftPage() {
   const [warnings, setWarnings] = useState<{ date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string }[]>([]);
 
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null);
+  const [editType, setEditType] = useState<ShiftAssignmentType>('normal');
+  const [startH, setStartH] = useState('09');
+  const [startM, setStartM] = useState('00');
+  const [endH, setEndH] = useState('17');
+  const [endM, setEndM] = useState('00');
 
   /* シフト生成 */
   const handleGenerate = () => {
@@ -95,20 +99,42 @@ export default function ShiftPage() {
   /* セルクリック → 編集モーダル */
   const handleCellClick = (staffId: string, date: string) => {
     if (confirmed) return;
+    const cell = shiftCells.find((c) => c.staff_id === staffId && c.date === date);
+    const staff = MOCK_STAFF.find((s) => s.id === staffId);
+
+    if (cell) {
+      setEditType(cell.assignment_type);
+      if (cell.start_time) {
+        const [h, m] = cell.start_time.split(':');
+        setStartH(h);
+        setStartM(m);
+      } else {
+        setStartH(staff?.default_start_time?.split(':')[0] || '09');
+        setStartM(staff?.default_start_time?.split(':')[1] || '00');
+      }
+      if (cell.end_time) {
+        const [h, m] = cell.end_time.split(':');
+        setEndH(h);
+        setEndM(m);
+      } else {
+        setEndH(staff?.default_end_time?.split(':')[0] || '17');
+        setEndM(staff?.default_end_time?.split(':')[1] || '00');
+      }
+    }
     setEditingCell({ staffId, date });
   };
 
-  /* セルのassignment_typeを変更 */
-  const handleTypeChange = (type: ShiftAssignmentType) => {
+  /* 保存実行 */
+  const handleSave = () => {
     if (!editingCell) return;
     setShiftCells((prev) =>
       prev.map((c) =>
         c.staff_id === editingCell.staffId && c.date === editingCell.date
           ? {
               ...c,
-              assignment_type: type,
-              start_time: type === 'normal' ? (MOCK_STAFF.find((s) => s.id === editingCell.staffId)?.default_start_time || '09:00') : null,
-              end_time: type === 'normal' ? (MOCK_STAFF.find((s) => s.id === editingCell.staffId)?.default_end_time || '17:00') : null,
+              assignment_type: editType,
+              start_time: editType === 'normal' ? `${startH}:${startM}` : null,
+              end_time: editType === 'normal' ? `${endH}:${endM}` : null,
             }
           : c
       )
@@ -130,13 +156,10 @@ export default function ShiftPage() {
   }, [generated, warnings]);
 
   return (
-    <>
-      <Header
-        title="シフト表"
-        onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header title="シフト表" />
 
-      <div className="p-6">
+      <div className="flex-1 overflow-auto p-6">
         {/* ヘッダー */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
@@ -192,19 +215,21 @@ export default function ShiftPage() {
 
         {/* グリッド */}
         {generated ? (
-          <ShiftGrid
-            year={2026}
-            month={4}
-            staff={MOCK_STAFF.map((s) => ({
-              id: s.id,
-              name: s.name,
-              employment_type: s.employment_type,
-              is_qualified: s.is_qualified,
-            }))}
-            cells={shiftCells}
-            warnings={warnings}
-            onCellClick={handleCellClick}
-          />
+          <div className="flex flex-col h-full min-h-[500px]">
+            <ShiftGrid
+              year={2026}
+              month={4}
+              staff={MOCK_STAFF.map((s) => ({
+                id: s.id,
+                name: s.name,
+                employment_type: s.employment_type,
+                is_qualified: s.is_qualified,
+              }))}
+              cells={shiftCells}
+              warnings={warnings}
+              onCellClick={handleCellClick}
+            />
+          </div>
         ) : (
           <div
             className="flex flex-col items-center justify-center py-20"
@@ -269,12 +294,12 @@ export default function ShiftPage() {
                   paid_leave: 'var(--green)',
                   off: 'var(--ink-3)',
                 };
-                const isActive = editingCellData?.assignment_type === type;
+                const isActive = editType === type;
 
                 return (
                   <button
                     key={type}
-                    onClick={() => handleTypeChange(type)}
+                    onClick={() => setEditType(type)}
                     className="px-4 py-3 text-sm font-semibold rounded-md transition-all"
                     style={{
                       background: isActive ? colors[type] : 'var(--bg)',
@@ -287,9 +312,55 @@ export default function ShiftPage() {
                 );
               })}
             </div>
+
+            {editType === 'normal' && (
+              <div className="flex flex-col gap-4 mt-2 p-4 rounded-lg" style={{ background: 'var(--bg)' }}>
+                <div>
+                  <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>勤務時間</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={startH}
+                      onChange={(e) => setStartH(e.target.value.slice(0,2))}
+                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
+                    />
+                    <span className="font-bold">:</span>
+                    <input
+                      type="text"
+                      value={startM}
+                      onChange={(e) => setStartM(e.target.value.slice(0,2))}
+                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
+                    />
+                    <span className="mx-2 text-gray-400">〜</span>
+                    <input
+                      type="text"
+                      value={endH}
+                      onChange={(e) => setEndH(e.target.value.slice(0,2))}
+                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
+                    />
+                    <span className="font-bold">:</span>
+                    <input
+                      type="text"
+                      value={endM}
+                      onChange={(e) => setEndM(e.target.value.slice(0,2))}
+                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditingCell(null)}>
+                キャンセル
+              </Button>
+              <Button variant="primary" className="flex-1" onClick={handleSave}>
+                保存する
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
-    </>
+    </div>
   );
 }

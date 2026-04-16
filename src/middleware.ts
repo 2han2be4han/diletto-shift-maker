@@ -13,11 +13,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 const DEV_SKIP_AUTH = process.env.NODE_ENV === 'development';
 
 export async function middleware(request: NextRequest) {
-  /* 開発中は認証チェックをスキップして全ページアクセス可 */
-  if (DEV_SKIP_AUTH) {
-    return NextResponse.next();
-  }
-
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

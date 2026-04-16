@@ -63,7 +63,6 @@ function generateMockTransport(date: string): TransportEntry[] {
 }
 
 export default function TransportPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const year = 2026;
   const month = 4;
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
@@ -150,7 +149,6 @@ export default function TransportPage() {
     <>
       <Header
         title="送迎表"
-        onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
       />
 
       <div className="p-6">

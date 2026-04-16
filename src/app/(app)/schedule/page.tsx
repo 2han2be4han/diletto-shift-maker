@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import ScheduleGrid from '@/components/schedule/ScheduleGrid';
 import PdfImportModal from '@/components/schedule/PdfImportModal';
@@ -119,8 +119,13 @@ function ToggleGroup({
 }
 
 export default function SchedulePage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [cells] = useState<CellData[]>(() => generateMockCells());
+  const [cells, setCells] = useState<CellData[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setCells(generateMockCells());
+    setIsClient(true);
+  }, []);
   const [selectedCell, setSelectedCell] = useState<{ childId: string; date: string } | null>(null);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
@@ -191,10 +196,9 @@ export default function SchedulePage() {
   };
 
   return (
-    <>
+    <div className="flex flex-col h-full overflow-hidden">
       <Header
-        title="利用予定"
-        onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
+        title="2026年4月利用予定"
         actions={
           <>
             <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>
@@ -207,21 +211,20 @@ export default function SchedulePage() {
         }
       />
 
-      <div className="p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
-            2026年4月
-          </h2>
-          <Badge variant="info">{MOCK_CHILDREN.length}名登録</Badge>
-        </div>
-
-        <ScheduleGrid
-          year={2026}
-          month={4}
-          children={MOCK_CHILDREN}
-          cells={cells}
-          onCellClick={handleCellClick}
-        />
+      <div className="px-6 flex-1 overflow-hidden flex flex-col mt-2">
+        {isClient ? (
+          <ScheduleGrid
+            year={2026}
+            month={4}
+            children={MOCK_CHILDREN}
+            cells={cells}
+            onCellClick={handleCellClick}
+          />
+        ) : (
+          <div className="h-96 flex items-center justify-center text-sm text-gray-400">
+            読み込み中...
+          </div>
+        )}
       </div>
 
       {/* Excelコピペモーダル */}
@@ -369,6 +372,6 @@ export default function SchedulePage() {
           </div>
         )}
       </Modal>
-    </>
+    </div>
   );
 }

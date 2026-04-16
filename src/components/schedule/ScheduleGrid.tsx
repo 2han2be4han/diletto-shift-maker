@@ -90,22 +90,22 @@ export default function ScheduleGrid({
   };
 
   return (
-    <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+    <div className="flex-1 overflow-auto border-2 rounded-xl" style={{ borderColor: 'var(--rule)', background: 'var(--white)' }}>
       <table
-        className="w-full border-collapse"
-        style={{ minWidth: `${dates.length * 80 + 140}px`, fontSize: '0.8rem' }}
+        className="w-full border-separate border-spacing-0"
+        style={{ minWidth: `${dates.length * 80 + 160}px`, fontSize: '0.85rem' }}
       >
         <thead>
-          {/* 曜日 + 日付ヘッダー */}
           <tr>
             <th
-              className="sticky left-0 z-10 px-3 py-2 text-left font-semibold"
+              className="sticky left-0 top-0 z-50 px-4 py-4 text-left font-bold"
               style={{
-                background: 'var(--white)',
+                background: 'var(--bg)',
                 borderBottom: '2px solid var(--rule-strong)',
                 borderRight: '2px solid var(--rule-strong)',
-                minWidth: '140px',
+                minWidth: '160px',
                 color: 'var(--ink)',
+                boxShadow: '4px 4px 10px rgba(0,0,0,0.03)',
               }}
             >
               氏名
@@ -113,20 +113,20 @@ export default function ScheduleGrid({
             {dates.map((d) => (
               <th
                 key={d.dateStr}
-                className="px-1 py-2 text-center font-semibold whitespace-nowrap"
+                className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
                 style={{
                   borderBottom: '2px solid var(--rule-strong)',
                   borderRight: '1px solid var(--rule)',
-                  minWidth: '72px',
-                  background: getCellBg(d.dow),
+                  minWidth: '80px',
+                  background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
                   ...getDowStyle(d.dow),
-                  color: getDowStyle(d.dow).color || 'var(--ink-2)',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                 }}
               >
-                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>
+                <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '2px' }}>
                   {d.dow === 0 || d.dow === 6 ? '休' : '営'}
                 </div>
-                <div style={{ fontSize: '0.78rem' }}>
+                <div style={{ fontSize: '0.85rem' }}>
                   {month}/{d.day}
                 </div>
                 <div style={{ fontSize: '0.65rem' }}>
@@ -138,19 +138,19 @@ export default function ScheduleGrid({
         </thead>
         <tbody>
           {children.map((child) => (
-            <tr key={child.id}>
-              {/* 児童名（固定列） */}
+            <tr key={child.id} className="group">
               <td
-                className="sticky left-0 z-10 px-3 py-2 font-medium whitespace-nowrap"
+                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap"
                 style={{
                   background: 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
                   borderRight: '2px solid var(--rule-strong)',
                   color: 'var(--ink)',
+                  boxShadow: '4px 0 6px rgba(0,0,0,0.02)',
                 }}
               >
-                <div className="font-semibold">{child.name}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--ink-3)' }}>{child.grade_label}</div>
+                <div className="group-hover:text-[var(--accent)] transition-colors">{child.name}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--ink-3)', marginTop: '2px' }}>{child.grade_label}</div>
               </td>
               {dates.map((d) => {
                 const cell = cellMap.get(`${child.id}_${d.dateStr}`);
@@ -210,12 +210,13 @@ export default function ScheduleGrid({
           {/* 利用数合計行 */}
           <tr>
             <td
-              className="sticky left-0 z-10 px-3 py-2 font-bold"
+              className="sticky left-0 bottom-0 z-50 px-4 py-3 font-bold"
               style={{
-                background: 'var(--white)',
+                background: 'var(--bg)',
                 borderTop: '2px solid var(--rule-strong)',
                 borderRight: '2px solid var(--rule-strong)',
                 color: 'var(--ink)',
+                boxShadow: '4px -4px 6px rgba(0,0,0,0.02)',
               }}
             >
               利用数
@@ -225,13 +226,14 @@ export default function ScheduleGrid({
               return (
                 <td
                   key={d.dateStr}
-                  className="px-1 py-2 text-center font-bold"
+                  className="sticky bottom-0 z-40 px-1 py-2 text-center font-bold"
                   style={{
                     borderTop: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
                     color: count > 10 ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
                     fontWeight: count > 10 ? 800 : 700,
-                    background: getCellBg(d.dow),
+                    background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
+                    boxShadow: '0 -4px 4px rgba(0,0,0,0.02)',
                   }}
                 >
                   {count > 0 ? count : ''}

@@ -46,8 +46,7 @@ const DEFAULT_QUALIFICATIONS: QualificationType[] = [
 ];
 
 export default function TenantSettingsPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [tenantName, setTenantName] = useState('サンプル事業所');
+  const [tenantName, setTenantName] = useState('Diletto 藤江');
   const [areas, setAreas] = useState<AreaLabel[]>(DEFAULT_AREAS);
   const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
@@ -83,7 +82,7 @@ export default function TenantSettingsPage() {
 
   return (
     <>
-      <Header title="テナント設定" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Header title="テナント設定" />
 
       <div className="p-6 max-w-2xl">
         <div className="flex items-center gap-3 mb-6">

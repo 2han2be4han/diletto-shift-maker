@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 /**
  * サイドバーナビゲーション
@@ -35,6 +35,8 @@ const NAV_BOTTOM = [
   { href: '/billing', label: '契約管理', icon: '💳' },
 ];
 
+const MINI_WIDTH = 64;
+const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 360;
 
@@ -42,10 +44,14 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
   const pathname = usePathname();
   const isResizing = useRef(false);
 
+  /* デスクトップでの表示幅 */
+  const desktopWidth = isOpen ? width : MINI_WIDTH;
+
   /* ドラッグでサイドバー幅を変更する */
   const startResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      if (!isOpen) return; // 閉じている時はリサイズ不可
       isResizing.current = true;
 
       const handleMouseMove = (ev: MouseEvent) => {
@@ -63,58 +69,72 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [onWidthChange]
+    [isOpen, onWidthChange]
   );
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   const navContent = (
-    <>
+    <div className="flex flex-col h-full overflow-hidden">
       {/* ロゴ */}
-      <div className="px-5 py-5">
-        <Link href="/dashboard" className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
-          ShiftPuzzle
+      <div className="px-5 py-5 flex items-center h-16 shrink-0 transition-all">
+        <Link href="/dashboard" className="text-xl font-black tracking-tight" style={{ color: 'var(--ink)' }}>
+          {isOpen ? 'ShiftPuzzle' : 'S'}
         </Link>
       </div>
 
       {/* メインナビ */}
-      <nav className="flex-1 px-3">
+      <nav className="flex-1 px-2.5 overflow-y-auto overflow-x-hidden">
         <ul className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                title={!isOpen ? item.label : undefined}
                 style={{
                   color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-2)',
                   background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
                 }}
               >
-                <span className="text-base">{item.icon}</span>
-                {item.label}
+                <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
+                <span
+                  className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  {item.label}
+                </span>
               </Link>
             </li>
           ))}
         </ul>
 
         {/* 設定セクション */}
-        <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--rule)' }}>
-          <p className="px-3 mb-1 text-xs font-semibold" style={{ color: 'var(--ink-3)' }}>設定</p>
+        <div className="mt-4 pt-4 mb-2" style={{ borderTop: '1px solid var(--rule)' }}>
+          {isOpen && (
+            <p className="px-3 mb-2 text-[10px] font-bold tracking-wider uppercase opacity-50" style={{ color: 'var(--ink-3)' }}>
+              Settings
+            </p>
+          )}
           <ul className="flex flex-col gap-1">
             {NAV_SETTINGS.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={onClose}
-                  className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                  onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                  className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                  title={!isOpen ? item.label : undefined}
                   style={{
                     color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
                     background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
                   }}
                 >
-                  <span className="text-base">{item.icon}</span>
-                  {item.label}
+                  <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
+                  <span
+                    className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -123,75 +143,79 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
       </nav>
 
       {/* 下部ナビ */}
-      <div
-        className="px-3 pb-4 pt-2"
-        style={{ borderTop: '1px solid var(--rule)' }}
-      >
+      <div className="px-2.5 pb-4 mt-auto border-t pt-4" style={{ borderColor: 'var(--rule)' }}>
         <ul className="flex flex-col gap-1">
           {NAV_BOTTOM.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                title={!isOpen ? item.label : undefined}
                 style={{
                   color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
                   background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
                 }}
               >
-                <span className="text-base">{item.icon}</span>
-                {item.label}
+                <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
+                <span
+                  className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  {item.label}
+                </span>
               </Link>
             </li>
           ))}
         </ul>
       </div>
-    </>
+    </div>
   );
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   return (
     <>
-      {/* === モバイル/タブレット: オーバーレイ === */}
+      {/* === モバイル用オーバーレイ === */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 lg:hidden"
+          className="fixed inset-0 z-[60] lg:hidden"
           style={{ background: 'rgba(0,0,0,0.3)' }}
           onClick={onClose}
         />
       )}
+
+      {/* === サイドバー本体 === */}
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-full flex flex-col
-          transition-transform duration-200 ease-in-out
-          lg:hidden
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          fixed top-0 left-0 z-[60] h-full flex flex-col
+          lg:sticky lg:translate-x-0
+          transition-[width,transform] duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
         style={{
-          width: '260px',
-          background: 'var(--white)',
-          borderRight: '1px solid var(--rule)',
-        }}
-      >
-        {navContent}
-      </aside>
-
-      {/* === デスクトップ: 固定サイドバー + リサイズハンドル === */}
-      <aside
-        className="hidden lg:flex flex-col h-screen sticky top-0 shrink-0 select-none"
-        style={{
-          width: `${width}px`,
+          width: isMobile ? '260px' : `${desktopWidth}px`,
           background: 'var(--white)',
           borderRight: '1px solid var(--rule)',
         }}
       >
         {navContent}
 
-        {/* リサイズハンドル */}
-        <div
-          onMouseDown={startResize}
-          className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--accent-mid)] transition-colors"
-          title="ドラッグで幅を調整"
-        />
+        {/* リサイズハンドル（デスクトップの開いている時のみ） */}
+        {isOpen && (
+          <div
+            onMouseDown={startResize}
+            className="hidden lg:block absolute top-0 right-[-2px] h-full w-4 cursor-col-resize group z-50"
+          >
+            <div className="h-full w-[1px] ml-auto group-hover:bg-[var(--accent)] group-hover:w-[3px] transition-all" />
+          </div>
+        )}
       </aside>
     </>
   );

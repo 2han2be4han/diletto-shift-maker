@@ -107,21 +107,22 @@ export default function ShiftGrid({
   };
 
   return (
-    <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+    <div className="flex-1 overflow-auto border-2 rounded-xl" style={{ borderColor: 'var(--rule)', background: 'var(--white)' }}>
       <table
-        className="w-full border-collapse"
-        style={{ minWidth: `${dates.length * 56 + 160}px`, fontSize: '0.78rem' }}
+        className="w-full border-separate border-spacing-0"
+        style={{ minWidth: `${dates.length * 56 + 180}px`, fontSize: '0.85rem' }}
       >
         <thead>
           <tr>
             <th
-              className="sticky left-0 z-10 px-3 py-2 text-left font-semibold"
+              className="sticky left-0 top-0 z-50 px-4 py-4 text-left font-bold"
               style={{
-                background: 'var(--white)',
+                background: 'var(--bg)',
                 borderBottom: '2px solid var(--rule-strong)',
                 borderRight: '2px solid var(--rule-strong)',
-                minWidth: '140px',
+                minWidth: '160px',
                 color: 'var(--ink)',
+                boxShadow: '4px 4px 10px rgba(0,0,0,0.03)',
               }}
             >
               職員名
@@ -134,22 +135,23 @@ export default function ShiftGrid({
               return (
                 <th
                   key={d.dateStr}
-                  className="px-0.5 py-1.5 text-center font-semibold whitespace-nowrap"
+                  className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
                   style={{
                     borderBottom: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
-                    minWidth: '48px',
+                    minWidth: '56px',
                     background: isUnderstaffed
                       ? 'var(--red-pale)'
                       : hasWarning
                       ? 'var(--gold-pale)'
-                      : getCellBg(d.dow),
+                      : getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
                     color: getDowColor(d.dow),
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                   }}
                   title={dayWarnings.map((w) => w.message).join('\n')}
                 >
-                  <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{DOW_SHORT[d.dow]}</div>
-                  <div>{d.day}</div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{DOW_SHORT[d.dow]}</div>
+                  <div style={{ fontSize: '0.85rem' }}>{d.day}</div>
                 </th>
               );
             })}
@@ -157,32 +159,25 @@ export default function ShiftGrid({
         </thead>
         <tbody>
           {staff.map((s) => (
-            <tr key={s.id}>
+            <tr key={s.id} className="group">
               <td
-                className="sticky left-0 z-10 px-3 py-1.5 font-medium whitespace-nowrap"
+                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap"
                 style={{
                   background: 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
                   borderRight: '2px solid var(--rule-strong)',
                   color: 'var(--ink)',
+                  boxShadow: '4px 0 6px rgba(0,0,0,0.02)',
                 }}
               >
                 <div className="flex items-center gap-1.5">
-                  <span>{s.name}</span>
+                  <span className="group-hover:text-[var(--accent)] transition-colors">{s.name}</span>
                   {s.is_qualified && (
                     <span
                       className="text-xs px-1 rounded"
                       style={{ background: 'var(--green-pale)', color: 'var(--green)', fontSize: '0.6rem' }}
                     >
                       有資格
-                    </span>
-                  )}
-                  {s.employment_type === 'part_time' && (
-                    <span
-                      className="text-xs px-1 rounded"
-                      style={{ background: 'var(--gold-pale)', color: 'var(--gold)', fontSize: '0.6rem' }}
-                    >
-                      P
                     </span>
                   )}
                 </div>
@@ -205,9 +200,14 @@ export default function ShiftGrid({
                     title={type === 'normal' && cell ? `${cell.start_time}〜${cell.end_time}` : config.label}
                   >
                     {type === 'normal' ? (
-                      <span style={{ color: 'var(--ink-2)', fontSize: '0.7rem' }}>
-                        {cell?.start_time?.slice(0, 5)}
-                      </span>
+                      <div className="flex flex-col gap-0.5 leading-tight py-0.5">
+                        <span style={{ color: 'var(--ink-2)', fontSize: '0.68rem' }}>
+                          {cell?.start_time?.slice(0, 5)}
+                        </span>
+                        <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                          {cell?.end_time?.slice(0, 5)}
+                        </span>
+                      </div>
                     ) : (
                       <span
                         className="font-semibold"
@@ -222,33 +222,31 @@ export default function ShiftGrid({
             </tr>
           ))}
 
-          {/* 出勤人数合計行 */}
           <tr>
             <td
-              className="sticky left-0 z-10 px-3 py-2 font-bold"
+              className="sticky left-0 bottom-0 z-50 px-4 py-3 font-bold"
               style={{
-                background: 'var(--white)',
+                background: 'var(--bg)',
                 borderTop: '2px solid var(--rule-strong)',
                 borderRight: '2px solid var(--rule-strong)',
                 color: 'var(--ink)',
+                boxShadow: '4px -4px 6px rgba(0,0,0,0.02)',
               }}
             >
               出勤数
             </td>
             {dates.map((d) => {
-              const count = dailyWorkingCount.get(d.dateStr) || 0;
-              const dayWarnings = warningMap.get(d.dateStr) || [];
-              const isUnderstaffed = dayWarnings.some((w) => w.type === 'understaffed');
-
+              const count = dailyCounts.get(d.dateStr) || 0;
               return (
                 <td
                   key={d.dateStr}
-                  className="px-0.5 py-2 text-center font-bold"
+                  className="sticky bottom-0 z-40 px-1 py-2 text-center font-bold"
                   style={{
                     borderTop: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
-                    color: isUnderstaffed ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
-                    background: isUnderstaffed ? 'var(--red-pale)' : getCellBg(d.dow),
+                    color: count > 3 ? 'var(--green)' : count > 0 ? 'var(--gold)' : 'var(--ink-3)',
+                    background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
+                    boxShadow: '0 -4px 4px rgba(0,0,0,0.02)',
                   }}
                 >
                   {count > 0 ? count : ''}

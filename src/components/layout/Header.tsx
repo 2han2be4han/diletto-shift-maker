@@ -22,15 +22,18 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
 
   return (
     <header
-      className="flex items-center justify-between gap-4 px-6 py-3 shrink-0"
-      style={{ borderBottom: '1px solid var(--rule)' }}
+      className="sticky top-0 z-30 flex items-center justify-between gap-4 px-6 py-3 shrink-0"
+      style={{
+        borderBottom: '1px solid var(--rule)',
+        background: 'var(--white)',
+      }}
     >
       <div className="flex items-center gap-4">
         {/* ハンバーガー（タブレット以下のみ表示） */}
         <button
           onClick={handleToggle}
-          className="lg:hidden flex flex-col justify-center items-center w-8 h-8 gap-1.5"
-          aria-label="メニューを開く"
+          className="flex flex-col justify-center items-center w-8 h-8 gap-1.5 hover:opacity-70 transition-opacity"
+          aria-label="メニューを切替"
         >
           <span className="block w-5 h-0.5" style={{ background: 'var(--ink)' }} />
           <span className="block w-5 h-0.5" style={{ background: 'var(--ink)' }} />

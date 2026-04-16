@@ -14,11 +14,9 @@ import Badge from '@/components/ui/Badge';
  */
 
 export default function BillingPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
     <>
-      <Header title="契約管理" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Header title="契約管理" />
 
       <div className="p-6 max-w-2xl">
         <h2 className="text-lg font-bold mb-6" style={{ color: 'var(--ink)' }}>契約管理</h2>

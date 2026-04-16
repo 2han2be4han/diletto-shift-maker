@@ -38,7 +38,6 @@ const MOCK_REQUESTS: StaffRequest[] = [
 ];
 
 export default function RequestPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [detailStaff, setDetailStaff] = useState<StaffRequest | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -54,12 +53,11 @@ export default function RequestPage() {
       setTimeout(() => setCopiedId(null), 2000);
     });
   };
-
   return (
-    <>
-      <Header title="休み希望" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header title="休み希望" />
 
-      <div className="p-6">
+      <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
@@ -149,7 +147,9 @@ export default function RequestPage() {
               className="text-sm flex-1 px-3 py-2 rounded truncate"
               style={{ background: 'var(--bg)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
             >
-              {typeof window !== 'undefined' ? `${window.location.origin}/request/submit` : '/request/submit'}
+              {typeof window !== 'undefined' && window.location.origin
+                ? `${window.location.origin}/request/submit`
+                : '/request/submit'}
             </code>
             <button
               onClick={() => {
@@ -201,6 +201,6 @@ export default function RequestPage() {
           </div>
         )}
       </Modal>
-    </>
+    </div>
   );
 }

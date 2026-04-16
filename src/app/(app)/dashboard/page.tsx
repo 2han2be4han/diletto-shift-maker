@@ -1,16 +1,13 @@
 'use client';
 
 import Header from '@/components/layout/Header';
-import { useState } from 'react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 
 export default function DashboardPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
     <>
-      <Header title="ダッシュボード" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Header title="ダッシュボード" />
 
       <div className="p-6">
         <div

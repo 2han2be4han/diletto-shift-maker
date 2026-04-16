@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 /**
  * dilettoブランド準拠のログインページ
@@ -37,6 +39,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +48,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // TODO: Supabase Auth 実装後に接続
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      window.location.href = '/dashboard';
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError('メールアドレスまたはパスワードが正しくありません');
+        return;
+      }
+
+      router.push('/dashboard');
+      router.refresh();
     } catch {
-      setError('メールアドレスまたはパスワードが正しくありません');
+      setError('ログイン中にエラーが発生しました');
     } finally {
       setLoading(false);
     }

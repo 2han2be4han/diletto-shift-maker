@@ -63,7 +63,6 @@ const emptyStaff = (): StaffItem => ({
 });
 
 export default function StaffSettingsPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [staffList, setStaffList] = useState<StaffItem[]>(INITIAL_STAFF);
   const [editing, setEditing] = useState<StaffItem | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -107,7 +106,7 @@ export default function StaffSettingsPage() {
 
   return (
     <>
-      <Header title="職員管理" onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Header title="職員管理" />
 
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
