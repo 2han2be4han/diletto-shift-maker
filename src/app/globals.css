@@ -36,13 +36,13 @@
   --color-green: var(--green);
   --color-red: var(--red);
   --color-gold: var(--gold);
-  --font-sans: 'Inter', 'Noto Sans JP', sans-serif;
+  --font-sans: 'Inter', 'Noto Sans JP', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  font-family: 'Inter', 'Noto Sans JP', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
   font-size: 16px;
   line-height: 1.75;
   font-weight: 400;
