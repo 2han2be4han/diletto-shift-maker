@@ -123,14 +123,14 @@ export default function StaffSettingsPage() {
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
             <thead>
               <tr>
-                {['氏名', 'ロール', '雇用', '勤務時間', '対応エリア', '有資格', '操作'].map((h) => (
+                {['氏名', 'ロール', '雇用', '勤務時間', '対応エリア', '有資格'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {staffList.map((s) => (
-                <tr key={s.id} className="hover:bg-[var(--accent-pale)] transition-colors">
+                <tr key={s.id} className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer" onClick={() => handleEdit(s)}>
                   <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
                   </td>
@@ -168,15 +168,6 @@ export default function StaffSettingsPage() {
                     ) : (
                       <span style={{ color: 'var(--ink-3)' }}>-</span>
                     )}
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <button
-                      onClick={() => handleEdit(s)}
-                      className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
-                      style={{ color: 'var(--accent)' }}
-                    >
-                      編集
-                    </button>
                   </td>
                 </tr>
               ))}

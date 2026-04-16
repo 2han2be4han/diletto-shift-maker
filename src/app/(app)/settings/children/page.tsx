@@ -57,6 +57,29 @@ const emptyPattern = (): PatternItem => ({
   dropoff_location: '', dropoff_time: '16:00', dropoff_method: 'dropoff', area_label: '',
 });
 
+/* 送迎パターンのテンプレートセット */
+const PRESET_BUNDLES = [
+  {
+    id: 'school',
+    name: '学校プラン',
+    description: '学校お迎え・自宅送り',
+    patterns: [
+      { name: '通常', pickup_location: '学校', pickup_time: '14:00', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
+      { name: '短縮', pickup_location: '学校', pickup_time: '11:45', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
+      { name: '休み', pickup_location: '自宅', pickup_time: '14:00', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
+    ],
+  },
+  {
+    id: 'holiday',
+    name: '休暇プラン',
+    description: '自宅お迎え・自宅送り',
+    patterns: [
+      { name: '終日利用', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🌳 豊明' },
+      { name: '休み', pickup_location: '保護者', pickup_time: '10:00', pickup_method: 'parent', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '' },
+    ],
+  },
+];
+
 /* デイロボExcelを参考にした仮データ */
 const INITIAL_CHILDREN: ChildItem[] = [
   {
@@ -158,7 +181,7 @@ export default function ChildrenSettingsPage() {
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
             <thead>
               <tr>
-                {['氏名', '学年', 'パターン数', 'エリア', 'ステータス', ''].map((h) => (
+                {['氏名', '学年', 'パターン数', 'エリア', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
@@ -173,14 +196,15 @@ export default function ChildrenSettingsPage() {
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {c.patterns.length}パターン
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                    {[...new Set(c.patterns.map((p) => p.area_label).filter(Boolean))].join(' ')}
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                    <div className="flex flex-wrap gap-1">
+                      {[...new Set(c.patterns.map((p) => p.area_label).filter(Boolean))].map((area) => (
+                        <span key={area} title={area} className="text-sm">{area.split(' ')[0]}</span>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                     <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                    <span className="text-xs" style={{ color: 'var(--accent)' }}>編集</span>
                   </td>
                 </tr>
               ))}
@@ -223,6 +247,30 @@ export default function ChildrenSettingsPage() {
               <div className="flex items-end gap-2 pb-1">
                 <input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} id="active" />
                 <label htmlFor="active" className="text-sm" style={{ color: 'var(--ink-2)' }}>有効</label>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 p-3" style={{ background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--rule)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>テンプレート一括適用</label>
+              <div className="flex gap-2">
+                {PRESET_BUNDLES.map((bundle) => (
+                  <button
+                    key={bundle.id}
+                    onClick={() => {
+                      if (window.confirm(`${bundle.name}のテンプレートを適用しますか？現在のパターンは上書きされます。`)) {
+                        setEditing({
+                          ...editing,
+                          patterns: bundle.patterns.map((p) => ({ ...p })),
+                        });
+                      }
+                    }}
+                    className="flex-1 text-left p-2 rounded transition-all hover:bg-white border border-transparent hover:border-[var(--rule)]"
+                    style={{ background: 'rgba(0,0,0,0.03)' }}
+                  >
+                    <div className="text-xs font-bold" style={{ color: 'var(--ink)' }}>{bundle.name}</div>
+                    <div className="text-[10px]" style={{ color: 'var(--ink-3)' }}>{bundle.description}</div>
+                  </button>
+                ))}
               </div>
             </div>
 
