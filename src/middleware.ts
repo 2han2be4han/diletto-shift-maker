@@ -6,8 +6,18 @@ import { NextResponse, type NextRequest } from 'next/server';
  * - 未認証ユーザー → /login にリダイレクト
  * - 認証済みで /login にアクセス → /dashboard にリダイレクト
  * - Supabase のセッションCookieを自動リフレッシュ
+ *
+ * DEV_SKIP_AUTH: 開発中はSupabase Auth未接続のため認証チェックをスキップ
+ * Supabase Auth接続後にこのフラグを削除すること
  */
+const DEV_SKIP_AUTH = process.env.NODE_ENV === 'development';
+
 export async function middleware(request: NextRequest) {
+  /* 開発中は認証チェックをスキップして全ページアクセス可 */
+  if (DEV_SKIP_AUTH) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -1,7 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import Button from '@/components/ui/Button';
+
+/**
+ * dilettoブランド準拠のログインページ
+ * - 左パネル: diletto本体サイト(diletto-s.com)と同一ブランド表現
+ * - 右パネル: admin.htmlと同一スタイルのログインカード
+ */
+
+/* dilettoロゴ（common.jsと同一マークアップ再現） */
+function DilettoLogo({ size = 'default' }: { size?: 'default' | 'small' }) {
+  const fontSize = size === 'small' ? '1.05rem' : '1.3rem';
+  const subSize = size === 'small' ? '0.58em' : '0.62em';
+
+  return (
+    <span
+      style={{
+        fontSize,
+        fontWeight: 800,
+        letterSpacing: '0.12em',
+        color: 'var(--ink)',
+      }}
+    >
+      di
+      <em style={{ fontStyle: 'normal', color: 'var(--accent)' }}>letto</em>
+      {' '}
+      <span style={{ fontSize: subSize, fontWeight: 600, opacity: 1 }}>
+        by <span style={{ color: '#2e9e46' }}>AI Skill</span> Exchange
+      </span>
+    </span>
+  );
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,11 +45,6 @@ export default function LoginPage() {
 
     try {
       // TODO: Supabase Auth 実装後に接続
-      // const { error } = await supabase.auth.signInWithPassword({ email, password });
-      // if (error) throw error;
-      // router.push('/dashboard');
-
-      // 仮実装: 2秒後にダッシュボードへ
       await new Promise((resolve) => setTimeout(resolve, 1000));
       window.location.href = '/dashboard';
     } catch {
@@ -30,55 +54,80 @@ export default function LoginPage() {
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--white)',
+    color: 'var(--ink)',
+    border: '1px solid var(--rule)',
+    borderRadius: '10px',
+    padding: '14px 18px',
+    fontSize: '1rem',
+  };
+
   return (
     <div className="flex min-h-screen">
-      {/* === 左パネル: ブランディング（lg以上で表示） === */}
+      {/* === 左パネル: dilettoブランディング（lg以上）DocMerge準拠・黒背景 === */}
       <div
-        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
-        style={{ background: 'var(--ink)' }}
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between px-12 py-10"
+        style={{ background: '#111111' }}
       >
-        {/* 上部: dilettoロゴ */}
+        {/* 上部: dilettoロゴ（白テキスト版） */}
         <div>
           <span
-            className="text-sm font-semibold tracking-widest uppercase"
-            style={{ color: 'var(--ink-3)' }}
+            style={{
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              color: '#ffffff',
+            }}
           >
-            diletto
+            di
+            <em style={{ fontStyle: 'normal', color: 'var(--accent)' }}>letto</em>
+            {' '}
+            <span style={{ fontSize: '0.58em', fontWeight: 600, color: 'rgba(255,255,255,0.45)' }}>
+              by <span style={{ color: '#2e9e46' }}>AI Skill</span> Exchange
+            </span>
           </span>
         </div>
 
         {/* 中央: プロダクト紹介 */}
-        <div className="flex flex-col gap-6 max-w-md">
+        <div className="flex flex-col gap-6 max-w-lg">
           <h1
-            className="text-4xl font-bold leading-tight"
-            style={{ color: 'var(--white)' }}
+            className="font-bold leading-tight"
+            style={{
+              color: '#ffffff',
+              fontSize: 'clamp(2rem, 3.4vw, 2.8rem)',
+              fontWeight: 900,
+            }}
           >
-            ShiftPuzzle
+            送迎・シフト管理を、
+            <br />
+            もっとシンプルに。
           </h1>
           <p
-            className="text-base leading-relaxed"
-            style={{ color: 'rgba(255,255,255,0.6)' }}
+            className="leading-relaxed"
+            style={{
+              color: 'rgba(255,255,255,0.55)',
+              fontSize: '1rem',
+              lineHeight: '1.85',
+            }}
           >
-            放課後等デイサービス向け
+            放課後等デイサービス向け送迎・シフト半自動生成SaaS。
             <br />
-            送迎・シフト半自動生成SaaS
+            PDFから利用予定を読み取り、シフトと送迎担当を
+            <br />
+            ワンクリックで仮割り当て。
           </p>
-          <div className="flex flex-col gap-3 mt-4">
+          <div className="flex flex-col gap-4 mt-2">
             {[
               'PDFから利用予定を自動読み取り',
               '休み希望を反映したシフト生成',
               'ワンクリックで送迎担当を仮割り当て',
             ].map((text) => (
               <div key={text} className="flex items-center gap-3">
-                <span
-                  className="flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full shrink-0"
-                  style={{ background: 'var(--accent)', color: '#fff' }}
-                >
-                  ✓
-                </span>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.9rem' }}>•</span>
                 <span
                   className="text-sm"
-                  style={{ color: 'rgba(255,255,255,0.7)' }}
+                  style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}
                 >
                   {text}
                 </span>
@@ -92,7 +141,7 @@ export default function LoginPage() {
           className="text-xs"
           style={{ color: 'rgba(255,255,255,0.3)' }}
         >
-          © 2026 diletto Inc.
+          © 2026 diletto by AI Skill Exchange. All rights reserved.
         </p>
       </div>
 
@@ -101,48 +150,62 @@ export default function LoginPage() {
         className="flex-1 flex items-center justify-center p-6"
         style={{ background: 'var(--bg)' }}
       >
-        <div className="w-full max-w-sm">
+        <div className="w-full" style={{ maxWidth: '400px' }}>
           {/* モバイル用ロゴ（lg未満で表示） */}
           <div className="lg:hidden text-center mb-8">
-            <p
-              className="text-xs font-semibold tracking-widest uppercase mb-1"
-              style={{ color: 'var(--ink-3)' }}
-            >
-              diletto
-            </p>
-            <h1
-              className="text-2xl font-bold"
+            <DilettoLogo size="small" />
+            <h2
+              className="text-xl font-bold mt-3"
               style={{ color: 'var(--ink)' }}
             >
               ShiftPuzzle
-            </h1>
+            </h2>
           </div>
 
-          {/* ログインカード */}
+          {/* ログインカード（admin.html準拠） */}
           <div
-            className="p-8"
             style={{
               background: 'var(--white)',
-              borderRadius: '8px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+              borderRadius: '20px',
+              boxShadow: '0 32px 80px rgba(0,0,0,0.12)',
+              padding: '48px',
             }}
           >
+            {/* ロゴ（admin.htmlと同一スタイル） */}
+            <div className="mb-8">
+              <span
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.1em',
+                  color: 'var(--ink)',
+                }}
+              >
+                di
+                <em style={{ fontStyle: 'normal', color: 'var(--accent)' }}>letto</em>
+                {' '}
+                <span style={{ fontWeight: 600, fontSize: '0.7em' }}>
+                  ShiftPuzzle
+                </span>
+              </span>
+            </div>
+
             <h2
-              className="text-lg font-bold mb-1"
-              style={{ color: 'var(--ink)' }}
+              className="font-bold mb-1"
+              style={{ color: 'var(--ink)', fontSize: '1.2rem' }}
             >
               ログイン
             </h2>
             <p
-              className="text-sm mb-6"
-              style={{ color: 'var(--ink-3)' }}
+              className="mb-6"
+              style={{ color: 'var(--ink-3)', fontSize: '0.9rem' }}
             >
               アカウント情報を入力してください
             </p>
 
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <form onSubmit={handleLogin} className="flex flex-col gap-5">
               {/* メールアドレス */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label
                   className="text-xs font-semibold"
                   style={{ color: 'var(--ink-2)' }}
@@ -155,20 +218,13 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
-                  className="w-full px-3 py-2.5 text-sm outline-none transition-all focus:ring-2"
-                  style={{
-                    background: 'var(--bg)',
-                    color: 'var(--ink)',
-                    border: '1px solid var(--rule)',
-                    borderRadius: '4px',
-                    // @ts-expect-error -- CSS変数をfocusリングに使用
-                    '--tw-ring-color': 'var(--accent-mid)',
-                  }}
+                  className="w-full outline-none transition-all"
+                  style={inputStyle}
                 />
               </div>
 
               {/* パスワード */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label
                   className="text-xs font-semibold"
                   style={{ color: 'var(--ink-2)' }}
@@ -181,39 +237,48 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="パスワードを入力"
                   required
-                  className="w-full px-3 py-2.5 text-sm outline-none transition-all focus:ring-2"
-                  style={{
-                    background: 'var(--bg)',
-                    color: 'var(--ink)',
-                    border: '1px solid var(--rule)',
-                    borderRadius: '4px',
-                  }}
+                  className="w-full outline-none transition-all"
+                  style={inputStyle}
                 />
               </div>
 
               {/* エラーメッセージ */}
               {error && (
                 <p
-                  className="text-xs font-medium px-3 py-2"
+                  className="text-xs font-medium px-4 py-3"
                   style={{
                     color: 'var(--red)',
                     background: 'var(--red-pale)',
-                    borderRadius: '4px',
+                    borderRadius: '10px',
                   }}
                 >
                   {error}
                 </p>
               )}
 
-              {/* ログインボタン */}
-              <Button
+              {/* ログインボタン（admin.html準拠: ink背景→hover時accent） */}
+              <button
                 type="submit"
-                variant="primary"
                 disabled={loading}
-                className="w-full mt-1"
+                className="w-full font-semibold transition-all disabled:opacity-50 disabled:pointer-events-none"
+                style={{
+                  background: 'var(--ink)',
+                  color: '#ffffff',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  fontSize: '1rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  if (!loading) e.currentTarget.style.background = 'var(--accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--ink)';
+                }}
               >
                 {loading ? 'ログイン中...' : 'ログイン'}
-              </Button>
+              </button>
             </form>
           </div>
         </div>

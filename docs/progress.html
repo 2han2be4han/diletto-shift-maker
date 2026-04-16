@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShiftPuzzle - Phase C 進捗表</title>
+  <title>ShiftPuzzle - 全体進捗表</title>
   <style>
     body { font-family: 'Inter', 'Noto Sans JP', sans-serif; margin: 24px; background: #f5f4f0; color: #111; }
     h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    h2 { font-size: 1.15rem; margin-top: 32px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #111; }
     .subtitle { color: #5a5a55; font-size: 0.9rem; margin-bottom: 24px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .phase-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .phase-card { background: #fff; border-radius: 8px; padding: 14px 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); min-width: 180px; flex: 1; }
+    .phase-card h3 { font-size: 0.9rem; margin: 0 0 6px 0; }
+    .phase-card .phase-status { font-size: 0.8rem; font-weight: 600; }
+    .phase-card .phase-desc { font-size: 0.78rem; color: #5a5a55; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 24px; }
     th { background: #111; color: #fff; text-align: left; padding: 10px 14px; font-size: 0.85rem; font-weight: 600; }
     td { padding: 10px 14px; border-bottom: 1px solid rgba(0,0,0,0.08); font-size: 0.85rem; }
     tr:last-child td { border-bottom: none; }
@@ -18,16 +24,134 @@
     .done { background: rgba(42,122,82,0.1); color: #2a7a52; }
     .blocked { background: rgba(155,51,51,0.08); color: #9b3333; }
     .progress-bar { width: 100px; height: 8px; background: #f0f0ec; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
-    .progress-fill { height: 100%; background: #1a3eb8; border-radius: 4px; transition: width 0.3s; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .fill-done { background: #2a7a52; }
+    .fill-progress { background: #1a3eb8; }
     .check-section { background: rgba(138,97,32,0.07); padding: 6px 10px; border-radius: 4px; font-size: 0.8rem; color: #8a6120; margin-top: 2px; }
     .notes { color: #5a5a55; font-size: 0.8rem; }
     .updated { text-align: right; color: #a8a8a0; font-size: 0.78rem; margin-top: 16px; }
   </style>
 </head>
 <body>
-  <h1>ShiftPuzzle - Phase C: 基盤実装 進捗表</h1>
-  <p class="subtitle">最終更新: 2026-04-16 — Phase C 全ステップ完了</p>
+  <h1>ShiftPuzzle - 全体進捗表</h1>
+  <p class="subtitle">最終更新: 2026-04-16</p>
 
+  <!-- フェーズ概要カード -->
+  <div class="phase-summary">
+    <div class="phase-card">
+      <h3>Phase A</h3>
+      <div class="phase-status" style="color:#5a5a55;">未着手</div>
+      <div class="phase-desc">Vercel連携・自動デプロイ</div>
+    </div>
+    <div class="phase-card">
+      <h3>Phase B</h3>
+      <div class="phase-status" style="color:#5a5a55;">未着手</div>
+      <div class="phase-desc">Supabaseプロジェクト作成</div>
+    </div>
+    <div class="phase-card">
+      <h3>Phase C</h3>
+      <div class="phase-status" style="color:#2a7a52;">完了</div>
+      <div class="phase-desc">基盤実装（デザイン・認証・DB）</div>
+    </div>
+    <div class="phase-card">
+      <h3>Phase D</h3>
+      <div class="phase-status" style="color:#5a5a55;">未着手</div>
+      <div class="phase-desc">MVP機能実装</div>
+    </div>
+  </div>
+
+  <!-- Phase A -->
+  <h2>Phase A: Vercel連携</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>機能名</th>
+        <th>対象</th>
+        <th>ステータス</th>
+        <th>完了率</th>
+        <th>整合性チェック</th>
+        <th>備考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>A-1</td>
+        <td>Vercelプロジェクト作成</td>
+        <td>Vercel Dashboard</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td>-</td>
+        <td class="notes">GitHubリポジトリをインポート</td>
+      </tr>
+      <tr>
+        <td>A-2</td>
+        <td>自動デプロイ設定</td>
+        <td>Vercel Settings</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">mainブランチpush → 自動デプロイ確認</td>
+        <td class="notes">dilettoとは別プロジェクト</td>
+      </tr>
+      <tr>
+        <td>A-3</td>
+        <td>環境変数設定</td>
+        <td>Vercel Environment Variables</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">.env.exampleの全項目がVercelに設定済みか確認</td>
+        <td class="notes">Supabase / Stripe / Anthropic キー</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Phase B -->
+  <h2>Phase B: Supabaseプロジェクト作成</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>機能名</th>
+        <th>対象</th>
+        <th>ステータス</th>
+        <th>完了率</th>
+        <th>整合性チェック</th>
+        <th>備考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>B-1</td>
+        <td>Supabaseプロジェクト新規作成</td>
+        <td>Supabase Dashboard</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td>-</td>
+        <td class="notes">ShiftPuzzle専用プロジェクト</td>
+      </tr>
+      <tr>
+        <td>B-2</td>
+        <td>マイグレーション実行（テーブル・RLS）</td>
+        <td>Supabase SQL Editor</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">Phase C-4で作成した4テーブル + RLSが反映済みか確認</td>
+        <td class="notes">tenants, staff, children, child_transport_patterns</td>
+      </tr>
+      <tr>
+        <td>B-3</td>
+        <td>.env.local 設定</td>
+        <td>.env.local</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">SUPABASE_URL / ANON_KEY / SERVICE_ROLE_KEY 設定確認</td>
+        <td class="notes">ローカル開発用</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Phase C -->
+  <h2>Phase C: 基盤実装 <span class="status done">完了</span></h2>
   <table>
     <thead>
       <tr>
@@ -41,101 +165,140 @@
       </tr>
     </thead>
     <tbody>
-      <!-- C-1 -->
       <tr>
         <td>C-1</td>
         <td>進捗表作成</td>
         <td>docs/progress.html</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
         <td>-</td>
         <td class="notes">本ファイル</td>
       </tr>
-      <!-- C-2a -->
       <tr>
         <td>C-2a</td>
         <td>CSS変数・フォント設定</td>
         <td>globals.css, layout.tsx</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ design rulebook の変数と一致</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; design rulebook の変数と一致</td>
         <td class="notes">Inter + Noto Sans JP, ライトテーマ変数設定済み</td>
       </tr>
-      <!-- C-2b -->
       <tr>
         <td>C-2b</td>
         <td>共通UIコンポーネント</td>
         <td>components/ui/Button.tsx, Modal.tsx, Badge.tsx</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ 4バリアント実装 / btn-shimmer未使用</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; 4バリアント実装 / btn-shimmer未使用</td>
         <td class="notes">Badge 5バリアント追加</td>
       </tr>
-      <!-- C-2c -->
       <tr>
         <td>C-2c</td>
         <td>サイドバー+メインレイアウト</td>
         <td>(app)/layout.tsx, Sidebar.tsx, Header.tsx</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ 幅ドラッグ調整可 / タブレット折りたたみ / ナビ一致</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; 幅ドラッグ調整可 / タブレット折りたたみ / ナビ一致</td>
         <td class="notes">デフォルト240px, 180-360px可変</td>
       </tr>
-      <!-- C-3a -->
       <tr>
         <td>C-3a</td>
         <td>Supabaseクライアント</td>
         <td>lib/supabase/client.ts, server.ts</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ service_role keyはサーバー側のみ</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; service_role keyはサーバー側のみ</td>
         <td class="notes">@supabase/supabase-js, @supabase/ssr インストール済み</td>
       </tr>
-      <!-- C-3b -->
       <tr>
         <td>C-3b</td>
         <td>ログインページ</td>
         <td>(auth)/login/page.tsx</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ デザイントークンのみ / エラーメッセージ日本語 / dilettoスプリット</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; デザイントークンのみ / エラーメッセージ日本語 / dilettoスプリット</td>
         <td class="notes">左パネル: dilettoブランド、右パネル: ログインフォーム</td>
       </tr>
-      <!-- C-3c -->
       <tr>
         <td>C-3c</td>
         <td>認証ミドルウェア</td>
         <td>middleware.ts</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ 未認証→/login, 認証済み→/dashboard 確認済み</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; 未認証→/login, 認証済み→/dashboard 確認済み</td>
         <td class="notes">静的ファイル・Webhook除外設定済み</td>
       </tr>
-      <!-- C-4 -->
       <tr>
         <td>C-4</td>
         <td>DBテーブル構築</td>
         <td>Supabase Migration, types/index.ts</td>
         <td><span class="status done">完了</span></td>
-        <td>
-          <span class="progress-bar"><span class="progress-fill" style="width:100%"></span></span> 100%
-        </td>
-        <td class="check-section">✅ 全テーブルtenant_id有 / RLS設定済 / reference-map更新済</td>
+        <td><span class="progress-bar"><span class="progress-fill fill-done" style="width:100%"></span></span> 100%</td>
+        <td class="check-section">&#10003; 全テーブルtenant_id有 / RLS設定済 / reference-map更新済</td>
         <td class="notes">4テーブル + RLS + 型定義完了</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Phase D -->
+  <h2>Phase D: MVP機能実装</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>機能名</th>
+        <th>対象ファイル</th>
+        <th>ステータス</th>
+        <th>完了率</th>
+        <th>整合性チェック</th>
+        <th>備考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>D-1</td>
+        <td>PDF利用予定インポート</td>
+        <td>api/import/pdf/route.ts, lib/anthropic/parsePdf.ts, PdfImportModal.tsx, PdfConfirmTable.tsx, schedule/page.tsx</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">Claude API claude-sonnet-4-20250514 固定 / JSON形式レスポンス / 確認画面経由でDB保存</td>
+        <td class="notes">PDF手動アップロード → Claude API解析 → 確認 → DB登録</td>
+      </tr>
+      <tr>
+        <td>D-2</td>
+        <td>休み希望 → シフト生成</td>
+        <td>request/page.tsx, lib/logic/generateShift.ts, api/shift/generate/route.ts, shift/page.tsx, ShiftGrid.tsx, ShiftCell.tsx</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">最低出勤人数ルール / 有資格者ルール / is_confirmed=false で保存</td>
+        <td class="notes">職員の休み希望フォーム + シフト半自動生成</td>
+      </tr>
+      <tr>
+        <td>D-3</td>
+        <td>送迎担当仮割り当て</td>
+        <td>lib/logic/generateTransport.ts, api/transport/generate/route.ts, transport/page.tsx, TransportDayView.tsx, AssignmentCell.tsx</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">5段階優先ルール / 最大2名 / 未割当は赤ハイライト / is_confirmed=false</td>
+        <td class="notes">ルールベースで送迎担当を自動割り当て</td>
+      </tr>
+      <tr>
+        <td>D-4</td>
+        <td>手動調整・確定</td>
+        <td>shift/page.tsx, transport/page.tsx, api/transport/confirm/route.ts</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">確定済みレコード自動上書き禁止 / 権限チェック（viewer不可）</td>
+        <td class="notes">画面上でシフト・送迎表を手動調整 → 確定操作</td>
+      </tr>
+      <tr>
+        <td>D-5</td>
+        <td>シフト表・送迎表表示</td>
+        <td>schedule/page.tsx, ScheduleCalendar.tsx, shift/page.tsx, transport/page.tsx</td>
+        <td><span class="status pending">未着手</span></td>
+        <td><span class="progress-bar"><span class="progress-fill fill-progress" style="width:0%"></span></span> 0%</td>
+        <td class="check-section">FullCalendar連携 / PC・タブレット表示確認</td>
+        <td class="notes">カレンダーUIでの利用予定・シフト・送迎表の閲覧</td>
       </tr>
     </tbody>
   </table>
