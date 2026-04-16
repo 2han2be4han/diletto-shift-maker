@@ -123,12 +123,14 @@ export default function ScheduleGrid({
                   color: getDowStyle(d.dow).color || 'var(--ink-2)',
                 }}
               >
-                <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>
                   {d.dow === 0 || d.dow === 6 ? '休' : '営'}
                 </div>
-                <div>
-                  {d.day}
-                  <span style={{ fontSize: '0.7rem' }}>({DOW_SHORT[d.dow]})</span>
+                <div style={{ fontSize: '0.78rem' }}>
+                  {month}/{d.day}
+                </div>
+                <div style={{ fontSize: '0.65rem' }}>
+                  ({DOW_SHORT[d.dow]})
                 </div>
               </th>
             ))}
@@ -227,7 +229,8 @@ export default function ScheduleGrid({
                   style={{
                     borderTop: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
-                    color: count >= 8 ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
+                    color: count > 10 ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
+                    fontWeight: count > 10 ? 800 : 700,
                     background: getCellBg(d.dow),
                   }}
                 >
