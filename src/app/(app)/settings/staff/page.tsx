@@ -783,11 +783,11 @@ export default function StaffSettingsPage() {
                       </p>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {labels.map((area) => {
+                        {labels.map((area, idx) => {
                           const on = selected.includes(area);
                           return (
                             <button
-                              key={area}
+                              key={`${idx}-${area}`}
                               type="button"
                               onClick={() => handleAreaToggle(direction, area)}
                               className="rounded-md transition-all text-left"
