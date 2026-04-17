@@ -640,39 +640,34 @@ function StaffSelect({
           </div>
         );
       })}
-      {staffIds.length === 0 ? (
-        <button
-          onClick={handleAdd}
-          disabled={disabled}
-          className="self-start rounded-md transition-colors disabled:opacity-60"
-          style={{
-            width: SELECT_WIDTH,
-            padding: '5px 8px',
-            fontSize: '0.72rem',
-            fontWeight: 500,
-            color: 'var(--red)',
-            border: '1px dashed var(--red)',
-            background: 'transparent',
-          }}
-        >
-          担当を選択
-        </button>
-      ) : staffIds.length < 2 && !disabled ? (
-        <button
-          onClick={handleAdd}
-          className="self-start rounded-md transition-colors hover:bg-[var(--accent-pale)]"
-          style={{
-            padding: '2px 8px',
-            fontSize: '0.7rem',
-            fontWeight: 500,
-            color: 'var(--accent)',
-            border: '1px dashed var(--accent)',
-            background: 'transparent',
-          }}
-        >
-          ＋ 追加
-        </button>
-      ) : null}
+      {/* ＋追加 / 担当を選択 ボタンは select と同じレイアウトラインに揃える
+         （先頭にマーク幅の透明プレースホルダを置く） */}
+      {(staffIds.length === 0 || (staffIds.length < 2 && !disabled)) && (
+        <div className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="shrink-0"
+            style={{ display: 'inline-block', width: '3.2em' }}
+          />
+          <button
+            onClick={handleAdd}
+            disabled={disabled}
+            className="rounded-md transition-colors disabled:opacity-60"
+            style={{
+              width: SELECT_WIDTH,
+              padding: '5px 8px',
+              fontSize: '0.74rem',
+              fontWeight: 500,
+              color: staffIds.length === 0 ? 'var(--red)' : 'var(--accent)',
+              border: `1px dashed ${staffIds.length === 0 ? 'var(--red)' : 'var(--accent)'}`,
+              background: 'transparent',
+              textAlign: 'center',
+            }}
+          >
+            {staffIds.length === 0 ? '担当を選択' : '＋ 追加'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
