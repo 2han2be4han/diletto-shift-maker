@@ -584,16 +584,12 @@ function StaffSelect({
             >
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
-              {availableStaff.map((s) => {
-                /* 各候補の担当マークを option label の先頭に含める（🌳🍶 本岡 恵 のように） */
-                const optMarks = s.areaMarks.length > 0 ? `${s.areaMarks.join('')} ` : '';
-                return (
-                  <option key={s.id} value={s.id}>
-                    {optMarks}
-                    {s.name}
-                  </option>
-                );
-              })}
+              {availableStaff.map((s) => (
+                /* Phase 27: 外側のマークバッジと重複表示になるため option は名前のみ */
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
             </select>
             {/* 選択中職員のマーク表示（select の value は option label の装飾を見せないので補足表示） */}
             {id && !isMissing && marks.length > 0 && (
