@@ -282,6 +282,9 @@ export type ParsedScheduleEntry = {
   /** Phase 24: Excel貼付で「迎/送」ラベル無しは self 扱い（任意、未設定は pickup/dropoff 扱い） */
   pickup_method?: ScheduleEntryPickupMethod;
   dropoff_method?: ScheduleEntryDropoffMethod;
+  /** Phase 27-A-1: PDF import の pattern selector。確認画面で初期選択される（時刻一致 → 過去最頻 → 最初の1件 → null）。
+   *  null は明示的に「該当なし」を選んだ状態 */
+  pattern_id?: string | null;
 };
 
 // ----- コメント（4機能にポリモーフィック） -----

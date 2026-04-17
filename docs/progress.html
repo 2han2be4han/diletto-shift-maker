@@ -514,6 +514,16 @@
             <tr><td>27-D-4</td><td>generateTransport に direction 引数追加。pickup/dropoff でエリアフィルタ分岐。新カラム空時は旧 transport_areas フォールバック</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>外部シグネチャ不変</td></tr>
             <tr><td>27-D-5</td><td>UI 側（settings/staff モーダル D-4 分割 + 一覧ポップ化 G）</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>モーダル: 迎対応(accent)/送り対応(green) 2 セクション。一覧: 迎/送を別チップで色分け（accent-pale/green-pale）。モバイル行も同様</td></tr>
             <tr><td>27-D-6</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+    <div class="phase-head">Phase 27-A-1: PDF import の pattern selector（B 案・デフォルト＋明示切替）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>27-A-1-1</td><td>ParsedScheduleEntry 型に pattern_id 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>optional。undefined=未設定 / null=該当なし明示選択</td></tr>
+            <tr><td>27-A-1-2</td><td>schedule/page で過去12ヶ月の schedule_entries から child_id→最頻 pattern_id を集計 (patternUsage)。patterns も state に保持</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-3</td><td>PdfImportModal に childList / patterns / patternUsage 受け入れ。解析結果に assignPatternIds で初期 pattern_id 付与（時刻完全一致 → 最頻 → 最初の1件 → null）</td><td>src/components/schedule/PdfImportModal.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-4</td><td>PdfConfirmTable にパターン選択列追加。児童名に 🔗 (紐付け済) / ⚠ (該当なし) マーク。時刻不一致時は注記表示。未選択件数サマリ</td><td>src/components/schedule/PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-5</td><td>handleBulkImport で pattern_id を送信</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>API 側は Phase 5 から受け入れ対応済</td></tr>
+            <tr><td>27-A-1-6</td><td>ずれ確認: tsc 通過 / ExcelPasteModal は既存フロー（pattern_id=undefined→null）で互換</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>Excel 側の pattern selector は A-2 で対応</td></tr>
         </tbody>
     </table>
 

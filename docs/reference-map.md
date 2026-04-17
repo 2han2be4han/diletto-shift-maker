@@ -374,3 +374,27 @@
 ### 触らない / 残置
 - `src/app/(app)/settings/staff/page.tsx` の既存 `transport_areas` 参照（UI 未更新のため残す。新カラム空時のフォールバックが効く）
 - `src/app/(app)/settings/tenant/page.tsx` / `transport/page.tsx` / `output/daily/page.tsx` / `settings/children/page.tsx` の `settings.transport_areas`（**テナント設定**側で別モノ・変更不要）
+## Phase 27-A-1: PDF import の pattern selector（2026-04-17）
+
+### 型
+- `ParsedScheduleEntry.pattern_id?: string | null` 追加（optional、undefined=未設定／null=該当なし明示）
+
+### schedule/page.tsx
+- `patterns` state 追加（`/api/children` から取得、従来は捨てていた）
+- `patternUsage: Map<child_id, pattern_id>` 追加（過去12ヶ月の schedule_entries から最頻パターンを集計）
+- `handleBulkImport` で `pattern_id` を `/api/schedule-entries` POST に含める
+
+### PdfImportModal
+- props に `childList` / `patterns` / `patternUsage` 追加
+- 解析結果受け取り時に `assignPatternIds()` で初期 pattern_id 付与
+  - 優先順位: 時刻完全一致 → 過去最頻 → 児童の最初の 1 件 → null
+
+### PdfConfirmTable
+- props に `childList` / `patterns` 追加
+- 「備考」列を「パターン」列に置換。児童の全パターンをドロップダウン表示（pattern_name + area + 時刻）
+- 児童名先頭に 🔗（紐付け済）/ ⚠（該当なし）マーク
+- 選択パターンの時刻と PDF 時刻が異なる場合は注記表示
+- サマリ行に「⚠ パターン未選択: N 件」
+
+### 触らない / 残置
+- ExcelPasteModal は A-1 スコープ外。pattern_id=undefined で送信され、API 側で null 保存。Excel 側 UI は A-2 で対応予定

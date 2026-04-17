@@ -5,22 +5,82 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import PdfConfirmTable from './PdfConfirmTable';
-import type { ParsedScheduleEntry } from '@/types';
+import type { ChildRow, ChildTransportPatternRow, ParsedScheduleEntry } from '@/types';
 
 /**
  * PDFインポートモーダル
  * フロー: アップロード → 解析中 → 確認テーブル → 確定でDB保存
+ *
+ * Phase 27-A-1: 解析結果に pattern_id を付与する。優先順位:
+ *   1. pickup_time / dropoff_time が完全一致するパターン
+ *   2. patternUsage（過去の最頻パターン）
+ *   3. 児童の最初のパターン
+ *   4. 該当なし（pattern_id = null）
  */
 
 type PdfImportModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (entries: ParsedScheduleEntry[]) => void;
+  childList: ChildRow[];
+  patterns: ChildTransportPatternRow[];
+  patternUsage: Map<string, string>;
 };
+
+/** "HH:MM:SS" → "HH:MM"（比較用正規化） */
+function normalizeTime(t: string | null | undefined): string | null {
+  if (!t) return null;
+  return t.length >= 5 ? t.slice(0, 5) : t;
+}
+
+/** 解析結果に pattern_id を付与する */
+function assignPatternIds(
+  entries: ParsedScheduleEntry[],
+  childList: ChildRow[],
+  patterns: ChildTransportPatternRow[],
+  patternUsage: Map<string, string>,
+): ParsedScheduleEntry[] {
+  const nameToChildId = new Map(childList.map((c) => [c.name, c.id]));
+  /* child_id → パターン一覧 */
+  const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
+  for (const p of patterns) {
+    const list = patternsByChild.get(p.child_id) ?? [];
+    list.push(p);
+    patternsByChild.set(p.child_id, list);
+  }
+  return entries.map((e) => {
+    if (e.pattern_id !== undefined) return e; /* 既に設定済みは尊重 */
+    const childId = nameToChildId.get(e.child_name);
+    if (!childId) return { ...e, pattern_id: null };
+    const childPatterns = patternsByChild.get(childId) ?? [];
+    if (childPatterns.length === 0) return { ...e, pattern_id: null };
+    /* 1. 時刻完全一致 */
+    const pt = normalizeTime(e.pickup_time);
+    const dt = normalizeTime(e.dropoff_time);
+    const exact = childPatterns.find(
+      (p) => normalizeTime(p.pickup_time) === pt && normalizeTime(p.dropoff_time) === dt,
+    );
+    if (exact) return { ...e, pattern_id: exact.id };
+    /* 2. 過去の最頻 */
+    const fromUsage = patternUsage.get(childId);
+    if (fromUsage && childPatterns.some((p) => p.id === fromUsage)) {
+      return { ...e, pattern_id: fromUsage };
+    }
+    /* 3. 最初の 1 件 */
+    return { ...e, pattern_id: childPatterns[0].id };
+  });
+}
 
 type ImportState = 'idle' | 'uploading' | 'confirm' | 'saving';
 
-export default function PdfImportModal({ isOpen, onClose, onConfirm }: PdfImportModalProps) {
+export default function PdfImportModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  childList,
+  patterns,
+  patternUsage,
+}: PdfImportModalProps) {
   const [state, setState] = useState<ImportState>('idle');
   const [entries, setEntries] = useState<ParsedScheduleEntry[]>([]);
   const [isMock, setIsMock] = useState(false);
@@ -51,7 +111,8 @@ export default function PdfImportModal({ isOpen, onClose, onConfirm }: PdfImport
         throw new Error(data.error || 'PDF解析に失敗しました');
       }
 
-      setEntries(data.entries);
+      /* Phase 27-A-1: 解析結果に初期 pattern_id を付与 */
+      setEntries(assignPatternIds(data.entries, childList, patterns, patternUsage));
       setIsMock(data.isMock);
       setState('confirm');
     } catch (err) {
@@ -168,6 +229,8 @@ export default function PdfImportModal({ isOpen, onClose, onConfirm }: PdfImport
             <PdfConfirmTable
               entries={entries}
               onEntriesChange={setEntries}
+              childList={childList}
+              patterns={patterns}
             />
 
             <div className="flex gap-2 mt-2">
