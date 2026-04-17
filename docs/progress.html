@@ -433,6 +433,74 @@
     <p style="margin-top: 8px; color: #555;">
       <strong>未適用マイグレーション</strong>: <code>supabase/migrations/0022_shift_requests_submitted_by.sql</code> は本番 Supabase で手動適用必要。Phase 26 では新規マイグレーションなし（transport_min_end_time は tenants.settings JSONB へ格納）。
     </p>
+    <h2>Phase 25: 出欠編集 + シフト変更申請 + 日次出力（2026-04-17 着手）</h2>
+
+    <p><strong>ゴール</strong>: 全職員が児童出欠を編集可能（履歴付き）／自分のシフト変更希望を申請→出勤中adminが承認／毎日の送迎・出勤表を全職員がダウンロード可能に。</p>
+
+    <p><strong>方針確定</strong>: ① 退職者は物理削除を完全廃止し `is_active=false` のソフト削除のみ ／ ② 履歴は出欠のみ（他は既存ログで足りる）／ ③ 既存 `shift_requests`（休み希望）は据置、承認フローは新規 `shift_change_requests` に集約 ／ ④ 承認操作は「現在時刻が shift の start〜end 内のadmin」に限定 ／ ⑤ 日次出力は自動送信なし・全職員アプリからダウンロード。</p>
+
+    <div class="phase-head">Phase A: スキーマ基盤</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>25-A-1</td><td>staff ソフト削除: is_active + retired_at 追加、current_* 補助関数を退職者除外に更新</td><td>supabase/migrations/0020_staff_retirement.sql</td><td class="status-done">完了</td><td>100%</td><td>既存 API の DELETE は C-4 で PATCH is_active=false に置換</td></tr>
+            <tr><td>25-A-2</td><td>schedule_entries に attendance_status / attendance_updated_at / attendance_updated_by 追加、attendance_audit_logs + update_schedule_entry_attendance RPC 新設</td><td>supabase/migrations/0021_attendance.sql</td><td class="status-done">完了</td><td>100%</td><td>RPC で全ロール出欠更新可＋履歴自動記録</td></tr>
+            <tr><td>25-A-3</td><td>shift_change_requests テーブル新設（change_type/requested_payload/status/reviewed_by/snapshot_before）+ RLS</td><td>supabase/migrations/0022_shift_change_requests.sql</td><td class="status-done">完了</td><td>100%</td><td>viewer は自分の staff_id のみ POST 可</td></tr>
+            <tr><td>25-A-4</td><td>types/index.ts に StaffRow is_active/retired_at、ScheduleEntryRow attendance_*、AttendanceStatus、AttendanceAuditLogRow、ShiftChangeRequestRow 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>既存型の破壊的変更なし</td></tr>
+            <tr><td>25-A-5</td><td>ずれ確認: tsc 通過、settings/staff/page.tsx の EditableStaff 初期化追従</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>npx tsc --noEmit エラー0</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase B: 認可・セッション</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>25-B-1</td><td>getCurrentStaff で is_active=true に絞り込み（退職者は自動的にログイン不可）</td><td>src/lib/auth/getCurrentStaff.ts</td><td class="status-done">完了</td><td>100%</td><td>auto-link パスも is_active=true のみに</td></tr>
+            <tr><td>25-B-2</td><td>RLS: update_schedule_entry_attendance RPC で全ロール更新可に（A-2 と一体）</td><td>supabase/migrations/0021_attendance.sql</td><td class="status-done">完了</td><td>100%</td><td>RPC grant execute to authenticated</td></tr>
+            <tr><td>25-B-3</td><td>requireAuthenticated / requireOnDutyAdmin を requireRole に追加</td><td>src/lib/auth/requireRole.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-B-4</td><td>isOnDutyAdmin(staff, now) ヘルパー</td><td>src/lib/auth/isOnDutyAdmin.ts</td><td class="status-done">完了</td><td>100%</td><td>JST 今日 + 現在時刻 が start_time〜end_time 内</td></tr>
+            <tr><td>25-B-5</td><td>ずれ確認: tsc 通過、CLAUDE.md §8 は E-1 で更新</td><td>CLAUDE.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase C: API & UI</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>25-C-1</td><td>/api/schedule-entries/[id]/attendance PATCH（全ロール、RPC 経由で履歴自動記録）</td><td>src/app/api/schedule-entries/[id]/attendance/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-2</td><td>/api/attendance-logs GET（履歴閲覧、全ロール）</td><td>src/app/api/attendance-logs/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-3</td><td>/api/shift-change-requests POST (self) / GET / PATCH(approve|reject, on-duty admin only / cancel=本人)</td><td>src/app/api/shift-change-requests/route.ts + /[id]/route.ts</td><td class="status-done">完了</td><td>100%</td><td>承認時は shift_assignments upsert</td></tr>
+            <tr><td>25-C-4</td><td>/api/staff/[id] DELETE → is_active=false + retired_at に変更（物理削除撤去）、?include_retired=1 対応</td><td>src/app/api/staff/[id]/route.ts + /api/staff/route.ts</td><td class="status-done">完了</td><td>100%</td><td>auth.users は残す</td></tr>
+            <tr><td>25-C-5</td><td>利用予定モーダル: 当日の出欠ステータスUI（5段階）+ 履歴インラインパネル</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ロール編集可</td></tr>
+            <tr><td>25-C-6</td><td>/request ページに ShiftChangeRequestSection（申請フォーム+自分の申請一覧）追加</td><td>src/app/(app)/request/page.tsx + src/components/request/ShiftChangeRequestSection.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-7</td><td>/shift に ApprovalQueue コンポーネント（admin のみ表示、onDutyAdmin のみ承認可）</td><td>src/app/(app)/shift/page.tsx + src/components/shift/ApprovalQueue.tsx + /api/me (on_duty_admin)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-8</td><td>職員管理: 「退職」ボタン（ソフト削除）、「復帰」ボタン、「退職者も表示」チェックボックス、退職バッジ</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-9</td><td>ずれ確認: tsc 通過 + next build 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>エラー0</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase D: 日次出力</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>25-D-0</td><td>UI案ユーザー承認（ホワイトボード風 / 出勤リスト / 印刷対応）</td><td>（Slack等で提示済）</td><td class="status-done">完了</td><td>100%</td><td>休憩欄スキップ＋レイアウトOK済</td></tr>
+            <tr><td>25-D-1</td><td>/output/daily ページ（2カラム: 送迎カード + 出勤リスト）。未割当は赤背景、NEW タグ、エリア絵文字表示</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>デザイントークン準拠</td></tr>
+            <tr><td>25-D-2</td><td>nextBusinessDay: 土日→翌月曜、defaultOutputDate 初期値</td><td>src/lib/dates/nextBusinessDay.ts</td><td class="status-done">完了</td><td>100%</td><td>祝日は将来</td></tr>
+            <tr><td>25-D-3</td><td>PDF ダウンロード API（@react-pdf/renderer）、全職員アクセス可</td><td>src/app/api/output/daily/pdf/route.ts</td><td class="status-done">完了</td><td>100%</td><td>A4縦、左=送迎/右=出勤</td></tr>
+            <tr><td>25-D-4</td><td>サイドバーに「日次出力」ナビ追加（全ロール可視）</td><td>src/components/layout/Sidebar.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-D-5</td><td>ずれ確認: attendance_status='absent' 児童は Web/PDF 双方で除外、next build 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase E: ドキュメント</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>25-E-1</td><td>CLAUDE.md §8 権限制御ルール刷新（出欠例外 / 退職フラグ / 承認フロー / 出欠記録 / シフト変更申請セクション追加）</td><td>CLAUDE.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-E-2</td><td>reference-map.md に Phase 25 変更一覧追記（新テーブル/新カラム/新APIルート/新lib/新UI）</td><td>reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-E-3</td><td>error-log.md 記載すべき詰まりなし（tsc/next build 一発通過）</td><td>error-log.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
 
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>

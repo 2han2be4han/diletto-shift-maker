@@ -10,12 +10,14 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import { generateShiftAssignments } from '@/lib/logic/generateShift';
+import ApprovalQueue from '@/components/shift/ApprovalQueue';
 import type {
   ShiftAssignmentType,
   StaffRow,
   ShiftAssignmentRow,
   ShiftRequestRow,
   ScheduleEntryRow,
+  StaffRole,
 } from '@/types';
 
 /**
@@ -64,6 +66,20 @@ export default function ShiftPage() {
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null);
   /* Phase 26: 確定済シフトでも「編集モード」ON でセル編集可能にする */
   const [editMode, setEditMode] = useState(false);
+
+  /* Phase 25: 自分の role と出勤中admin判定（承認UI表示用） */
+  const [myRole, setMyRole] = useState<StaffRole | null>(null);
+  const [onDutyAdmin, setOnDutyAdmin] = useState(false);
+
+  useEffect(() => {
+    void fetch('/api/me')
+      .then((r) => r.json())
+      .then((d) => {
+        setMyRole(d.staff?.role ?? null);
+        setOnDutyAdmin(Boolean(d.on_duty_admin));
+      })
+      .catch(() => {});
+  }, []);
 
   /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント） */
   const childrenCountByDate = useMemo(() => {
@@ -301,6 +317,12 @@ export default function ShiftPage() {
       <Header title="シフト表" showMonthSelector actions={headerActions} />
 
       <div className="flex-1 overflow-auto p-6">
+        {/* Phase 25: admin のみ承認キュー表示。出勤中でないと承認ボタン非活性 */}
+        {myRole === 'admin' && (
+          <ApprovalQueue staff={staff} canApprove={onDutyAdmin} />
+        )}
+
+        {/* Phase 26: h2 年月 + 再生成/確定ボタンは Header actions に移設済。ここはバッジのみ。 */}
         <div className="flex items-center mb-4 flex-wrap gap-2">
           {confirmed && !editMode && <Badge variant="success">確定済み</Badge>}
           {confirmed && editMode && <Badge variant="warning">編集中（確定済みを変更しています）</Badge>}

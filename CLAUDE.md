@@ -240,11 +240,28 @@ shift-puzzle/
 - 条件を満たす職員が存在しない場合: `is_unassigned: true` フラグを立て、赤ハイライトで表示する（空欄のまま確定は禁止）
 - 生成結果は `is_confirmed: false` で保存する（自動確定禁止）
 
-#### 権限制御
-- `viewer` ロール: GET系APIのみアクセス可。POST・PUT・DELETE禁止
+#### 権限制御（Phase 25 更新）
+- `viewer` ロール: 原則 GET 系のみ。例外:
+  - 自分の `shift_requests`（休み希望）の書き込み可
+  - 自分の `shift_change_requests`（シフト変更申請）の書き込み可
+  - 児童の出欠ステータス更新可（RPC `update_schedule_entry_attendance` 経由、履歴必須）
 - `editor` ロール: 利用予定・シフト・送迎表の編集可。テナント設定・職員管理禁止
-- `admin` ロール: 全操作可
+- `admin` ロール: 全操作可。ただし「シフト変更申請の承認/却下」は**現在出勤中の admin のみ**（`isOnDutyAdmin` で判定、`requireOnDutyAdmin` で強制）
+- 職員の退職はソフト削除のみ（`is_active=false` + `retired_at` 設定）。物理削除は完全廃止
+- 退職者は `current_staff()` 等の補助関数で自動除外され、全 RLS を通過できない（ログイン不可）
 - ロールチェックはAPIルート側で必ず実施する（フロントエンドのみの制御禁止）
+
+#### 出欠記録（Phase 25）
+- `schedule_entries.attendance_status`（planned/present/absent/late/early_leave）で管理
+- 更新は必ず RPC `update_schedule_entry_attendance(p_entry_id, p_status)` 経由（全ロール許可）
+- 更新のたびに `attendance_audit_logs` に履歴を自動記録（changed_by_name スナップショット保持で退職後も参照可）
+- `attendance_status='absent'` の児童は日次出力・送迎表から除外される
+
+#### シフト変更申請（Phase 25）
+- `shift_change_requests` テーブル。`change_type` は `time`/`leave`/`type_change` の3種
+- 申請: viewer は自分の `staff_id` のみ、editor/admin は他人分も可
+- 承認/却下: 出勤中 admin のみ。承認時は `shift_assignments` をトランザクション更新
+- 承認後の変更取消は新規申請として提出（過去の申請を書き換えない）
 
 #### マルチテナント
 - 全テーブルに `tenant_id` カラムを必ず含める

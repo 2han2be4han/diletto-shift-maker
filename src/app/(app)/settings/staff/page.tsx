@@ -40,6 +40,8 @@ const emptyStaff = (): EditableStaff => ({
   qualifications: [],
   is_qualified: false,
   display_order: null,
+  is_active: true,
+  retired_at: null,
   isNew: true,
 });
 
@@ -81,11 +83,13 @@ export default function StaffSettingsPage() {
     }
   };
 
+  const [showRetired, setShowRetired] = useState(false);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const [sRes, tRes] = await Promise.all([
-        fetch('/api/staff'),
+        fetch(`/api/staff${showRetired ? '?include_retired=1' : ''}`),
         fetch('/api/tenant'),
       ]);
       if (!sRes.ok) throw new Error('職員の取得に失敗しました');
@@ -114,7 +118,7 @@ export default function StaffSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showRetired]);
 
   useEffect(() => {
     fetchAll();
@@ -137,6 +141,8 @@ export default function StaffSettingsPage() {
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
       display_order: s.display_order,
+      is_active: s.is_active,
+      retired_at: s.retired_at,
     });
   };
 
@@ -198,17 +204,24 @@ export default function StaffSettingsPage() {
     }
   };
 
+  /* Phase 25: 物理削除廃止 → 退職（ソフト削除）に変更 */
   const handleDelete = async () => {
     if (!editing || editing.isNew) return;
-    if (!confirm(`${editing.name} を削除しますか？（元に戻せません）`)) return;
+    if (
+      !confirm(
+        `${editing.name} を退職扱いにしますか？\n（ログイン不可になります。再雇用時に「復帰」できます）`,
+      )
+    ) {
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/staff/${editing.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('削除失敗');
+      if (!res.ok) throw new Error('退職処理に失敗しました');
       setEditing(null);
       await fetchAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '削除に失敗しました');
+      setError(e instanceof Error ? e.message : '退職処理に失敗しました');
     } finally {
       setSaving(false);
     }
@@ -268,9 +281,17 @@ export default function StaffSettingsPage() {
 
       <div className="p-6 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>職員一覧</h2>
-            <Badge variant="info">{staffList.length}名</Badge>
+            <Badge variant="info">{staffList.filter((s) => s.is_active !== false).length}名</Badge>
+            <label className="flex items-center gap-1 text-sm cursor-pointer" style={{ color: 'var(--ink-2)' }}>
+              <input
+                type="checkbox"
+                checked={showRetired}
+                onChange={(e) => setShowRetired(e.target.checked)}
+              />
+              退職者も表示
+            </label>
           </div>
           <Button variant="primary" onClick={handleAdd}>+ 職員を招待</Button>
         </div>
@@ -350,8 +371,12 @@ export default function StaffSettingsPage() {
                   }}
                   className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer"
                   style={{
-                    opacity: isDragging ? 0.4 : 1,
-                    background: isDropTarget ? 'var(--accent-pale)' : undefined,
+                    opacity: s.is_active === false ? 0.55 : isDragging ? 0.4 : 1,
+                    background: isDropTarget
+                      ? 'var(--accent-pale)'
+                      : s.is_active === false
+                        ? 'var(--bg)'
+                        : undefined,
                   }}
                   onClick={() => handleEdit(s)}
                 >
@@ -388,7 +413,15 @@ export default function StaffSettingsPage() {
                   </td>
                   <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
-                    {!s.user_id && (
+                    {s.is_active === false && (
+                      <span
+                        className="ml-2 text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
+                      >
+                        退職
+                      </span>
+                    )}
+                    {!s.user_id && s.is_active !== false && (
                       <>
                         <span className="ml-2 text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
                         <button
@@ -711,10 +744,36 @@ export default function StaffSettingsPage() {
             </div>
 
             <div className="flex justify-between gap-2 mt-2">
-              <div>
-                {!editing.isNew && (
+              <div className="flex gap-2">
+                {!editing.isNew && editing.is_active !== false && (
                   <Button variant="secondary" onClick={handleDelete} disabled={saving}>
-                    <span style={{ color: 'var(--red)' }}>削除</span>
+                    <span style={{ color: 'var(--red)' }}>退職</span>
+                  </Button>
+                )}
+                {!editing.isNew && editing.is_active === false && (
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      if (!editing || !confirm(`${editing.name} を復帰させますか？`)) return;
+                      setSaving(true);
+                      try {
+                        const res = await fetch(`/api/staff/${editing.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ is_active: true }),
+                        });
+                        if (!res.ok) throw new Error('復帰処理に失敗しました');
+                        setEditing(null);
+                        await fetchAll();
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : '復帰処理に失敗しました');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    disabled={saving}
+                  >
+                    <span style={{ color: 'var(--green)' }}>復帰</span>
                   </Button>
                 )}
               </div>

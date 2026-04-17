@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/schedule', label: '利用予定', icon: '📅' },
   { href: '/shift', label: 'シフト表', icon: '📋' },
   { href: '/transport', label: '送迎表', icon: '🚗' },
+  { href: '/output/daily', label: '日次出力', icon: '📄' },
   { href: '/request', label: '休み希望', icon: '✋' },
 ];
 

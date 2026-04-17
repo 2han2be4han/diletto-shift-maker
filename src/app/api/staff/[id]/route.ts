@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/requireRole';
 
 /**
- * PATCH /api/staff/[id]   - 職員情報更新（admin のみ）
- * DELETE /api/staff/[id]  - 職員削除（admin のみ）
+ * PATCH  /api/staff/[id]  - 職員情報更新（admin のみ）
+ *                          body.is_active=false で退職扱い（ソフト削除）
+ *                          body.is_active=true  で退職復帰
+ * DELETE /api/staff/[id]  - Phase 25: 物理削除は廃止。is_active=false に置換。
  */
 
 export async function PATCH(
@@ -23,9 +25,15 @@ export async function PATCH(
     'name', 'email', 'role', 'employment_type',
     'default_start_time', 'default_end_time',
     'transport_areas', 'qualifications', 'is_qualified',
+    'is_active',
   ] as const;
   const payload: Record<string, unknown> = {};
   for (const k of allowed) if (k in body) payload[k] = body[k];
+
+  /* is_active 切替時に retired_at を自動設定/解除 */
+  if ('is_active' in payload) {
+    payload.retired_at = payload.is_active === false ? new Date().toISOString() : null;
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -49,16 +57,13 @@ export async function DELETE(
   const { id } = await params;
   const supabase = await createClient();
 
-  /* staff 行と紐付く user_id を取得して Auth からも削除（admin のみ service_role 必要） */
-  const { data: staff } = await supabase.from('staff').select('user_id').eq('id', id).maybeSingle();
+  /* Phase 25: 物理削除廃止。is_active=false + retired_at 設定で退職扱いに。
+     auth.users は残すことで、再雇用時の手動リンク運用が可能。 */
+  const { error } = await supabase
+    .from('staff')
+    .update({ is_active: false, retired_at: new Date().toISOString() })
+    .eq('id', id);
 
-  const { error } = await supabase.from('staff').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  if (staff?.user_id) {
-    const admin = createAdminClient();
-    await admin.auth.admin.deleteUser(staff.user_id);
-  }
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, soft_deleted: true });
 }

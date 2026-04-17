@@ -10,8 +10,30 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { ParsedScheduleEntry, ChildRow, ScheduleEntryRow } from '@/types';
+import type {
+  ParsedScheduleEntry,
+  ChildRow,
+  ScheduleEntryRow,
+  AttendanceStatus,
+  AttendanceAuditLogRow,
+} from '@/types';
 import { GRADE_LABELS } from '@/lib/utils/parseChildName';
+
+/* Phase 25: 出欠ラベル */
+const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
+  planned: '予定',
+  present: '出席',
+  absent: '欠席',
+  late: '遅刻',
+  early_leave: '早退',
+};
+const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
+  planned: 'var(--ink-3)',
+  present: 'var(--green)',
+  absent: 'var(--red)',
+  late: 'var(--gold)',
+  early_leave: 'var(--accent)',
+};
 
 /**
  * 利用予定ページ（Supabase接続版）
@@ -23,12 +45,14 @@ import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 /* GRADE_LABELS は @/lib/utils/parseChildName で一元管理 */
 
 type CellData = {
+  entry_id: string | null;
   child_id: string;
   date: string;
   pickup_time: string | null;
   dropoff_time: string | null;
   pickup_method: 'self' | 'pickup';
   dropoff_method: 'self' | 'dropoff';
+  attendance_status: AttendanceStatus;
   note: string | null;
 };
 
@@ -90,6 +114,11 @@ export default function SchedulePage() {
   const [excelModalOpen, setExcelModalOpen] = useState(false);
 
   const [attendance, setAttendance] = useState<'attend' | 'absent' | 'off'>('attend');
+  /* Phase 25: 当日の出欠記録（DB永続） */
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('planned');
+  const [attendanceBusy, setAttendanceBusy] = useState(false);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceAuditLogRow[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [pickupHour, setPickupHour] = useState('13');
   const [pickupMin, setPickupMin] = useState('20');
   const [pickupMethod, setPickupMethod] = useState<'self' | 'pickup'>('pickup');
@@ -119,6 +148,7 @@ export default function SchedulePage() {
       setChildren((ch as ChildRow[]).filter((c) => c.is_active));
       setCells(
         (entries as ScheduleEntryRow[]).map<CellData>((e) => ({
+          entry_id: e.id,
           child_id: e.child_id,
           date: e.date,
           pickup_time: e.pickup_time,
@@ -126,6 +156,7 @@ export default function SchedulePage() {
           /* Phase 24: DB に保存された method を尊重。旧データ(デフォルト) は pickup/dropoff になる */
           pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
           dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
+          attendance_status: e.attendance_status ?? 'planned',
           note: null,
         }))
       );
@@ -169,7 +200,56 @@ export default function SchedulePage() {
     }
     setPickupMethod(cellData?.pickup_method || 'pickup');
     setDropoffMethod(cellData?.dropoff_method || 'dropoff');
+    setAttendanceStatus(cellData?.attendance_status ?? 'planned');
+    setAttendanceLogs([]);
+    setLogsOpen(false);
     setSelectedCell({ childId, date });
+  };
+
+  /* Phase 25: 出欠ステータス変更（RPC 経由）。全ロール可。 */
+  const handleAttendanceChange = async (next: AttendanceStatus) => {
+    const cell = cells.find(
+      (c) => c.child_id === selectedCell?.childId && c.date === selectedCell?.date,
+    );
+    if (!cell?.entry_id) {
+      alert('この日の利用予定がまだ登録されていないため、出欠記録できません。先に時間などを保存してください。');
+      return;
+    }
+    setAttendanceBusy(true);
+    try {
+      const res = await fetch(
+        `/api/schedule-entries/${cell.entry_id}/attendance`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: next }),
+        },
+      );
+      if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
+      setAttendanceStatus(next);
+      setCells((prev) =>
+        prev.map((c) =>
+          c.entry_id === cell.entry_id ? { ...c, attendance_status: next } : c,
+        ),
+      );
+      /* 履歴を開いてたら再取得 */
+      if (logsOpen) void loadAttendanceLogs(cell.entry_id);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '更新失敗');
+    } finally {
+      setAttendanceBusy(false);
+    }
+  };
+
+  const loadAttendanceLogs = async (entryId: string) => {
+    try {
+      const res = await fetch(`/api/attendance-logs?entry_id=${entryId}`);
+      if (!res.ok) throw new Error('履歴取得失敗');
+      const { logs } = await res.json();
+      setAttendanceLogs(logs as AttendanceAuditLogRow[]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '履歴取得失敗');
+    }
   };
 
   const handleSave = async () => {
@@ -364,6 +444,79 @@ export default function SchedulePage() {
                 </div>
               </>
             )}
+
+            {/* Phase 25: 当日の出欠記録（全ロール編集可・履歴付き） */}
+            <div className="flex flex-col gap-2 pt-3 mt-1" style={{ borderTop: '1px solid var(--rule)' }}>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+                  当日の出欠記録
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cell = cells.find(
+                      (c) =>
+                        c.child_id === selectedCell.childId && c.date === selectedCell.date,
+                    );
+                    if (!cell?.entry_id) return;
+                    if (!logsOpen) void loadAttendanceLogs(cell.entry_id);
+                    setLogsOpen(!logsOpen);
+                  }}
+                  className="text-xs underline"
+                  style={{ color: 'var(--ink-3)' }}
+                >
+                  {logsOpen ? '履歴を閉じる' : '履歴を見る'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(['planned', 'present', 'absent', 'late', 'early_leave'] as AttendanceStatus[]).map(
+                  (s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={attendanceBusy}
+                      onClick={() => handleAttendanceChange(s)}
+                      className="px-3 py-1 text-xs font-semibold rounded transition-all"
+                      style={{
+                        background: attendanceStatus === s ? ATTENDANCE_COLORS[s] : 'var(--bg)',
+                        color: attendanceStatus === s ? '#fff' : 'var(--ink-2)',
+                        border: `1px solid ${
+                          attendanceStatus === s ? ATTENDANCE_COLORS[s] : 'var(--rule-strong)'
+                        }`,
+                        opacity: attendanceBusy ? 0.6 : 1,
+                        cursor: attendanceBusy ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {ATTENDANCE_LABELS[s]}
+                    </button>
+                  ),
+                )}
+              </div>
+              {logsOpen && (
+                <div
+                  className="mt-1 p-2 rounded text-xs"
+                  style={{ background: 'var(--bg)', maxHeight: '160px', overflowY: 'auto' }}
+                >
+                  {attendanceLogs.length === 0 ? (
+                    <span style={{ color: 'var(--ink-3)' }}>履歴なし</span>
+                  ) : (
+                    <ul className="flex flex-col gap-1">
+                      {attendanceLogs.map((l) => (
+                        <li key={l.id} style={{ color: 'var(--ink-2)' }}>
+                          <span style={{ color: 'var(--ink-3)' }}>
+                            {format(new Date(l.changed_at), 'M/d HH:mm', { locale: ja })}
+                          </span>{' '}
+                          {l.changed_by_name}: {l.old_status ? ATTENDANCE_LABELS[l.old_status] : '(新規)'} →{' '}
+                          <strong style={{ color: ATTENDANCE_COLORS[l.new_status] }}>
+                            {ATTENDANCE_LABELS[l.new_status]}
+                          </strong>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-2 mt-2">
               <Button variant="secondary" onClick={() => setSelectedCell(null)}>キャンセル</Button>

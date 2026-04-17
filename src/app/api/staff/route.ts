@@ -9,18 +9,24 @@ import { requireRole } from '@/lib/auth/requireRole';
  * 個別操作（PATCH / DELETE）は /api/staff/[id]
  */
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const gate = await requireRole('viewer');
   if (!gate.ok) return gate.response;
 
+  /* Phase 25: ?include_retired=1 で退職者も含む一覧を返す。デフォルトは在職のみ。 */
+  const includeRetired = request.nextUrl.searchParams.get('include_retired') === '1';
+
   const supabase = await createClient();
   /* Phase 24: display_order NULLS LAST → name で安定ソート */
-  const { data, error } = await supabase
+  let q = supabase
     .from('staff')
     .select('*')
     .order('display_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
 
+  if (!includeRetired) q = q.eq('is_active', true);
+
+  const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ staff: data });
 }
