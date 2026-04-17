@@ -168,13 +168,15 @@ function selectStaff({
 
     /* ③ エリア一致（エリア指定がある場合）。
        Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。
-       両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。 */
+       両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。
+       Phase 27 fix: 空エリア = 「対応不可（候補から除外）」として扱う。
+       未対応エリアに職員を送り込まない運用ルールをロジックで担保する。 */
     if (areaLabel) {
       const directionAreas =
         direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
       const effective =
         (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
-      if (effective.length > 0 && !effective.includes(areaLabel)) return false;
+      if (!effective.includes(areaLabel)) return false;
     }
 
     return true;

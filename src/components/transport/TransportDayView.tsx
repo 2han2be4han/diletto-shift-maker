@@ -117,38 +117,61 @@ export default function TransportDayView({
     return em !== null && em >= minEndMin;
   });
 
-  const headerCellStyle = { background: 'var(--ink)', color: '#fff' } as const;
+  /* Phase 27 (layout revised): ダーク帯 + 方向別アクセントカラーでセクション感を出す。
+     迎=accent(青)、送=green(緑)でヘッダーにドット記号を入れて視線を誘導。 */
+  const PICK_ACCENT = 'var(--accent)';
+  const DROP_ACCENT = 'var(--green)';
+  const headerBase: React.CSSProperties = {
+    background: 'var(--ink)',
+    color: '#fff',
+    fontSize: '0.72rem',
+    letterSpacing: '0.08em',
+    padding: '10px 12px',
+    fontWeight: 700,
+    textTransform: 'none',
+    whiteSpace: 'nowrap',
+  };
+  const SectionLabel = ({ color, children }: { color: string; children: React.ReactNode }) => (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: color }} />
+      <span>{children}</span>
+    </span>
+  );
 
   return (
-    <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+    <div
+      className="overflow-x-auto"
+      style={{
+        borderRadius: '10px',
+        border: '1px solid var(--rule)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        background: 'var(--white)',
+      }}
+    >
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
         <thead>
           <tr>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '140px' }}>
-              児童名
+            <th className="text-left" style={{ ...headerBase, minWidth: '140px' }}>児童名</th>
+            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 時刻</SectionLabel>
             </th>
-            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
-              迎え時間
+            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 場所</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
-              迎場所
+            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 担当</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
-              迎え担当
+            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 時刻</SectionLabel>
             </th>
-            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
-              送り時間
+            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 場所</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
-              送り場所
-            </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
-              送り担当
+            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>
             </th>
             {onAddPattern && (
-              <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '60px' }}>
-                設定
-              </th>
+              <th className="text-center" style={{ ...headerBase, minWidth: '60px' }}>設定</th>
             )}
           </tr>
         </thead>
@@ -348,9 +371,10 @@ function TimeCell({
 }
 
 /**
- * 場所セル（Phase 26.1）
- * - エリア絵文字を大きく、エリア名、住所をまとめて表示
- * - 住所があれば Google Maps リンク
+ * 場所セル（Phase 27 redesigned）
+ * - 単行レイアウトで全行の高さを統一
+ * - エリア名自体がクリッカブル（Google Maps）
+ * - 住所は title (tooltip) で確認できる
  */
 function LocationCellInline({
   areaLabel,
@@ -366,6 +390,9 @@ function LocationCellInline({
   const { emoji, name } = splitAreaLabel(areaLabel);
   const hasAny = !!(emoji || name || location);
   const query = location ?? areaLabel ?? '';
+  const clickable = !!query;
+  const tooltip = location ? `${name ?? ''} — ${location}（クリックで Google Maps）`.trim() : name ?? '';
+
   return (
     <td
       className="px-3 py-2 align-middle"
@@ -374,40 +401,51 @@ function LocationCellInline({
       {!hasAny ? (
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>—</span>
       ) : (
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={() => clickable && openInGoogleMaps(query)}
+          disabled={!clickable}
+          className="inline-flex items-center gap-2 min-w-0 max-w-full rounded-md text-left transition-colors"
+          style={{
+            padding: '4px 8px',
+            background: clickable ? 'transparent' : 'transparent',
+            cursor: clickable ? 'pointer' : 'default',
+          }}
+          onMouseEnter={(e) => {
+            if (clickable) e.currentTarget.style.background = 'var(--bg)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+          title={tooltip}
+        >
           {emoji && (
             <span
               className="shrink-0"
-              style={{ fontSize: '1.4rem', lineHeight: 1 }}
+              style={{ fontSize: '1.2rem', lineHeight: 1 }}
               aria-hidden
             >
               {emoji}
             </span>
           )}
-          <div className="flex flex-col min-w-0 gap-0.5 leading-tight">
-            {name && (
-              <span
-                className="font-semibold truncate"
-                style={{ color: accentColor, fontSize: '0.82rem' }}
-                title={name}
-              >
-                {name}
-              </span>
-            )}
-            {location && (
-              <button
-                type="button"
-                onClick={() => openInGoogleMaps(query)}
-                className="inline-flex items-center gap-1 text-left truncate hover:underline"
-                style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}
-                title={`${location}（Google Maps で開く）`}
-              >
-                <span aria-hidden>📍</span>
-                <span className="truncate">{location}</span>
-              </button>
-            )}
-          </div>
-        </div>
+          {name && (
+            <span
+              className="font-semibold truncate"
+              style={{ color: accentColor, fontSize: '0.85rem' }}
+            >
+              {name}
+            </span>
+          )}
+          {clickable && location && (
+            <span
+              aria-hidden
+              className="shrink-0 opacity-50"
+              style={{ fontSize: '0.72rem' }}
+            >
+              🗺
+            </span>
+          )}
+        </button>
       )}
     </td>
   );
@@ -559,29 +597,32 @@ function StaffSelect({
     onChange([...staffIds, '']);
   };
 
+  /* Phase 27 redesigned: 各スロットを縦並びでコンパクトに揃える。
+     select は固定幅、マークは右側に薄く表示、＋追加は下に小さく。 */
+  const SELECT_WIDTH = 130;
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex flex-col gap-1">
       {staffIds.map((id, i) => {
-        /* Phase 26: 候補外（退勤時間 < 16:31 / 欠勤）でも既存選択は残す */
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
-        /* Phase 27: 選択中の職員が同方向で担当している他エリアのマークを表示（迎/送別） */
         const selectedStaff = availableStaff.find((s) => s.id === id);
         const marks = (direction === 'pickup'
           ? selectedStaff?.pickupAreaMarks
           : selectedStaff?.dropoffAreaMarks) ?? [];
         return (
-          <div key={i} className="inline-flex items-center gap-1">
+          <div key={i} className="flex items-center gap-1.5">
             <select
               value={id}
               onChange={(e) => handleChange(i, e.target.value)}
               disabled={disabled}
-              className="px-2 py-1 text-xs outline-none disabled:opacity-60"
+              className="outline-none disabled:opacity-60"
               style={{
-                border: `1px solid ${isMissing ? 'var(--red)' : 'var(--rule)'}`,
-                borderRadius: '4px',
+                width: SELECT_WIDTH,
+                padding: '5px 8px',
+                fontSize: '0.78rem',
+                border: `1px solid ${isMissing ? 'var(--red)' : id ? 'var(--rule)' : 'var(--red)'}`,
+                borderRadius: '6px',
                 color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
                 background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
-                minWidth: '90px',
               }}
               title={
                 isMissing
@@ -594,17 +635,20 @@ function StaffSelect({
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
               {availableStaff.map((s) => (
-                /* Phase 27: 外側のマークバッジと重複表示になるため option は名前のみ */
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
-            {/* 選択中職員のマーク表示（select の value は option label の装飾を見せないので補足表示） */}
             {id && !isMissing && marks.length > 0 && (
               <span
-                className="text-xs shrink-0 order-first"
-                style={{ lineHeight: 1 }}
+                className="shrink-0"
+                style={{
+                  lineHeight: 1,
+                  fontSize: '0.88rem',
+                  letterSpacing: '-0.05em',
+                  opacity: 0.8,
+                }}
                 title={`この日の担当エリア: ${marks.join(' ')}`}
                 aria-label={`担当エリア ${marks.join(' ')}`}
               >
@@ -614,25 +658,39 @@ function StaffSelect({
           </div>
         );
       })}
-      {staffIds.length < 2 && !disabled && (
-        <button
-          onClick={handleAdd}
-          className="px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[var(--accent-pale)]"
-          style={{ color: 'var(--accent)', border: '1px dashed var(--accent)' }}
-        >
-          + 追加
-        </button>
-      )}
-      {staffIds.length === 0 && (
+      {staffIds.length === 0 ? (
         <button
           onClick={handleAdd}
           disabled={disabled}
-          className="px-2 py-1 text-xs font-medium rounded disabled:opacity-60"
-          style={{ color: 'var(--red)', border: '1px dashed var(--red)' }}
+          className="self-start rounded-md transition-colors disabled:opacity-60"
+          style={{
+            width: SELECT_WIDTH,
+            padding: '5px 8px',
+            fontSize: '0.72rem',
+            fontWeight: 500,
+            color: 'var(--red)',
+            border: '1px dashed var(--red)',
+            background: 'transparent',
+          }}
         >
           担当を選択
         </button>
-      )}
+      ) : staffIds.length < 2 && !disabled ? (
+        <button
+          onClick={handleAdd}
+          className="self-start rounded-md transition-colors hover:bg-[var(--accent-pale)]"
+          style={{
+            padding: '2px 8px',
+            fontSize: '0.7rem',
+            fontWeight: 500,
+            color: 'var(--accent)',
+            border: '1px dashed var(--accent)',
+            background: 'transparent',
+          }}
+        >
+          ＋ 追加
+        </button>
+      ) : null}
     </div>
   );
 }
