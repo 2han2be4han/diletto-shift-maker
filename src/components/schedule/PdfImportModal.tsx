@@ -11,11 +11,13 @@ import type { ChildRow, ChildTransportPatternRow, ParsedScheduleEntry } from '@/
  * PDFインポートモーダル
  * フロー: アップロード → 解析中 → 確認テーブル → 確定でDB保存
  *
- * Phase 27-A-1: 解析結果に pattern_id を付与する。優先順位:
- *   1. pickup_time / dropoff_time が完全一致するパターン
- *   2. patternUsage（過去の最頻パターン）
- *   3. 児童の最初のパターン
- *   4. 該当なし（pattern_id = null）
+ * Phase 27-A-1: 解析結果に pattern_id を付与する。優先順位（精度の高い順）:
+ *   1. 時刻 AND エリア が両方一致（最強）
+ *   2. エリア一致（PDF の area_label とパターンの pickup/dropoff/area_label のいずれか）
+ *   3. 時刻（pickup と dropoff の両方）が一致
+ *   4. patternUsage（過去の最頻パターン）
+ *   5. 児童の最初のパターン
+ *   6. 該当なし（pattern_id = null）
  */
 
 type PdfImportModalProps = {
@@ -48,25 +50,42 @@ function assignPatternIds(
     list.push(p);
     patternsByChild.set(p.child_id, list);
   }
+  /** パターンの迎/送/旧 area_label のいずれかが entry.area_label と一致するか */
+  const matchArea = (p: ChildTransportPatternRow, areaLabel: string | null): boolean => {
+    if (!areaLabel) return false;
+    return (
+      p.pickup_area_label === areaLabel ||
+      p.dropoff_area_label === areaLabel ||
+      p.area_label === areaLabel
+    );
+  };
+
   return entries.map((e) => {
     if (e.pattern_id !== undefined) return e; /* 既に設定済みは尊重 */
     const childId = nameToChildId.get(e.child_name);
     if (!childId) return { ...e, pattern_id: null };
     const childPatterns = patternsByChild.get(childId) ?? [];
     if (childPatterns.length === 0) return { ...e, pattern_id: null };
-    /* 1. 時刻完全一致 */
     const pt = normalizeTime(e.pickup_time);
     const dt = normalizeTime(e.dropoff_time);
-    const exact = childPatterns.find(
-      (p) => normalizeTime(p.pickup_time) === pt && normalizeTime(p.dropoff_time) === dt,
-    );
-    if (exact) return { ...e, pattern_id: exact.id };
-    /* 2. 過去の最頻 */
+    const timeMatch = (p: ChildTransportPatternRow) =>
+      normalizeTime(p.pickup_time) === pt && normalizeTime(p.dropoff_time) === dt;
+
+    /* 1. 時刻 AND エリア 両方一致 */
+    const bothMatch = childPatterns.find((p) => timeMatch(p) && matchArea(p, e.area_label));
+    if (bothMatch) return { ...e, pattern_id: bothMatch.id };
+    /* 2. エリア一致のみ */
+    const areaOnly = childPatterns.find((p) => matchArea(p, e.area_label));
+    if (areaOnly) return { ...e, pattern_id: areaOnly.id };
+    /* 3. 時刻一致のみ */
+    const timeOnly = childPatterns.find(timeMatch);
+    if (timeOnly) return { ...e, pattern_id: timeOnly.id };
+    /* 4. 過去の最頻 */
     const fromUsage = patternUsage.get(childId);
     if (fromUsage && childPatterns.some((p) => p.id === fromUsage)) {
       return { ...e, pattern_id: fromUsage };
     }
-    /* 3. 最初の 1 件 */
+    /* 5. 最初の 1 件 */
     return { ...e, pattern_id: childPatterns[0].id };
   });
 }

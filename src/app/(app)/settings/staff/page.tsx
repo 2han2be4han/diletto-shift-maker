@@ -54,7 +54,9 @@ export default function StaffSettingsPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [staffList, setStaffList] = useState<StaffRow[]>([]);
-  const [areas, setAreas] = useState<AreaLabel[]>([]);
+  /* Phase 27-D (revised): 迎/送エリアをテナント設定から分離して取得 */
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
+  const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [qualificationTypes, setQualificationTypes] = useState<QualificationType[]>([]);
   const [editing, setEditing] = useState<EditableStaff | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -101,20 +103,10 @@ export default function StaffSettingsPage() {
       const { tenant } = await tRes.json();
       setStaffList(staff ?? []);
       const s: TenantSettings = tenant?.settings ?? {};
-      /* Phase 13: 対応エリア候補は 迎(pickup_areas) ∪ 送(dropoff_areas) のユニーク合成。
-         旧 transport_areas のみのテナントは自動的にそれを使う */
-      const pickup = s.pickup_areas ?? s.transport_areas ?? [];
-      const dropoff = s.dropoff_areas ?? [];
-      const seen = new Set<string>();
-      const union: AreaLabel[] = [];
-      for (const a of [...pickup, ...dropoff]) {
-        const key = `${a.emoji}|${a.name}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          union.push(a);
-        }
-      }
-      setAreas(union);
+      /* Phase 27-D (revised): 迎/送エリアを分離ソースで扱う。
+         旧 transport_areas のみのテナントは迎側のフォールバックにする */
+      setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
+      setDropoffAreas(s.dropoff_areas ?? []);
       setQualificationTypes(s.qualification_types ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
@@ -128,7 +120,8 @@ export default function StaffSettingsPage() {
   }, [fetchAll]);
 
   const countable = qualificationTypes.filter((q) => q.countable).map((q) => q.name);
-  const areaLabels = areas.map((a) => `${a.emoji} ${a.name}`);
+  const pickupAreaLabels = pickupAreas.map((a) => `${a.emoji} ${a.name}`);
+  const dropoffAreaLabels = dropoffAreas.map((a) => `${a.emoji} ${a.name}`);
 
   const handleAdd = () => setEditing(emptyStaff());
   const handleEdit = (s: StaffRow) => {
@@ -746,62 +739,77 @@ export default function StaffSettingsPage() {
               </div>
             </div>
 
-            {/* Phase 27-D: 対応エリアを迎/送に分割。迎=accent(青系), 送=green(緑系) */}
-            {(['pickup', 'dropoff'] as const).map((direction) => {
-              const key = direction === 'pickup' ? 'pickup_transport_areas' : 'dropoff_transport_areas';
-              const label = direction === 'pickup' ? '迎対応' : '送り対応';
-              const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
-              const selected = editing[key];
-              return (
-                <div key={direction} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{label}エリア</label>
-                    {areaLabels.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditing({ ...editing, [key]: [...areaLabels] })}
-                          className="text-xs transition-colors"
-                          style={{ color: accentVar, textDecoration: 'underline' }}
-                        >
-                          全選択
-                        </button>
-                        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>/</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditing({ ...editing, [key]: [] })}
-                          className="text-xs transition-colors"
-                          style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
-                        >
-                          全解除
-                        </button>
+            {/* Phase 27-D (revised v2): 迎エリア・送エリアを別ソースで並列表示。
+                迎セクション=テナントの pickup_areas のみ、送セクション=dropoff_areas のみ。 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(['pickup', 'dropoff'] as const).map((direction) => {
+                const key = direction === 'pickup' ? 'pickup_transport_areas' : 'dropoff_transport_areas';
+                const label = direction === 'pickup' ? '迎対応' : '送り対応';
+                const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+                const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
+                const labels = direction === 'pickup' ? pickupAreaLabels : dropoffAreaLabels;
+                const selected = editing[key];
+                return (
+                  <div
+                    key={direction}
+                    className="flex flex-col gap-1.5 rounded-md p-2"
+                    style={{ border: '1px solid var(--rule)', background: palVar }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold" style={{ color: accentVar }}>{label}エリア</label>
+                      {labels.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setEditing({ ...editing, [key]: [...labels] })}
+                            style={{ color: accentVar, textDecoration: 'underline' }}
+                          >
+                            全選択
+                          </button>
+                          <span style={{ color: 'var(--ink-3)' }}>/</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditing({ ...editing, [key]: [] })}
+                            style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
+                          >
+                            全解除
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {labels.length === 0 ? (
+                      <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                        （テナント設定で{label}エリアを追加してください）
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {labels.map((area) => {
+                          const on = selected.includes(area);
+                          return (
+                            <button
+                              key={area}
+                              type="button"
+                              onClick={() => handleAreaToggle(direction, area)}
+                              className="rounded-md transition-all text-left"
+                              style={{
+                                padding: '5px 10px',
+                                fontSize: '0.78rem',
+                                fontWeight: 500,
+                                background: on ? accentVar : 'var(--white)',
+                                color: on ? '#fff' : 'var(--ink-2)',
+                                border: `1px solid ${on ? accentVar : 'var(--rule)'}`,
+                              }}
+                            >
+                              {on ? '✓ ' : ''}{area}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {areaLabels.length === 0 && (
-                      <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                        （テナント設定でエリアを追加してください）
-                      </p>
-                    )}
-                    {areaLabels.map((area) => (
-                      <button
-                        key={area}
-                        onClick={() => handleAreaToggle(direction, area)}
-                        className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
-                        style={{
-                          background: selected.includes(area) ? accentVar : 'var(--bg)',
-                          color: selected.includes(area) ? '#fff' : 'var(--ink-2)',
-                          border: `1px solid ${selected.includes(area) ? accentVar : 'var(--rule)'}`,
-                        }}
-                      >
-                        {area}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保有資格</label>
