@@ -12,12 +12,14 @@ import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
  */
 
 const DEFAULT_AREAS: AreaLabel[] = [
-  { emoji: '🍇', name: '藤江' },
-  { emoji: '🌳', name: '豊明' },
-  { emoji: '🏭', name: '大府' },
-  { emoji: '✈', name: '常滑' },
-  { emoji: '🍶', name: '学童エリア' },
+  { emoji: '🍇', name: '藤江', time: '' },
+  { emoji: '🌳', name: '豊明', time: '' },
+  { emoji: '🏭', name: '大府', time: '' },
+  { emoji: '✈', name: '常滑', time: '' },
+  { emoji: '🍶', name: '学童エリア', time: '' },
 ];
+
+const AREA_TIME_STEP_SECONDS = 600; /* 10分ステップ */
 
 const DEFAULT_QUALIFICATIONS: QualificationType[] = [
   { name: '保育士', countable: true },
@@ -61,7 +63,7 @@ export default function TenantSettingsPage() {
     })();
   }, []);
 
-  const handleAddArea = () => setAreas([...areas, { emoji: '📍', name: '' }]);
+  const handleAddArea = () => setAreas([...areas, { emoji: '📍', name: '', time: '' }]);
   const handleRemoveArea = (i: number) => setAreas(areas.filter((_, idx) => idx !== i));
   const handleAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
     setAreas(areas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
@@ -142,7 +144,7 @@ export default function TenantSettingsPage() {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎エリア</label>
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              絵文字ラベルとエリア名を設定します。職員の対応エリア選択に使用されます。
+              マーク・エリア名・時間はセットで扱います。児童の送迎パターンでエリアを選ぶと、時間が自動入力されます（編集可能）。
             </p>
             <div className="flex flex-col gap-2">
               {areas.map((area, i) => (
@@ -154,6 +156,7 @@ export default function TenantSettingsPage() {
                     className="w-14 text-center outline-none"
                     style={inputStyle}
                     placeholder="🏠"
+                    aria-label="マーク"
                   />
                   <input
                     type="text"
@@ -162,6 +165,16 @@ export default function TenantSettingsPage() {
                     className="flex-1 outline-none"
                     style={inputStyle}
                     placeholder="エリア名"
+                    aria-label="エリア名"
+                  />
+                  <input
+                    type="time"
+                    step={AREA_TIME_STEP_SECONDS}
+                    value={area.time ?? ''}
+                    onChange={(e) => handleAreaChange(i, 'time', e.target.value)}
+                    className="w-28 outline-none"
+                    style={inputStyle}
+                    aria-label="基準時間"
                   />
                   <button
                     onClick={() => handleRemoveArea(i)}

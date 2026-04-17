@@ -5,7 +5,11 @@
  * ============================================= */
 
 // ----- テナント -----
-export type AreaLabel = { emoji: string; name: string };
+/**
+ * エリアラベル。time はそのエリアの基準時刻（迎 or 送の時）。
+ * マーク（emoji）と時間はセットで扱い、児童の送迎パターンでエリアを選ぶと time が自動入力される。
+ */
+export type AreaLabel = { emoji: string; name: string; time?: string };
 export type QualificationType = { name: string; countable: boolean };
 
 export type TenantSettings = {
@@ -48,13 +52,22 @@ export type StaffRow = {
 // ----- 児童 -----
 export type GradeType =
   | 'preschool'
+  | 'nursery_3'      /* 年少（3歳児クラス） */
+  | 'nursery_4'      /* 年中（4歳児クラス） */
+  | 'nursery_5'      /* 年長（5歳児クラス） */
   | 'elementary_1'
   | 'elementary_2'
   | 'elementary_3'
   | 'elementary_4'
   | 'elementary_5'
   | 'elementary_6'
-  | 'junior_high';
+  | 'junior_high'    /* 旧データ用「中学」（学年未指定） */
+  | 'junior_high_1'
+  | 'junior_high_2'
+  | 'junior_high_3'
+  | 'high_1'
+  | 'high_2'
+  | 'high_3';
 
 export type ChildRow = {
   id: string;
@@ -81,7 +94,12 @@ export type ChildTransportPatternRow = {
   dropoff_location: string | null;
   dropoff_time: string | null;
   dropoff_method: DropoffMethod;
+  /** 旧: パターン全体に1つのエリア。後方互換のため残す */
   area_label: string | null;
+  /** 迎のエリア（emoji + name 形式） */
+  pickup_area_label: string | null;
+  /** 送のエリア（emoji + name 形式） */
+  dropoff_area_label: string | null;
   created_at: string;
 };
 

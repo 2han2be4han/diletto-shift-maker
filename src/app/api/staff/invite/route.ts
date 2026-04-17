@@ -1,26 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/requireRole';
+import { sendInviteEmail } from '@/lib/email/sendInviteEmail';
+import { generateInviteLink } from '@/lib/email/generateInviteLink';
 import type { StaffRole, EmploymentType } from '@/types';
 
 /**
  * POST /api/staff/invite
  * admin のみ: 新規職員を招待
  *
- * body: {
- *   name: string
- *   email: string
- *   role: StaffRole
- *   employment_type?: EmploymentType
- *   is_qualified?: boolean
- *   default_start_time?: string
- *   default_end_time?: string
- *   transport_areas?: string[]
- * }
- *
- * 1. public.staff に行を insert（user_id は null）
- * 2. Supabase admin API で招待メール送信
- * 3. 職員がリンクからパスワード設定 → 0005 トリガーで staff.user_id が自動リンク
+ * フロー:
+ *   1. public.staff に行を insert（user_id は null）
+ *   2. admin.auth.admin.generateLink で招待リンクを生成（メール送信はしない）
+ *      既にメールが auth.users にある場合は magiclink にフォールバック
+ *   3. Resend で自前テンプレートの招待メールを送信
+ *   4. staff.last_invited_at を更新
  */
 export async function POST(request: NextRequest) {
   const gate = await requireRole('admin');
@@ -36,6 +30,7 @@ export async function POST(request: NextRequest) {
     default_start_time?: string | null;
     default_end_time?: string | null;
     transport_areas?: string[];
+    qualifications?: string[];
   };
 
   try {
@@ -68,6 +63,7 @@ export async function POST(request: NextRequest) {
       default_start_time: body.default_start_time ?? null,
       default_end_time: body.default_end_time ?? null,
       transport_areas: body.transport_areas ?? [],
+      qualifications: body.qualifications ?? [],
     })
     .select()
     .single();
@@ -79,26 +75,59 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  /* 2. 招待メール送信 */
-  const origin = request.nextUrl.origin;
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    redirectTo: `${origin}/auth/callback?next=/dashboard`,
-    data: {
-      tenant_id: inviter.tenant_id,
-      staff_id: staffRow.id,
-    },
+  /* 2. テナント名を取得（メール本文用） */
+  const { data: tenantRow } = await admin
+    .from('tenants')
+    .select('name')
+    .eq('id', inviter.tenant_id)
+    .maybeSingle();
+  const tenantName = tenantRow?.name ?? '事業所';
+
+  /* 3. 招待リンクを生成（メール送信はしない）→ Resend で送信 */
+  const siteUrl = request.nextUrl.origin;
+  const redirectTo = `${siteUrl}/auth/callback?next=/dashboard`;
+
+  const linkResult = await generateInviteLink(admin, {
+    email: normalizedEmail,
+    redirectTo,
+    tenantId: inviter.tenant_id,
+    staffId: staffRow.id,
   });
 
-  if (inviteError) {
-    /* 招待失敗時は staff 行を残す（既に email が Auth にある可能性があるので手動紐付け可能） */
+  if (!linkResult.ok) {
     return NextResponse.json(
       {
-        warning: `職員は追加しましたが、招待メール送信に失敗しました: ${inviteError.message}`,
+        warning: `職員は追加しましたが、招待リンクの生成に失敗しました: ${linkResult.error}`,
         staff: staffRow,
       },
       { status: 200 }
     );
   }
+
+  /* 4. Resend で送信 */
+  const mailResult = await sendInviteEmail({
+    to: normalizedEmail,
+    staffName: name,
+    tenantName,
+    actionLink: linkResult.actionLink,
+    siteUrl,
+  });
+
+  if (!mailResult.ok) {
+    return NextResponse.json(
+      {
+        warning: `職員は追加しましたが、メール送信に失敗しました: ${mailResult.error}`,
+        staff: staffRow,
+      },
+      { status: 200 }
+    );
+  }
+
+  /* 5. last_invited_at を更新（クールダウン判定用） */
+  await admin
+    .from('staff')
+    .update({ last_invited_at: new Date().toISOString() })
+    .eq('id', staffRow.id);
 
   return NextResponse.json({ staff: staffRow, invited: true });
 }

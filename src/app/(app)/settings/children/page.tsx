@@ -12,12 +12,16 @@ import type {
   PickupMethod,
   DropoffMethod,
   TenantSettings,
+  AreaLabel,
 } from '@/types';
-import { getDefaultPickupTimeByGrade } from '@/lib/utils/parseChildName';
+import { getDefaultPickupTimeByGrade, GRADE_LABELS } from '@/lib/utils/parseChildName';
 
 /**
  * 児童管理ページ（admin・editor）
  * Supabase 連携 + エリア種類はテナント設定から取得
+ *
+ * 送迎パターンは迎 / 送 で別エリアを選択可能。
+ * エリア選択時にそのエリアの基準時刻が時間欄に自動入力される（編集可）。
  */
 
 type PatternItem = {
@@ -26,10 +30,11 @@ type PatternItem = {
   pickup_location: string;
   pickup_time: string;
   pickup_method: PickupMethod;
+  pickup_area_label: string;
   dropoff_location: string;
   dropoff_time: string;
   dropoff_method: DropoffMethod;
-  area_label: string;
+  dropoff_area_label: string;
 };
 
 type EditableChild = {
@@ -42,25 +47,38 @@ type EditableChild = {
   isNew?: boolean;
 };
 
-const GRADE_LABELS: Record<GradeType, string> = {
-  preschool: '未就学', elementary_1: '小1', elementary_2: '小2', elementary_3: '小3',
-  elementary_4: '小4', elementary_5: '小5', elementary_6: '小6', junior_high: '中学',
+/* GRADE_LABELS は @/lib/utils/parseChildName から import（プルダウン順もこの定義順） */
+
+const PICKUP_METHOD_LABELS: Record<PickupMethod, string> = {
+  pickup: 'お迎え',
+  self: '自分で',
+  parent: '保護者',
+};
+const DROPOFF_METHOD_LABELS: Record<DropoffMethod, string> = {
+  dropoff: '送り',
+  self: '自分で帰る',
+  parent: '保護者',
 };
 
-const PATTERN_PRESETS = ['保育園', '自宅', '学校（通常）', '学校（短縮）', 'おけいこ', '休み'];
-const METHOD_LABELS = { pickup: 'お迎え', self: '自分で', parent: '保護者' };
-const METHOD_LABELS_DROP = { dropoff: '送り', self: '自分で帰る', parent: '保護者' };
+const TIME_STEP_SECONDS = 600; /* 10分ステップ */
+/* 迎/送 行内のレイアウト揃えるための固定幅 */
+const LABEL_WIDTH = '3.5rem';
+const METHOD_SELECT_WIDTH = '6rem';
 
-const emptyPattern = (): PatternItem => ({
+const emptyPattern = (grade?: GradeType): PatternItem => ({
   pattern_name: '',
   pickup_location: '',
-  pickup_time: '14:00',
+  pickup_time: grade ? getDefaultPickupTimeByGrade(grade) : '14:00',
   pickup_method: 'pickup',
+  pickup_area_label: '',
   dropoff_location: '',
   dropoff_time: '16:00',
   dropoff_method: 'dropoff',
-  area_label: '',
+  dropoff_area_label: '',
 });
+
+/** "🐻 幼稚部" 形式の label を返す */
+const formatAreaLabel = (a: AreaLabel): string => `${a.emoji} ${a.name}`;
 
 export default function ChildrenSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -68,7 +86,7 @@ export default function ChildrenSettingsPage() {
   const [error, setError] = useState('');
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
-  const [areaLabels, setAreaLabels] = useState<string[]>([]);
+  const [areas, setAreas] = useState<AreaLabel[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -85,7 +103,7 @@ export default function ChildrenSettingsPage() {
       if (tRes.ok) {
         const { tenant } = await tRes.json();
         const s: TenantSettings = tenant?.settings ?? {};
-        setAreaLabels((s.transport_areas ?? []).map((a) => `${a.emoji} ${a.name}`));
+        setAreas(s.transport_areas ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
@@ -98,6 +116,9 @@ export default function ChildrenSettingsPage() {
     fetchAll();
   }, [fetchAll]);
 
+  const findAreaByLabel = (label: string): AreaLabel | undefined =>
+    areas.find((a) => formatAreaLabel(a) === label);
+
   const handleAdd = () => {
     setEditing({
       id: `new-${Date.now()}`,
@@ -105,7 +126,7 @@ export default function ChildrenSettingsPage() {
       grade_type: 'elementary_1',
       is_active: true,
       parent_contact: null,
-      patterns: [emptyPattern()],
+      patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
   };
@@ -119,10 +140,12 @@ export default function ChildrenSettingsPage() {
         pickup_location: p.pickup_location ?? '',
         pickup_time: p.pickup_time ?? '14:00',
         pickup_method: p.pickup_method,
+        /* 旧 area_label は互換のため pickup 側のフォールバックに */
+        pickup_area_label: p.pickup_area_label ?? p.area_label ?? '',
         dropoff_location: p.dropoff_location ?? '',
         dropoff_time: p.dropoff_time ?? '16:00',
         dropoff_method: p.dropoff_method,
-        area_label: p.area_label ?? '',
+        dropoff_area_label: p.dropoff_area_label ?? '',
       }));
     setEditing({
       id: child.id,
@@ -130,7 +153,7 @@ export default function ChildrenSettingsPage() {
       grade_type: child.grade_type,
       is_active: child.is_active,
       parent_contact: child.parent_contact,
-      patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern()],
+      patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
   };
 
@@ -168,11 +191,15 @@ export default function ChildrenSettingsPage() {
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
       }
 
-      /* パターン一括置換 */
+      /* パターン一括置換: pattern_name は UI で編集しないので index 採番 */
+      const patternsForSave = editing.patterns.map((p, idx) => ({
+        ...p,
+        pattern_name: p.pattern_name?.trim() || `パターン${idx + 1}`,
+      }));
       const pRes = await fetch(`/api/children/${childId}/patterns`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patterns: editing.patterns }),
+        body: JSON.stringify({ patterns: patternsForSave }),
       });
       if (!pRes.ok) throw new Error((await pRes.json()).error ?? 'パターン保存失敗');
 
@@ -201,10 +228,51 @@ export default function ChildrenSettingsPage() {
     }
   };
 
-  const updatePattern = (index: number, field: keyof PatternItem, value: string) => {
+  const updatePattern = <K extends keyof PatternItem>(
+    index: number,
+    field: K,
+    value: PatternItem[K]
+  ) => {
     if (!editing) return;
     const ps = [...editing.patterns];
     ps[index] = { ...ps[index], [field]: value };
+    setEditing({ ...editing, patterns: ps });
+  };
+
+  /**
+   * エリア選択時: 時間欄に基準時刻を自動入力
+   * ユーザーが後から時間を編集済みの場合は上書きしない（空 or 既定値のときだけ入れる）
+   */
+  const handlePickupAreaChange = (index: number, newLabel: string) => {
+    if (!editing) return;
+    const area = areas.find((a) => formatAreaLabel(a) === newLabel);
+    const current = editing.patterns[index];
+    const ps = [...editing.patterns];
+    const shouldAutofillTime =
+      !!area?.time &&
+      (!current.pickup_time ||
+        current.pickup_time === '14:00' ||
+        current.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type));
+    ps[index] = {
+      ...current,
+      pickup_area_label: newLabel,
+      pickup_time: shouldAutofillTime ? (area?.time ?? current.pickup_time) : current.pickup_time,
+    };
+    setEditing({ ...editing, patterns: ps });
+  };
+
+  const handleDropoffAreaChange = (index: number, newLabel: string) => {
+    if (!editing) return;
+    const area = areas.find((a) => formatAreaLabel(a) === newLabel);
+    const current = editing.patterns[index];
+    const ps = [...editing.patterns];
+    const shouldAutofillTime =
+      !!area?.time && (!current.dropoff_time || current.dropoff_time === '16:00');
+    ps[index] = {
+      ...current,
+      dropoff_area_label: newLabel,
+      dropoff_time: shouldAutofillTime ? (area?.time ?? current.dropoff_time) : current.dropoff_time,
+    };
     setEditing({ ...editing, patterns: ps });
   };
 
@@ -213,8 +281,6 @@ export default function ChildrenSettingsPage() {
     border: '1px solid var(--rule)', borderRadius: '6px',
     padding: '8px 12px', fontSize: '0.85rem',
   };
-
-  const smallInput: React.CSSProperties = { ...inputStyle, padding: '6px 8px', fontSize: '0.8rem' };
 
   if (loading) {
     return (
@@ -226,6 +292,8 @@ export default function ChildrenSettingsPage() {
   }
 
   const activeCount = children.filter((c) => c.is_active).length;
+  const areaOptions = areas.map(formatAreaLabel);
+  void findAreaByLabel; /* 現状未使用（将来の時間再同期用に保持） */
 
   return (
     <>
@@ -285,136 +353,152 @@ export default function ChildrenSettingsPage() {
         </div>
       </div>
 
-      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={editing?.isNew ? '児童追加' : `${editing?.name} の設定`} size="lg">
+      <Modal
+        isOpen={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing?.isNew ? '児童追加' : `${editing?.name} の設定`}
+        size="lg"
+      >
         {editing && (
-          <div className="flex flex-col gap-5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>氏名</label>
-                <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="outline-none" style={inputStyle} />
+          <div className="flex flex-col gap-6">
+            {/* 基本情報 */}
+            <section className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>氏名</label>
+                  <input
+                    type="text"
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                    className="outline-none"
+                    style={inputStyle}
+                    placeholder="例）山田 太郎"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>学年</label>
+                  <select
+                    value={editing.grade_type}
+                    onChange={(e) => {
+                      const newGrade = e.target.value as GradeType;
+                      const defaultTime = getDefaultPickupTimeByGrade(newGrade);
+                      const oldDefaultTime = getDefaultPickupTimeByGrade(editing.grade_type);
+                      /* 学年依存の既定時間が入っているパターンだけ自動更新 */
+                      const updatedPatterns = editing.patterns.map((p) =>
+                        p.pickup_time === oldDefaultTime || !p.pickup_time
+                          ? { ...p, pickup_time: defaultTime }
+                          : p
+                      );
+                      setEditing({ ...editing, grade_type: newGrade, patterns: updatedPatterns });
+                    }}
+                    className="outline-none"
+                    style={inputStyle}
+                  >
+                    {Object.entries(GRADE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>学年</label>
-                <select
-                  value={editing.grade_type}
-                  onChange={(e) => {
-                    const newGrade = e.target.value as GradeType;
-                    const defaultTime = getDefaultPickupTimeByGrade(newGrade);
-                    const updatedPatterns = editing.patterns.map((p) =>
-                      p.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type) || !p.pickup_time
-                        ? { ...p, pickup_time: defaultTime }
-                        : p
-                    );
-                    setEditing({ ...editing, grade_type: newGrade, patterns: updatedPatterns });
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保護者連絡先（任意）</label>
+                  <input
+                    type="text"
+                    value={editing.parent_contact ?? ''}
+                    onChange={(e) => setEditing({ ...editing, parent_contact: e.target.value })}
+                    className="outline-none"
+                    style={inputStyle}
+                    placeholder="090-xxxx-xxxx"
+                  />
+                </div>
+                <label
+                  className="flex items-center justify-center gap-2 rounded cursor-pointer"
+                  style={{
+                    background: editing.is_active ? 'var(--green-pale)' : 'var(--bg)',
+                    border: `1px solid ${editing.is_active ? 'rgba(42,122,82,0.25)' : 'var(--rule)'}`,
+                    padding: '0 12px',
                   }}
-                  className="outline-none"
-                  style={inputStyle}
                 >
-                  {Object.entries(GRADE_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                </select>
+                  <input
+                    type="checkbox"
+                    checked={editing.is_active}
+                    onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
+                  />
+                  <span className="text-sm font-medium" style={{ color: editing.is_active ? 'var(--green)' : 'var(--ink-3)' }}>
+                    {editing.is_active ? '有効' : '無効'}
+                  </span>
+                </label>
               </div>
-              <div className="flex items-end gap-2 pb-1">
-                <input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} id="active" />
-                <label htmlFor="active" className="text-sm" style={{ color: 'var(--ink-2)' }}>有効</label>
-              </div>
-            </div>
+            </section>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保護者連絡先（任意）</label>
-              <input
-                type="text"
-                value={editing.parent_contact ?? ''}
-                onChange={(e) => setEditing({ ...editing, parent_contact: e.target.value })}
-                className="outline-none"
-                style={inputStyle}
-                placeholder="090-xxxx-xxxx"
-              />
-            </div>
-
-            <div className="flex flex-col gap-3">
+            {/* 送迎パターン */}
+            <section className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                   送迎パターン（{editing.patterns.length}件）
                 </label>
                 <span className="text-xs" style={{ color: 'var(--ink-3)' }}>最大5パターン</span>
               </div>
+              {areas.length === 0 && (
+                <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
+                  エリアが未設定です。テナント設定でマーク・エリア名・時間を登録してから利用してください。
+                </p>
+              )}
 
               {editing.patterns.map((p, i) => (
                 <div
                   key={i}
-                  className="p-3"
-                  style={{ background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--rule)' }}
+                  className="p-3 flex flex-col gap-2"
+                  style={{ background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--rule)' }}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <select
-                      value={p.pattern_name}
-                      onChange={(e) => updatePattern(i, 'pattern_name', e.target.value)}
-                      className="outline-none flex-1"
-                      style={smallInput}
-                    >
-                      <option value="">区分を選択</option>
-                      {PATTERN_PRESETS.map((pr) => (<option key={pr} value={pr}>{pr}</option>))}
-                    </select>
-                    <select
-                      value={p.area_label}
-                      onChange={(e) => updatePattern(i, 'area_label', e.target.value)}
-                      className="outline-none"
-                      style={smallInput}
-                    >
-                      <option value="">エリア</option>
-                      {areaLabels.map((a) => (<option key={a} value={a}>{a}</option>))}
-                    </select>
+                  {/* パターン番号 + 削除 */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
+                      パターン {i + 1}
+                    </span>
                     <button
+                      type="button"
                       onClick={() => setEditing({ ...editing, patterns: editing.patterns.filter((_, j) => j !== i) })}
-                      className="text-xs px-2 py-1 rounded hover:bg-[var(--red-pale)]"
+                      className="text-xs px-2 py-1 rounded transition-colors hover:bg-[var(--red-pale)]"
                       style={{ color: 'var(--red)' }}
+                      aria-label="このパターンを削除"
                     >
-                      削除
+                      🗑 削除
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded flex-wrap"
-                      style={{ background: 'var(--accent-pale)', border: '1px solid rgba(26,62,184,0.1)' }}
-                    >
-                      <span className="text-xs font-bold shrink-0" style={{ color: 'var(--accent)' }}>迎🚗←</span>
-                      {p.area_label && <span className="text-xs shrink-0">{p.area_label.split(' ')[0]}</span>}
-                      <input type="text" value={p.pickup_location} onChange={(e) => updatePattern(i, 'pickup_location', e.target.value)} placeholder="場所" className="outline-none w-16 text-xs bg-transparent" style={{ color: 'var(--ink)' }} />
-                      <span className="text-xs" style={{ color: 'var(--ink-3)' }}>-</span>
-                      <input type="time" value={p.pickup_time} onChange={(e) => updatePattern(i, 'pickup_time', e.target.value)} className="outline-none text-xs bg-transparent w-20" style={{ color: 'var(--ink)' }} />
-                      <select value={p.pickup_method} onChange={(e) => updatePattern(i, 'pickup_method', e.target.value)} className="outline-none text-xs bg-transparent" style={{ color: 'var(--accent)' }}>
-                        {Object.entries(METHOD_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                      </select>
-                    </div>
-
-                    <div
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded flex-wrap"
-                      style={{ background: 'var(--green-pale)', border: '1px solid rgba(42,122,82,0.1)' }}
-                    >
-                      <span className="text-xs font-bold shrink-0" style={{ color: 'var(--green)' }}>送🚗→</span>
-                      {p.area_label && <span className="text-xs shrink-0">{p.area_label.split(' ')[0]}</span>}
-                      <input type="text" value={p.dropoff_location} onChange={(e) => updatePattern(i, 'dropoff_location', e.target.value)} placeholder="場所" className="outline-none w-16 text-xs bg-transparent" style={{ color: 'var(--ink)' }} />
-                      <span className="text-xs" style={{ color: 'var(--ink-3)' }}>-</span>
-                      <input type="time" value={p.dropoff_time} onChange={(e) => updatePattern(i, 'dropoff_time', e.target.value)} className="outline-none text-xs bg-transparent w-20" style={{ color: 'var(--ink)' }} />
-                      <select value={p.dropoff_method} onChange={(e) => updatePattern(i, 'dropoff_method', e.target.value)} className="outline-none text-xs bg-transparent" style={{ color: 'var(--green)' }}>
-                        {Object.entries(METHOD_LABELS_DROP).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                      </select>
-                    </div>
-                  </div>
+                  {/* 迎 行 */}
+                  <PickupRow
+                    pattern={p}
+                    areaOptions={areaOptions}
+                    onMethodChange={(v) => updatePattern(i, 'pickup_method', v)}
+                    onAreaChange={(v) => handlePickupAreaChange(i, v)}
+                    onTimeChange={(v) => updatePattern(i, 'pickup_time', v)}
+                  />
+                  {/* 送 行 */}
+                  <DropoffRow
+                    pattern={p}
+                    areaOptions={areaOptions}
+                    onMethodChange={(v) => updatePattern(i, 'dropoff_method', v)}
+                    onAreaChange={(v) => handleDropoffAreaChange(i, v)}
+                    onTimeChange={(v) => updatePattern(i, 'dropoff_time', v)}
+                  />
                 </div>
               ))}
 
               {editing.patterns.length < 5 && (
                 <Button
                   variant="secondary"
-                  onClick={() => setEditing({ ...editing, patterns: [...editing.patterns, emptyPattern()] })}
+                  onClick={() => setEditing({ ...editing, patterns: [...editing.patterns, emptyPattern(editing.grade_type)] })}
                 >
                   + パターン追加
                 </Button>
               )}
-            </div>
+            </section>
 
+            {/* フッター */}
             <div className="flex justify-between gap-2 mt-2">
               <div>
                 {!editing.isNew && (
@@ -435,4 +519,157 @@ export default function ChildrenSettingsPage() {
       </Modal>
     </>
   );
+}
+
+/* ---------- 迎 行 ---------- */
+type PickupRowProps = {
+  pattern: PatternItem;
+  areaOptions: string[];
+  onMethodChange: (v: PickupMethod) => void;
+  onAreaChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
+};
+
+function PickupRow({
+  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange,
+}: PickupRowProps) {
+  return (
+    <div
+      className="flex items-center gap-2 px-2.5 py-2"
+      style={{
+        background: 'var(--accent-pale)',
+        border: '1px solid rgba(26,62,184,0.15)',
+        borderRadius: '8px',
+      }}
+    >
+      <span
+        className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
+        style={{ color: 'var(--accent)', width: LABEL_WIDTH }}
+      >
+        迎 🚗←
+      </span>
+      <select
+        value={pattern.pickup_method}
+        onChange={(e) => onMethodChange(e.target.value as PickupMethod)}
+        className="outline-none text-xs font-medium shrink-0"
+        style={methodSelectStyle('var(--accent)')}
+      >
+        {Object.entries(PICKUP_METHOD_LABELS).map(([k, v]) => (
+          <option key={k} value={k}>{v}</option>
+        ))}
+      </select>
+      <select
+        value={pattern.pickup_area_label}
+        onChange={(e) => onAreaChange(e.target.value)}
+        className="outline-none text-xs flex-1 min-w-0"
+        style={areaSelectStyle()}
+        aria-label="迎のエリア"
+      >
+        <option value="">エリア選択</option>
+        {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+      </select>
+      <input
+        type="time"
+        step={TIME_STEP_SECONDS}
+        value={pattern.pickup_time}
+        onChange={(e) => onTimeChange(e.target.value)}
+        className="outline-none text-xs shrink-0"
+        style={timeInputStyle()}
+        aria-label="迎の時間"
+      />
+    </div>
+  );
+}
+
+/* ---------- 送 行 ---------- */
+type DropoffRowProps = {
+  pattern: PatternItem;
+  areaOptions: string[];
+  onMethodChange: (v: DropoffMethod) => void;
+  onAreaChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
+};
+
+function DropoffRow({
+  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange,
+}: DropoffRowProps) {
+  return (
+    <div
+      className="flex items-center gap-2 px-2.5 py-2"
+      style={{
+        background: 'var(--green-pale)',
+        border: '1px solid rgba(42,122,82,0.15)',
+        borderRadius: '8px',
+      }}
+    >
+      <span
+        className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
+        style={{ color: 'var(--green)', width: LABEL_WIDTH }}
+      >
+        送 🚗→
+      </span>
+      <select
+        value={pattern.dropoff_method}
+        onChange={(e) => onMethodChange(e.target.value as DropoffMethod)}
+        className="outline-none text-xs font-medium shrink-0"
+        style={methodSelectStyle('var(--green)')}
+      >
+        {Object.entries(DROPOFF_METHOD_LABELS).map(([k, v]) => (
+          <option key={k} value={k}>{v}</option>
+        ))}
+      </select>
+      <select
+        value={pattern.dropoff_area_label}
+        onChange={(e) => onAreaChange(e.target.value)}
+        className="outline-none text-xs flex-1 min-w-0"
+        style={areaSelectStyle()}
+        aria-label="送のエリア"
+      >
+        <option value="">エリア選択</option>
+        {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+      </select>
+      <input
+        type="time"
+        step={TIME_STEP_SECONDS}
+        value={pattern.dropoff_time}
+        onChange={(e) => onTimeChange(e.target.value)}
+        className="outline-none text-xs shrink-0"
+        style={timeInputStyle()}
+        aria-label="送の時間"
+      />
+    </div>
+  );
+}
+
+/* ---------- 共通スタイル ---------- */
+function methodSelectStyle(accentColor: string): React.CSSProperties {
+  return {
+    background: 'var(--surface)',
+    color: accentColor,
+    border: '1px solid var(--rule)',
+    borderRadius: '6px',
+    padding: '6px 8px',
+    width: METHOD_SELECT_WIDTH,
+  };
+}
+
+function areaSelectStyle(): React.CSSProperties {
+  return {
+    background: 'var(--surface)',
+    color: 'var(--ink)',
+    border: '1px solid var(--rule)',
+    borderRadius: '6px',
+    padding: '6px 8px',
+  };
+}
+
+function timeInputStyle(): React.CSSProperties {
+  return {
+    background: 'var(--surface)',
+    color: 'var(--ink)',
+    border: '1px solid var(--rule)',
+    borderRadius: '6px',
+    padding: '6px 8px',
+    width: '6.5rem',
+  };
 }

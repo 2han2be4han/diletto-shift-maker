@@ -17,7 +17,12 @@ type IncomingPattern = {
   dropoff_location?: unknown;
   dropoff_time?: unknown;
   dropoff_method?: unknown;
+  /** 旧: 全体に 1 つのエリア（互換のため残す） */
   area_label?: unknown;
+  /** 新: 迎のエリア */
+  pickup_area_label?: unknown;
+  /** 新: 送のエリア */
+  dropoff_area_label?: unknown;
 };
 
 function validatePatterns(raw: unknown): { ok: true; rows: IncomingPattern[] } | { ok: false; error: string } {
@@ -67,6 +72,8 @@ export async function POST(
   }
 
   const supabase = await createClient();
+  /* 旧 area_label への書き込みは互換のため pickup_area_label 優先で決定 */
+  const legacyArea = body.pickup_area_label ?? body.area_label ?? null;
   const { data, error } = await supabase
     .from('child_transport_patterns')
     .insert({
@@ -79,7 +86,9 @@ export async function POST(
       dropoff_location: body.dropoff_location ?? null,
       dropoff_time: body.dropoff_time ?? null,
       dropoff_method: body.dropoff_method ?? 'dropoff',
-      area_label: body.area_label ?? null,
+      area_label: legacyArea,
+      pickup_area_label: body.pickup_area_label ?? null,
+      dropoff_area_label: body.dropoff_area_label ?? null,
     })
     .select()
     .single();
@@ -138,18 +147,26 @@ export async function PUT(
   const existingIds = (existingRows ?? []).map((r) => r.id as string);
 
   /* 新データを insert（失敗しても既存データは保護される） */
-  const rows = patterns.map((p) => ({
-    tenant_id: gate.staff.tenant_id,
-    child_id: id,
-    pattern_name: String(p.pattern_name ?? ''),
-    pickup_location: (p.pickup_location as string | null) ?? null,
-    pickup_time: (p.pickup_time as string | null) ?? null,
-    pickup_method: (p.pickup_method as string) ?? 'pickup',
-    dropoff_location: (p.dropoff_location as string | null) ?? null,
-    dropoff_time: (p.dropoff_time as string | null) ?? null,
-    dropoff_method: (p.dropoff_method as string) ?? 'dropoff',
-    area_label: (p.area_label as string | null) ?? null,
-  }));
+  const rows = patterns.map((p) => {
+    const pickupArea = (p.pickup_area_label as string | null) ?? null;
+    const dropoffArea = (p.dropoff_area_label as string | null) ?? null;
+    /* 旧 area_label には互換のため pickup_area_label を優先して書く */
+    const legacyArea = pickupArea ?? (p.area_label as string | null) ?? null;
+    return {
+      tenant_id: gate.staff.tenant_id,
+      child_id: id,
+      pattern_name: String(p.pattern_name ?? ''),
+      pickup_location: (p.pickup_location as string | null) ?? null,
+      pickup_time: (p.pickup_time as string | null) ?? null,
+      pickup_method: (p.pickup_method as string) ?? 'pickup',
+      dropoff_location: (p.dropoff_location as string | null) ?? null,
+      dropoff_time: (p.dropoff_time as string | null) ?? null,
+      dropoff_method: (p.dropoff_method as string) ?? 'dropoff',
+      area_label: legacyArea,
+      pickup_area_label: pickupArea,
+      dropoff_area_label: dropoffArea,
+    };
+  });
 
   const { data: inserted, error: insertError } = await supabase
     .from('child_transport_patterns')

@@ -164,6 +164,56 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 11: 招待メール Resend 統合 + 再送機能（2026-04-17）</div>
+    <p>
+        <strong>背景</strong>: Supabase 標準メール (inviteUserByEmail) は無料枠で rate limit 3〜4通/時・Gmail で迷惑メール行きも多い。
+        Supabase Custom SMTP は有料プラン誘導になりがちなので、<strong>Resend を直接叩いて自前で送信</strong>する方式に変更。
+        併せて「招待メール再送」機能を追加。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>11-1</td><td>resend パッケージ追加</td><td>package.json</td><td class="status-done">完了</td><td>100%</td><td>npm install resend</td></tr>
+            <tr><td>11-2</td><td>staff.last_invited_at カラム追加（連打防止用）</td><td>supabase/migrations/0012_staff_invite_cooldown.sql</td><td class="status-done">完了</td><td>100%</td><td>60秒クールダウン。<strong>本番Supabaseに手動適用必須</strong></td></tr>
+            <tr><td>11-3</td><td>.env.example に RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_FROM_NAME 追記</td><td>.env.example, .env.local</td><td class="status-done">完了</td><td>100%</td><td><strong>Vercel 側にも要設定</strong></td></tr>
+            <tr><td>11-4</td><td>Resend SDK ラッパー作成</td><td>src/lib/email/resend.ts</td><td class="status-done">完了</td><td>100%</td><td>未設定時 null を返す安全設計</td></tr>
+            <tr><td>11-5</td><td>招待メール送信 helper（日本語 HTML テンプレート込み）</td><td>src/lib/email/sendInviteEmail.ts</td><td class="status-done">完了</td><td>100%</td><td>diletto 風ヘッダー + テナント名 + by ShiftPuzzle + CTA</td></tr>
+            <tr><td>11-6</td><td>新規招待 API を generateLink + Resend に書き換え</td><td>src/app/api/staff/invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td>共通 generateInviteLink helper 使用</td></tr>
+            <tr><td>11-7</td><td>再送 API 新規作成</td><td>src/app/api/staff/[id]/resend-invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td>admin 専用・60秒 cooldown・テナント一致チェック・既登録チェック</td></tr>
+            <tr><td>11-8</td><td>職員管理画面に「再送」インラインボタン追加</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>未ログイン職員行にアウトライン小ボタン・確認ダイアログ付き</td></tr>
+            <tr><td>11-9</td><td>reference-map.md 更新（新 API ルート・新カラム）</td><td>reference-map.md</td><td class="status-done">完了</td><td>100%</td><td>last_invited_at / 新 helper 3本 / 新 API ルート 1本 を追記</td></tr>
+            <tr><td>11-10</td><td>整合性確認: invite と resend-invite の動作差分</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>共通 helper (generateInviteLink / sendInviteEmail) 経由で両 API が同一テンプレ使用。両方とも last_invited_at 更新</td></tr>
+            <tr><td>11-11</td><td>npm run dev で型チェック + ローカル送信テスト</td><td>（全体）</td><td class="status-doing">ユーザー確認待ち</td><td>80%</td><td>tsc --noEmit 通過、dev server クリーン起動。実送信テストはユーザーのログイン後に依頼</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 12: 職員登録・児童モーダル・エリア時間（2026-04-17）</div>
+    <p>
+        <strong>ゴール</strong>: 職員登録 UX 改善（保有資格bug修正・全選択・10分ステップ・デフォルト時間）、
+        テナントエリアに時間を持たせ、児童モーダルを刷新（迎/送で別エリア選択→時間自動入力）。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>12-1</td><td>types/index.ts 拡張（AreaLabel.time / ChildTransportPatternRow の pickup_area_label / dropoff_area_label）</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>既存 area_label は互換のため残す</td></tr>
+            <tr><td>12-2</td><td>Migration 0013: child_transport_patterns に pickup_area_label / dropoff_area_label カラム追加</td><td>supabase/migrations/0013_separate_pickup_dropoff_area.sql</td><td class="status-done">完了</td><td>100%</td><td>nullable で後方互換。<strong>本番Supabaseに手動適用必須</strong></td></tr>
+            <tr><td>12-3</td><td>A1: 保有資格が新規登録時に保存されない bug 修正</td><td>src/app/(app)/settings/staff/page.tsx, src/app/api/staff/invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td>両方に qualifications を通す</td></tr>
+            <tr><td>12-4</td><td>A2: 対応エリアに「全選択」「全解除」ボタン追加</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>モーダル内に配置</td></tr>
+            <tr><td>12-5</td><td>A3: 勤務時間デフォルト 09:30 / 18:30 に変更</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>emptyStaff() の初期値</td></tr>
+            <tr><td>12-6</td><td>A4: 勤務時間の入力を 10 分ステップに</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>input step=600 秒</td></tr>
+            <tr><td>12-7</td><td>B: テナント設定のエリア行に時間フィールド追加（10 分ステップ）</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>マーク・名前・時間がセット</td></tr>
+            <tr><td>12-8</td><td>C3: /api/children/[id]/patterns で新カラム対応</td><td>src/app/api/children/[id]/patterns/route.ts</td><td class="status-done">完了</td><td>100%</td><td>PUT と POST 両方、旧 area_label にも互換書き込み</td></tr>
+            <tr><td>12-9</td><td>C4-C5: 児童モーダル UI 刷新（迎/送カード横並び・方法→エリア→時間横一列・エリア選択で時間自動入力）</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>時間は編集可、学年デフォルト時刻も尊重</td></tr>
+            <tr><td>12-10</td><td>整合性確認: 型/マイグレーション/API/UI の変更差分</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>types ↔ DB ↔ API ↔ UI の一貫性 tsc 通過で確認</td></tr>
+            <tr><td>12-11</td><td>reference-map.md 更新（AreaLabel.time / 新カラム2本）</td><td>reference-map.md</td><td class="status-done">完了</td><td>100%</td><td>child_transport_patterns に2カラム追記、更新履歴にPhase 12</td></tr>
+            <tr><td>12-12</td><td>npm run dev で型チェック + UI 動作確認</td><td>（全体）</td><td class="status-doing">ユーザー確認待ち</td><td>80%</td><td>tsc --noEmit 通過、dev server クリーン起動。<strong>ユーザーが localhost:5000 で全機能確認後 push</strong></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

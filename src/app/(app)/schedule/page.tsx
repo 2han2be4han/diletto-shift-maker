@@ -9,7 +9,8 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { ParsedScheduleEntry, ChildRow, ScheduleEntryRow, GradeType } from '@/types';
+import type { ParsedScheduleEntry, ChildRow, ScheduleEntryRow } from '@/types';
+import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 
 /**
  * 利用予定ページ（Supabase接続版）
@@ -18,10 +19,7 @@ import type { ParsedScheduleEntry, ChildRow, ScheduleEntryRow, GradeType } from 
  * - PDF / Excel インポートで bulk upsert
  */
 
-const GRADE_LABELS: Record<GradeType, string> = {
-  preschool: '未就学', elementary_1: '小1', elementary_2: '小2', elementary_3: '小3',
-  elementary_4: '小4', elementary_5: '小5', elementary_6: '小6', junior_high: '中学',
-};
+/* GRADE_LABELS は @/lib/utils/parseChildName で一元管理 */
 
 type CellData = {
   child_id: string;

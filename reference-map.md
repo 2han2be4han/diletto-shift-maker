@@ -32,6 +32,7 @@
 | transport_areas | text[] | `src/types/index.ts` (StaffRow) |
 | is_qualified | boolean | `src/types/index.ts` (StaffRow) |
 | created_at | timestamptz | `src/types/index.ts` (StaffRow) |
+| last_invited_at | timestamptz | `src/app/api/staff/invite/route.ts`, `src/app/api/staff/[id]/resend-invite/route.ts`（招待クールダウン判定） |
 
 ### children
 | カラム | 型 | 参照ファイル |
@@ -54,7 +55,9 @@
 | pickup_time | time | `src/types/index.ts` (ChildTransportPatternRow) |
 | dropoff_location | text | `src/types/index.ts` (ChildTransportPatternRow) |
 | dropoff_time | time | `src/types/index.ts` (ChildTransportPatternRow) |
-| area_label | text | `src/types/index.ts` (ChildTransportPatternRow) |
+| area_label | text | `src/types/index.ts` (ChildTransportPatternRow)。旧：パターン全体に 1 つのエリア。後方互換のため残置 |
+| pickup_area_label | text | `src/types/index.ts`, `src/app/(app)/settings/children/page.tsx`, `src/app/api/children/[id]/patterns/route.ts` — 迎のエリア |
+| dropoff_area_label | text | `src/types/index.ts`, `src/app/(app)/settings/children/page.tsx`, `src/app/api/children/[id]/patterns/route.ts` — 送のエリア |
 | created_at | timestamptz | `src/types/index.ts` (ChildTransportPatternRow) |
 
 ### schedule_entries
@@ -169,6 +172,9 @@
 | `STRIPE_WEBHOOK_SECRET` | Stripe Webhook署名 | **秘密（サーバーのみ）** |
 | `STRIPE_PRICE_ID` | StripeサブスクリプションPrice ID | **秘密（サーバーのみ）** |
 | `NEXT_PUBLIC_APP_URL` | アプリのURL（Stripe redirect用） | 公開可（NEXT_PUBLIC） |
+| `RESEND_API_KEY` | Resend APIキー（職員招待メール送信） | **秘密（サーバーのみ）** |
+| `RESEND_FROM_EMAIL` | 招待メールの送信元（Resend検証済みドメイン必須） | **秘密（サーバーのみ）** |
+| `RESEND_FROM_NAME` | 送信者表示名 | **秘密（サーバーのみ）** |
 
 ---
 
@@ -186,6 +192,11 @@
 | `src/components/layout/Header.tsx` | ページヘッダー（ハンバーガーメニュー付き） |
 | `src/app/(app)/layout.tsx` | アプリ共通レイアウト（サイドバー+メイン） |
 | `src/app/(auth)/login/page.tsx` | ログインページ（dilettoブランドスプリット） |
+| `src/lib/email/resend.ts` | Resend SDKクライアント初期化（サーバ専用） |
+| `src/lib/email/sendInviteEmail.ts` | 職員招待メール送信（Resend + 日本語HTMLテンプレート） |
+| `src/lib/email/generateInviteLink.ts` | Supabase generateLink（invite → magiclink フォールバック） |
+| `src/app/api/staff/invite/route.ts` | 新規職員招待（generateLink + Resend送信、last_invited_at 更新） |
+| `src/app/api/staff/[id]/resend-invite/route.ts` | 招待メール再送（admin専用・60秒クールダウン・既登録チェック） |
 
 ---
 
@@ -195,3 +206,7 @@
 |---|---|
 | 2026-04-15 | 初版作成。テンプレートのみ |
 | 2026-04-16 | Phase C実装完了。4テーブル作成・型定義・UIコンポーネント・レイアウト・認証基盤 |
+| 2026-04-17 | Phase 11: Resend 招待メール統合・再送機能。staff.last_invited_at 追加、/api/staff/[id]/resend-invite 新設、src/lib/email/* 追加 |
+| 2026-04-17 | Phase 12: 職員登録UX改善（qualifications bug fix / 全選択 / 10分ステップ / 09:30-18:30デフォルト）、AreaLabel.time 追加、ChildTransportPatternRow.pickup_area_label / dropoff_area_label 追加、児童モーダル刷新 |
+| 2026-04-17 | 児童モーダル微調整：区分/場所メモ削除、迎/送を1行化、視覚的整列（ラベル・方法セレクト固定幅） |
+| 2026-04-17 | GradeType 拡張：年少/年中/年長・中1-3・高1-3 追加、Migration 0014 で CHECK 制約更新、GRADE_LABELS を parseChildName.ts で一元管理 |

@@ -24,14 +24,18 @@ const EMPLOYMENT_LABELS: Record<EmploymentType, string> = { full_time: '常勤',
 
 type EditableStaff = Omit<StaffRow, 'tenant_id' | 'user_id' | 'created_at'> & { isNew?: boolean };
 
+const DEFAULT_START_TIME = '09:30';
+const DEFAULT_END_TIME = '18:30';
+const TIME_STEP_SECONDS = 600; /* 10分ステップ */
+
 const emptyStaff = (): EditableStaff => ({
   id: `new-${Date.now()}`,
   name: '',
   email: '',
   role: 'admin',
   employment_type: 'part_time',
-  default_start_time: '09:00',
-  default_end_time: '17:00',
+  default_start_time: DEFAULT_START_TIME,
+  default_end_time: DEFAULT_END_TIME,
   transport_areas: [],
   qualifications: [],
   is_qualified: false,
@@ -47,6 +51,7 @@ export default function StaffSettingsPage() {
   const [areas, setAreas] = useState<AreaLabel[]>([]);
   const [qualificationTypes, setQualificationTypes] = useState<QualificationType[]>([]);
   const [editing, setEditing] = useState<EditableStaff | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -85,8 +90,8 @@ export default function StaffSettingsPage() {
       email: s.email ?? '',
       role: s.role,
       employment_type: s.employment_type,
-      default_start_time: s.default_start_time ?? '09:00',
-      default_end_time: s.default_end_time ?? '17:00',
+      default_start_time: s.default_start_time ?? DEFAULT_START_TIME,
+      default_end_time: s.default_end_time ?? DEFAULT_END_TIME,
       transport_areas: s.transport_areas,
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
@@ -112,6 +117,7 @@ export default function StaffSettingsPage() {
             default_start_time: editing.default_start_time,
             default_end_time: editing.default_end_time,
             transport_areas: editing.transport_areas,
+            qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
           }),
         });
@@ -163,6 +169,28 @@ export default function StaffSettingsPage() {
       setError(e instanceof Error ? e.message : '削除に失敗しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResendInvite = async (
+    e: React.MouseEvent,
+    target: StaffRow
+  ) => {
+    e.stopPropagation(); /* 行クリックの編集モーダルを抑止 */
+    if (!confirm(`${target.name} さんに招待メールを再送しますか？`)) return;
+    setError('');
+    setInfo('');
+    setResendingId(target.id);
+    try {
+      const res = await fetch(`/api/staff/${target.id}/resend-invite`, { method: 'POST' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? '再送に失敗しました');
+      setInfo(`${target.name} さんに招待メールを再送しました`);
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '再送に失敗しました');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -238,7 +266,27 @@ export default function StaffSettingsPage() {
                   <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
                     {!s.user_id && (
-                      <span className="ml-2 text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
+                      <>
+                        <span className="ml-2 text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleResendInvite(e, s)}
+                          disabled={resendingId === s.id}
+                          className="ml-2 text-xs font-medium transition-colors"
+                          style={{
+                            background: 'transparent',
+                            color: 'var(--accent)',
+                            border: '1px solid var(--accent)',
+                            borderRadius: '4px',
+                            padding: '2px 8px',
+                            cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
+                            opacity: resendingId === s.id ? 0.6 : 1,
+                          }}
+                          title="招待メールを再送"
+                        >
+                          {resendingId === s.id ? '送信中...' : '再送'}
+                        </button>
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
@@ -332,16 +380,53 @@ export default function StaffSettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>出勤時間</label>
-                <input type="time" value={editing.default_start_time ?? ''} onChange={(e) => setEditing({ ...editing, default_start_time: e.target.value })} className="outline-none" style={inputStyle} />
+                <input
+                  type="time"
+                  step={TIME_STEP_SECONDS}
+                  value={editing.default_start_time ?? ''}
+                  onChange={(e) => setEditing({ ...editing, default_start_time: e.target.value })}
+                  className="outline-none"
+                  style={inputStyle}
+                />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>退勤時間</label>
-                <input type="time" value={editing.default_end_time ?? ''} onChange={(e) => setEditing({ ...editing, default_end_time: e.target.value })} className="outline-none" style={inputStyle} />
+                <input
+                  type="time"
+                  step={TIME_STEP_SECONDS}
+                  value={editing.default_end_time ?? ''}
+                  onChange={(e) => setEditing({ ...editing, default_end_time: e.target.value })}
+                  className="outline-none"
+                  style={inputStyle}
+                />
               </div>
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>対応エリア</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>対応エリア</label>
+                {areaLabels.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ ...editing, transport_areas: [...areaLabels] })}
+                      className="text-xs transition-colors"
+                      style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                    >
+                      全選択
+                    </button>
+                    <span className="text-xs" style={{ color: 'var(--ink-3)' }}>/</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ ...editing, transport_areas: [] })}
+                      className="text-xs transition-colors"
+                      style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
+                    >
+                      全解除
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {areaLabels.length === 0 && (
                   <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
