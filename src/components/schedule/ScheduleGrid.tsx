@@ -40,6 +40,14 @@ type ScheduleGridProps = {
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 const DOW_SHORT = ['日', '月', '火', '水', '木', '金', '土'];
 
+/** "HH:MM:SS" / "HH:MM" / "H:MM" → "HH:MM" に整形（秒を切り捨て、ゼロ埋め） */
+function formatHM(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const m = /^(\d{1,2}):(\d{2})/.exec(raw);
+  if (!m) return raw;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
 export default function ScheduleGrid({
   year,
   month,
@@ -177,26 +185,26 @@ export default function ScheduleGrid({
                         {cell.note}
                       </span>
                     ) : hasData ? (
-                      <div className="flex flex-col gap-0 leading-tight">
+                      <div className="flex flex-col gap-0 leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {cell.pickup_time && (
                           cell.pickup_method === 'self' ? (
                             <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
-                              {cell.pickup_time}
+                              自 {formatHM(cell.pickup_time)}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--accent)', fontSize: '0.72rem' }}>
-                              迎 {cell.pickup_time}
+                              迎 {formatHM(cell.pickup_time)}
                             </span>
                           )
                         )}
                         {cell.dropoff_time && (
                           cell.dropoff_method === 'self' ? (
                             <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
-                              {cell.dropoff_time}
+                              自 {formatHM(cell.dropoff_time)}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--green)', fontSize: '0.72rem' }}>
-                              送 {cell.dropoff_time}
+                              送 {formatHM(cell.dropoff_time)}
                             </span>
                           )
                         )}

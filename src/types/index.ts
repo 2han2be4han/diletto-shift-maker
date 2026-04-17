@@ -51,6 +51,8 @@ export type StaffRow = {
   transport_areas: string[];
   qualifications: string[];
   is_qualified: boolean;
+  /** Phase 24: 一覧・シフト表の表示順。NULL は name フォールバック */
+  display_order: number | null;
   created_at: string;
 };
 
@@ -116,6 +118,9 @@ export type ChildTransportPatternRow = {
 };
 
 // ----- 利用予定 -----
+export type ScheduleEntryPickupMethod = 'pickup' | 'self';
+export type ScheduleEntryDropoffMethod = 'dropoff' | 'self';
+
 export type ScheduleEntryRow = {
   id: string;
   tenant_id: string;
@@ -123,6 +128,10 @@ export type ScheduleEntryRow = {
   date: string;
   pickup_time: string | null;
   dropoff_time: string | null;
+  /** Phase 24: 'pickup'=お迎え, 'self'=自分で来る */
+  pickup_method: ScheduleEntryPickupMethod;
+  /** Phase 24: 'dropoff'=送り, 'self'=自分で帰る */
+  dropoff_method: ScheduleEntryDropoffMethod;
   pattern_id: string | null;
   is_confirmed: boolean;
   created_at: string;
@@ -176,6 +185,9 @@ export type ParsedScheduleEntry = {
   pickup_time: string | null;
   dropoff_time: string | null;
   area_label: string | null;
+  /** Phase 24: Excel貼付で「迎/送」ラベル無しは self 扱い（任意、未設定は pickup/dropoff 扱い） */
+  pickup_method?: ScheduleEntryPickupMethod;
+  dropoff_method?: ScheduleEntryDropoffMethod;
 };
 
 // ----- コメント（4機能にポリモーフィック） -----

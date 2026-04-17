@@ -390,6 +390,21 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 24: 職員 display_order + 並び替え UI（2026-04-17）</div>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>24-1</td><td>Migration 0019: staff.display_order integer + index</td><td>supabase/migrations/0019_staff_display_order.sql</td><td class="status-done">完了</td><td>100%</td><td>nullable、NULLS LAST + name で安定ソート</td></tr>
+            <tr><td>24-2</td><td>StaffRow に display_order 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>24-3</td><td>/api/staff GET を display_order→name でソート</td><td>src/app/api/staff/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>24-4</td><td>/api/staff/reorder POST 新設（admin のみ）</td><td>src/app/api/staff/reorder/route.ts</td><td class="status-done">完了</td><td>100%</td><td>orders[] を一括 update</td></tr>
+            <tr><td>24-5</td><td>職員一覧にドラッグハンドル列追加 + HTML5 DnD リオーダー</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>children と同じ 6 点グリップ UI</td></tr>
+            <tr><td>24-6</td><td>tsc 通過</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>本番 Supabase に migration 0019 適用要</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

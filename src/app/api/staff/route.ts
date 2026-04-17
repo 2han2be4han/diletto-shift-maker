@@ -14,10 +14,12 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   const supabase = await createClient();
+  /* Phase 24: display_order NULLS LAST → name で安定ソート */
   const { data, error } = await supabase
     .from('staff')
     .select('*')
-    .order('created_at', { ascending: true });
+    .order('display_order', { ascending: true, nullsFirst: false })
+    .order('name', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ staff: data });

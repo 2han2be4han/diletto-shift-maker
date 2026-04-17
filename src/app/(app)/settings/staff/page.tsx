@@ -39,6 +39,7 @@ const emptyStaff = (): EditableStaff => ({
   transport_areas: [],
   qualifications: [],
   is_qualified: false,
+  display_order: null,
   isNew: true,
 });
 
@@ -52,6 +53,33 @@ export default function StaffSettingsPage() {
   const [qualificationTypes, setQualificationTypes] = useState<QualificationType[]>([]);
   const [editing, setEditing] = useState<EditableStaff | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  /* Phase 24: ドラッグ並び替え状態 */
+  const [draggingStaffIdx, setDraggingStaffIdx] = useState<number | null>(null);
+  const [dragOverStaffIdx, setDragOverStaffIdx] = useState<number | null>(null);
+
+  /** 職員の並び替え: ドラッグ完了時に display_order を 0,1,2... で再採番 → API */
+  const handleReorderStaff = async (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= staffList.length || to >= staffList.length) return;
+    const next = [...staffList];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setStaffList(next);
+    try {
+      const orders = next.map((s, idx) => ({ id: s.id, display_order: idx }));
+      const res = await fetch('/api/staff/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? '並び替え保存失敗');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '並び替えに失敗しました');
+      await fetchAll();
+    }
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -108,6 +136,7 @@ export default function StaffSettingsPage() {
       transport_areas: s.transport_areas,
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
+      display_order: s.display_order,
     });
   };
 
@@ -262,6 +291,13 @@ export default function StaffSettingsPage() {
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem', tableLayout: 'auto' }}>
             <thead>
               <tr>
+                <th
+                  className="px-2 py-2 text-center font-semibold"
+                  style={{ background: 'var(--ink)', color: '#fff', width: '36px' }}
+                  title="ドラッグで並び替え"
+                >
+                  ↕
+                </th>
                 {[
                   { label: '氏名', minWidth: '140px' },
                   { label: 'メール', minWidth: '180px' },
@@ -284,13 +320,72 @@ export default function StaffSettingsPage() {
             <tbody>
               {staffList.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  <td colSpan={8} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                     職員が登録されていません
                   </td>
                 </tr>
               )}
-              {staffList.map((s) => (
-                <tr key={s.id} className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer" onClick={() => handleEdit(s)}>
+              {staffList.map((s, idx) => {
+                const isDragging = draggingStaffIdx === idx;
+                const isDropTarget = dragOverStaffIdx === idx && draggingStaffIdx !== null && draggingStaffIdx !== idx;
+                return (
+                <tr
+                  key={s.id}
+                  onDragOver={(e) => {
+                    if (draggingStaffIdx === null || draggingStaffIdx === idx) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setDragOverStaffIdx(idx);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverStaffIdx === idx) setDragOverStaffIdx(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingStaffIdx !== null && draggingStaffIdx !== idx) {
+                      handleReorderStaff(draggingStaffIdx, idx);
+                    }
+                    setDraggingStaffIdx(null);
+                    setDragOverStaffIdx(null);
+                  }}
+                  className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer"
+                  style={{
+                    opacity: isDragging ? 0.4 : 1,
+                    background: isDropTarget ? 'var(--accent-pale)' : undefined,
+                  }}
+                  onClick={() => handleEdit(s)}
+                >
+                  <td
+                    className="px-1 py-2 text-center"
+                    style={{ borderBottom: '1px solid var(--rule)' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingStaffIdx(idx);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', String(idx));
+                      }}
+                      onDragEnd={() => {
+                        setDraggingStaffIdx(null);
+                        setDragOverStaffIdx(null);
+                      }}
+                      className="inline-flex items-center justify-center w-6 h-7 rounded transition-colors hover:bg-[var(--bg)]"
+                      style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                      aria-label="ドラッグして並び替え"
+                      title="ドラッグして並び替え"
+                    >
+                      <svg width="14" height="18" viewBox="0 0 14 18" fill="var(--ink-3)" aria-hidden>
+                        <circle cx="4" cy="4" r="1.3" />
+                        <circle cx="10" cy="4" r="1.3" />
+                        <circle cx="4" cy="9" r="1.3" />
+                        <circle cx="10" cy="9" r="1.3" />
+                        <circle cx="4" cy="14" r="1.3" />
+                        <circle cx="10" cy="14" r="1.3" />
+                      </svg>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
                     {!s.user_id && (
@@ -361,7 +456,8 @@ export default function StaffSettingsPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

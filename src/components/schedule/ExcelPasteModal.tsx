@@ -493,7 +493,7 @@ function parseExcelClipboard(
       const cellValue = row[dc.colIndex] || '';
       if (!cellValue.trim()) continue;
 
-      const { pickup, dropoff, note } = parseCellValue(cellValue);
+      const { pickup, dropoff, pickup_method, dropoff_method, note } = parseCellValue(cellValue);
 
       if (pickup || dropoff || note) {
         entries.push({
@@ -501,6 +501,8 @@ function parseExcelClipboard(
           date: dc.dateStr,
           pickup_time: pickup,
           dropoff_time: dropoff,
+          pickup_method,
+          dropoff_method,
           area_label: note,
         });
       }
@@ -586,13 +588,16 @@ function parseTsvWithQuotes(raw: string): string[][] {
 function parseCellValue(cell: string): {
   pickup: string | null;
   dropoff: string | null;
+  pickup_method: 'pickup' | 'self';
+  dropoff_method: 'dropoff' | 'self';
   note: string | null;
 } {
   const text = cell.trim();
+  const defaultMethods = { pickup_method: 'pickup' as const, dropoff_method: 'dropoff' as const };
 
   /* 特殊ステータス */
   if (/[定追][\s・‧][休]/.test(text) || text === '定休' || text === '追休') {
-    return { pickup: null, dropoff: null, note: text.replace(/\s+/g, '') };
+    return { pickup: null, dropoff: null, ...defaultMethods, note: text.replace(/\s+/g, '') };
   }
 
   const times: { time: string; type: 'pickup' | 'dropoff' | 'unknown' }[] = [];
@@ -615,36 +620,50 @@ function parseCellValue(cell: string): {
     }
   }
 
-  if (times.length === 0) return { pickup: null, dropoff: null, note: null };
+  if (times.length === 0) {
+    return { pickup: null, dropoff: null, ...defaultMethods, note: null };
+  }
 
   let pickup: string | null = null;
   let dropoff: string | null = null;
+  /* Phase 24: ラベルの有無で 迎/送 か self かを判断 */
+  let pickup_method: 'pickup' | 'self' = 'pickup';
+  let dropoff_method: 'dropoff' | 'self' = 'dropoff';
 
   /* 明示的なタイプがある場合 */
   const pickupEntry = times.find((t) => t.type === 'pickup');
   const dropoffEntry = times.find((t) => t.type === 'dropoff');
 
-  if (pickupEntry) pickup = pickupEntry.time;
-  if (dropoffEntry) dropoff = dropoffEntry.time;
+  if (pickupEntry) {
+    pickup = pickupEntry.time;
+    pickup_method = 'pickup';
+  }
+  if (dropoffEntry) {
+    dropoff = dropoffEntry.time;
+    dropoff_method = 'dropoff';
+  }
 
   /* 不明なタイプが残っている場合、位置で推定 */
   if (!pickup && !dropoff && times.length >= 2) {
-    /* 先の時間が迎え、後の時間が送り */
+    /* 先の時間が来所、後の時間が帰宅。ラベル無しなので self 扱い */
     pickup = times[0].time;
     dropoff = times[1].time;
+    pickup_method = 'self';
+    dropoff_method = 'self';
   } else if (!pickup && !dropoff && times.length === 1) {
-    /* 1つだけの場合、時間帯で推定（13時以前=迎え、それ以降は迎え） */
+    /* 1つだけの場合、来所時刻として self 扱い */
     pickup = times[0].time;
+    pickup_method = 'self';
   }
 
-  /* unknown を埋める */
+  /* unknown を埋める: ラベル無しのものは self */
   const unknowns = times.filter((t) => t.type === 'unknown');
   for (const u of unknowns) {
-    if (!pickup && u.time !== dropoff) { pickup = u.time; continue; }
-    if (!dropoff && u.time !== pickup) { dropoff = u.time; }
+    if (!pickup && u.time !== dropoff) { pickup = u.time; pickup_method = 'self'; continue; }
+    if (!dropoff && u.time !== pickup) { dropoff = u.time; dropoff_method = 'self'; }
   }
 
-  return { pickup, dropoff, note: null };
+  return { pickup, dropoff, pickup_method, dropoff_method, note: null };
 }
 
 /** ヘッダーから日付を抽出: "1(水)", "営 1(水)", "休 5(日)", "4/1" */
@@ -698,6 +717,8 @@ function parseVerticalFormat(
         date: dateStr,
         pickup_time: pickupTime,
         dropoff_time: dropoffTime,
+        pickup_method: 'pickup',
+        dropoff_method: 'dropoff',
         area_label: row[4]?.trim() || null,
       });
     }
@@ -847,12 +868,16 @@ function UnknownChildrenRegisterDialog({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: 'rgba(0,0,0,0.55)' }}
       onClick={onClose}
     >
       <div
         className="w-full max-w-2xl max-h-[85vh] overflow-auto rounded-lg p-5"
-        style={{ background: 'var(--surface)' }}
+        style={{
+          background: '#ffffff',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+          border: '1px solid var(--rule)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">

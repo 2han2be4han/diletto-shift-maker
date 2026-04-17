@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
     date: String(e.date ?? ''),
     pickup_time: (e.pickup_time as string) ?? null,
     dropoff_time: (e.dropoff_time as string) ?? null,
+    pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
+    dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
     pattern_id: (e.pattern_id as string) ?? null,
     is_confirmed: Boolean(e.is_confirmed ?? false),
   }));

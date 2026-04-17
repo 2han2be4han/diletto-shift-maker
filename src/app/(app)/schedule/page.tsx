@@ -114,8 +114,9 @@ export default function SchedulePage() {
           date: e.date,
           pickup_time: e.pickup_time,
           dropoff_time: e.dropoff_time,
-          pickup_method: e.pickup_time ? 'pickup' : 'self',
-          dropoff_method: e.dropoff_time ? 'dropoff' : 'self',
+          /* Phase 24: DB に保存された method を尊重。旧データ(デフォルト) は pickup/dropoff になる */
+          pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
+          dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
           note: null,
         }))
       );
@@ -164,12 +165,13 @@ export default function SchedulePage() {
 
   const handleSave = async () => {
     if (!selectedCell) return;
+    /* Phase 24: method に関わらず出席なら時刻を保存（self のときも時刻は記録する） */
     const pickup =
-      attendance === 'attend' && pickupMethod === 'pickup'
+      attendance === 'attend'
         ? `${pickupHour.padStart(2, '0')}:${pickupMin.padStart(2, '0')}`
         : null;
     const dropoff =
-      attendance === 'attend' && dropoffMethod === 'dropoff'
+      attendance === 'attend'
         ? `${dropoffHour.padStart(2, '0')}:${dropoffMin.padStart(2, '0')}`
         : null;
 
@@ -183,6 +185,8 @@ export default function SchedulePage() {
             date: selectedCell.date,
             pickup_time: pickup,
             dropoff_time: dropoff,
+            pickup_method: pickupMethod,
+            dropoff_method: dropoffMethod,
           }],
         }),
       });
@@ -204,6 +208,8 @@ export default function SchedulePage() {
         date: e.date,
         pickup_time: e.pickup_time,
         dropoff_time: e.dropoff_time,
+        pickup_method: e.pickup_method ?? 'pickup',
+        dropoff_method: e.dropoff_method ?? 'dropoff',
       }));
     if (rows.length === 0) {
       alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
