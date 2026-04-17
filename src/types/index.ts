@@ -67,6 +67,9 @@ export type ChildRow = {
 };
 
 // ----- 児童の送迎パターン -----
+export type PickupMethod = 'pickup' | 'self' | 'parent';
+export type DropoffMethod = 'dropoff' | 'self' | 'parent';
+
 export type ChildTransportPatternRow = {
   id: string;
   child_id: string;
@@ -74,8 +77,10 @@ export type ChildTransportPatternRow = {
   pattern_name: string;
   pickup_location: string | null;
   pickup_time: string | null;
+  pickup_method: PickupMethod;
   dropoff_location: string | null;
   dropoff_time: string | null;
+  dropoff_method: DropoffMethod;
   area_label: string | null;
   created_at: string;
 };

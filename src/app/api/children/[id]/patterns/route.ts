@@ -49,8 +49,10 @@ export async function POST(
       pattern_name: body.pattern_name,
       pickup_location: body.pickup_location ?? null,
       pickup_time: body.pickup_time ?? null,
+      pickup_method: body.pickup_method ?? 'pickup',
       dropoff_location: body.dropoff_location ?? null,
       dropoff_time: body.dropoff_time ?? null,
+      dropoff_method: body.dropoff_method ?? 'dropoff',
       area_label: body.area_label ?? null,
     })
     .select()
@@ -85,8 +87,10 @@ export async function PUT(
     pattern_name: String(p.pattern_name ?? ''),
     pickup_location: (p.pickup_location as string) ?? null,
     pickup_time: (p.pickup_time as string) ?? null,
+    pickup_method: (p.pickup_method as string) ?? 'pickup',
     dropoff_location: (p.dropoff_location as string) ?? null,
     dropoff_time: (p.dropoff_time as string) ?? null,
+    dropoff_method: (p.dropoff_method as string) ?? 'dropoff',
     area_label: (p.area_label as string) ?? null,
   }));
 
