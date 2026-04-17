@@ -1,209 +1,246 @@
-# 次セッション仕様書（2026-04-16作成）
+# 次セッション用 仕様書 / 実装計画
 
-## 前提：現在の状態
-
-### 完了済み
-- Phase C（基盤）: デザイントークン、サイドバーレイアウト、Supabase クライアント、認証ミドルウェア（開発中はスキップ）、ログインページ（dilettoブランド）
-- Phase D（MVP UI）: 利用予定グリッド、PDFインポート、Excelコピペ、休み希望（管理者一覧+職員提出）、シフト生成+グリッド、送迎割り当て+日別ビュー
-- 設定: テナント設定（エリア・資格・締切）、職員管理（資格複数選択）、児童管理（送迎パターン最大5件）、契約管理
-- DB: Supabase に8テーブル作成済み（tenants, staff, children, child_transport_patterns, schedule_entries, shift_requests, shift_assignments, transport_assignments）+ RLS
-
-### 未完了・課題
-- 全ページがモックデータで動作中（Supabase未接続）
-- 認証はDEV_SKIP_AUTHで開発中スキップ中
-- Vercel未接続
+**対象コミット起点**: [`53586b8`](https://github.com/2han2be4han/diletto-shift-maker/commit/53586b8) (Phase 25 A/B/C 完了時点)
+**作成日**: 2026-04-17
 
 ---
 
-## 1. 送迎パターンの大規模リファクタ
+## 0. 前提作業（セッション冒頭で実施）
 
-### 背景
-現在の児童設定は「児童ごとに個別パターン」だが、実際の運用では：
-- **迎え**は学校/保育園単位で共通（同じ学校の子は同じ時間に迎えに行く）
-- **送り**も方面グルーピングがある（同じ方面の子をまとめて送る）
-- マーク（🍇🌳🏭等）でグルーピングを視覚化
-- 1回の送迎で複数マークが並ぶ = 複数方面の子を組み合わせ
-
-### 設計
-
-#### テナント設定に追加する項目
-
+### 0-1. Supabase へ未適用マイグレーションを適用
 ```
-迎え共通パターン（テナント全体で共有）:
-  id | パターン名     | 時間  | マーク
-  1  | 学校（通常）    | 14:20 | 🍇
-  2  | 学校（短縮）    | 11:30 | 🍇
-  3  | 保育園          | 13:25 | 🌳
-  4  | 自宅（午前）    | 10:30 | 🏭
-  ...
-
-送り共通パターン（テナント全体で共有）:
-  id | パターン名     | 時間  | マーク
-  1  | 自宅送り（通常）| 16:00 | -（児童固有マークを使用）
-  2  | 自宅送り（遅）  | 17:00 | -
-  3  | 大府方面        | 16:40 | 🏭
-  ...
+supabase/migrations/0022_shift_requests_submitted_by.sql
 ```
+内容: `shift_requests` に `submitted_by_staff_id uuid references staff(id) on delete set null` を追加 + index。
+未適用のままだと /request 管理者ビューの代理入力保存で NOT NULL 違反にはならないが、**代理バッジ**が常に非表示になる。
 
-#### 児童設定の変更
-
-```
-児童ごとの設定:
-  - 氏名、学年
-  - 迎えパターン: 共通パターンから複数選択（その児童に適用されるもの）
-  - 送りマーク: 児童固有のエリアマーク（🍇など）
-  - 送りパターン: 共通パターンから選択 or 個別設定
-```
-
-#### 送迎割り当て表の表示
-
-```
-迎え列の表示:
-  🍇🌳 = 藤江方面の子 + 豊明方面の子をまとめて迎え
-  マークは迎え時間が早い順に左から並べる
-
-送り列の表示:
-  🍇 = この子の固有マーク（帰り先エリア）
-  複数方面まとめ送りの場合: 🍇🏭
-```
-
-### 表示順ルール
-- パターン名 → 時間 → マーク の順で表示
-- 例: `学校（通常） 14:20 🍇`
-
-### DBの変更（必要に応じて）
-- `tenant_pickup_patterns` テーブル新設（共通迎えパターン）
-- `tenant_dropoff_patterns` テーブル新設（共通送りパターン）
-- `child_transport_patterns` テーブルを拡張（共通パターンへの参照 + 児童固有マーク）
-
-### UI変更箇所
-- `/settings/tenant` — 共通パターン管理セクション追加
-- `/settings/children` — パターン選択を共通パターンからの選択に変更
-- `/transport` — マーク表示をグルーピング対応に
-- `/schedule` — グリッドセルにマーク表示
+### 0-2. 進捗表の作成（CLAUDE.md §3 必須）
+着手前に `docs/progress.html` にフェーズ 26 の行を追加し、下記 5 タスクのステータスを表に含める。各ステップ完了後に更新する。
 
 ---
 
-## 2. イレギュラー送迎ログ
+## 1. タスク一覧（優先度順）
 
-### 背景
-通常の送迎パターンに当てはまらない「この日だけの特殊対応」がある。
-例: 「今日だけ保護者が直接送迎」「病院寄りで時間変更」等。
-
-### 設計
-- `transport_logs` テーブル新設
-  ```
-  transport_logs:
-    id, tenant_id, schedule_entry_id, date,
-    log_type: 'irregular' | 'note' | 'cancel',
-    description: text,
-    original_pickup_time, actual_pickup_time,
-    original_dropoff_time, actual_dropoff_time,
-    created_by (staff_id), created_at
-  ```
-- 送迎表のセルに「メモ」アイコン追加 → クリックでログ入力
-- 管理者画面でイレギュラーログの一覧・検索
+| # | タスク | 優先度 | 依存 |
+|---|---|---|---|
+| 1 | /shift ヘッダー整備 | 高 | なし |
+| 2 | 職員の出勤数カウント表示 | 中 | なし |
+| 3 | 休み希望ページの並び替え反映確認 | 低 | なし |
+| 4 | /transport 改修（4 サブ項目） | 高 | なし |
+| 5 | 招待リンクからの職員ログインフロー | 高（独立） | 別ブランチ推奨 |
 
 ---
 
-## 3. 学年自動進級
+## 2. タスク詳細
 
-### 背景
-毎年4月1日に全児童の学年が自動で+1される。
+### 2-1. /shift ヘッダー整備
 
-### 設計
-- Supabase Edge Function or cron で毎年 4/1 00:00 JST に実行
-- `children.grade_type` を1つ進める
-  - preschool → elementary_1
-  - elementary_1 → elementary_2
-  - ... → elementary_6 → junior_high
-  - junior_high → 自動で `is_active: false`（卒業扱い）
-- 進級ログを記録（誰が何年生から何年生になったか）
-- 手動で「今すぐ進級実行」ボタンも設置（テナント設定画面）
+#### 目的
+`/shift` を `/schedule` 並みの視認性に整える。具体的には以下をヘッダー領域に集約：
+- 対象年月（既に `MonthSelector` が配置済み）
+- 「シフト確定」ボタン
+- 「再生成」ボタン
+- 確定後も編集可能なモード切替
 
----
+#### 対象ファイル
+- `src/app/(app)/shift/page.tsx`
 
-## 4. Supabase Auth 接続
+#### 現状
+ヘッダー下のコンテンツ領域に h2 年月 + ボタン群が置かれている。`Header` の `actions` は未使用（MonthSelector のみ）。
 
-### 背景
-現在は DEV_SKIP_AUTH で全ページアクセス可能。本番運用にはAuth接続が必要。
+#### 実装指針
+1. `Header actions` に「シフト確定」「再生成」を移設
+   - 生成前: 「シフト生成」(app-card-cta)
+   - 生成済/未確定: 「再生成」(secondary) + 「シフト確定」(primary)
+   - 確定済: 「編集モード」トグル or 「再編集」ボタン + 「再生成」(secondary)
+2. 確定済のセル編集を有効化
+   - 現状: `handleSave` は `is_confirmed: confirmed` で保存しているため、確定状態のまま編集は技術的に可能
+   - 必要: 編集モード有効時にセルクリックハンドラを走らせる（今は `disabled={confirmed}` で生成を止めているだけ）
+3. 「確定解除」API（`/api/shift-assignments/unconfirm`）を新設するか、既存 `/confirm` エンドポイントを `confirmed: boolean` 引数化
+4. h2「{year}年{month}月」+ バッジはコンテンツ先頭から削除し、ヘッダータイトルに統合可
 
-### 実装項目
-1. ログインページ（`/login`）で `supabase.auth.signInWithPassword` を接続
-2. ミドルウェアの DEV_SKIP_AUTH を削除
-3. セッションからtenant_id を取得して全APIルートで使用
-4. Supabase Auth の user_metadata に tenant_id と staff_id を格納
-5. ユーザー招待フロー（管理者が職員をメールで招待）
+#### 受入条件
+- `/schedule` と同じ余白・ボタン配置
+- 確定後も「編集モード」に入ると個別セル編集 → 保存できる
+- バッジ（確定済み/未確定/警告件数）がヘッダーの下にインラインで見やすく並ぶ
 
-### 注意
-- `lib/supabase/server.ts` は変更時にユーザーに報告（CLAUDE.md §6）
-- RLSポリシーが正しく動作するかテスト必須
-
----
-
-## 5. Supabase データ連携
-
-### 背景
-現在は全ページがモックデータ。DBのテーブルは作成済みだが未接続。
-
-### 実装順序（依存関係順）
-1. テナント設定 → `tenants` テーブル読み書き
-2. 職員管理 → `staff` テーブル読み書き
-3. 児童管理 → `children` + `child_transport_patterns` 読み書き
-4. 利用予定 → `schedule_entries` 読み書き
-5. 休み希望 → `shift_requests` 読み書き
-6. シフト生成 → `shift_assignments` 読み書き
-7. 送迎割り当て → `transport_assignments` 読み書き
-
-### 各ページの変更
-- モックデータ（`const MOCK_*`）→ `useEffect` で Supabase から fetch
-- 保存ボタン → Supabase に upsert
-- 生成ボタン → APIルートを呼び出し → DBに保存 → 画面をリフレッシュ
+#### 注意点
+- 確定済みシフトの自動上書きは禁止（CLAUDE.md §6 破壊的変更）。「再生成」を押すと必ず確認ダイアログを表示
+- `tenant_id` を忘れず UPSERT
 
 ---
 
-## 6. その他の改善（優先度低）
+### 2-2. 職員の出勤数カウント表示
 
-### テナント設定の送迎エリアマーク
-- 現在ハードコードの `MOCK_AREAS` → テナント設定から取得
-- テナント設定で追加/削除 → 児童設定・職員設定に自動反映
+#### 目的
+シフトグリッドで各職員の「出勤◯日」を名前横に可視化。
 
-### ダッシュボード
-- 今月のサマリー（利用児童数、シフト状況、送迎割り当て状況）
-- 直近の送迎表プレビュー
-- 警告（人員不足日、未割当、休み希望未提出者）
+#### 対象ファイル
+- `src/components/shift/ShiftGrid.tsx`
 
-### Excelコピペのグリッドプレビュー進化
-- テキストエリア → グリッド表示（実装済み）のさらなるUX改善
-- セル直接編集の操作性向上
+#### 実装指針
+1. `cells` から `staff_id` ごとに `assignment_type === 'normal'` の件数を集計
+2. 職員名セル内に `<span>出勤{count}日</span>`（小さめ・`var(--ink-3)`）
+3. 可能なら「出勤{count}日 / 希望休{ph}日 / 有給{pl}日」も副次的に
 
-### Stripe連携
-- Stripe Checkout → テナント有効化
-- Webhook → subscription status 更新
-- billing ページで Stripe Customer Portal リンク
+#### 受入条件
+- 職員行を見ると月内の出勤日数が一目でわかる
+- セル編集後、カウントが即時再計算される
 
 ---
 
-## 実装優先順位（推奨）
+### 2-3. 休み希望ページの並び替え反映確認
 
+#### 目的
+`display_order` が /request でも反映されることを確認。
+
+#### 対象ファイル
+- `src/app/(app)/request/page.tsx`
+- `src/components/request/AdminRequestList.tsx`
+
+#### 現状
+サーバー側 select に `.order('display_order', { ascending: true, nullsFirst: false }).order('name')` 済。
+
+#### 実装指針
+- 実ブラウザで登録順と display_order 順が一致するか確認
+- 不一致なら `AdminRequestList` 内部で `staff` を受け取った順に依存していないか再確認（`byStaff` マップ利用のため `staff` 配列順がそのまま出力順になっているはず）
+
+#### 受入条件
+- `/settings/staff` でドラッグ並び替え → `/request` のリスト順も追従
+
+---
+
+### 2-4. /transport 改修
+
+#### 対象ファイル
+- `src/app/(app)/transport/page.tsx`
+- `src/components/transport/TransportDayView.tsx`
+- `src/lib/logic/generateTransport.ts`
+
+#### 2-4-a. 担当候補のフィルタ
+**要件**: その日出勤している職員 **かつ 退勤時間 ≥ 16:31** のみを割当候補に含める。
+
+**実装指針**:
+- `TransportDayView` の `availableStaff` 決定ロジックを修正
+- 親コンポから `shiftAssignments`（その日分）を渡し、`assignment_type === 'normal'` かつ `end_time >= '16:31'` で絞る
+- 16:31 閾値はテナント設定 `settings.transport_min_end_time` で可変にする余地を残す（デフォルト `'16:31'`）
+
+#### 2-4-b. 保存粒度の変更：件ごと → 日ごと
+**要件**: 現状は `handleStaffChange` で 1 件ずつ POST → 1 日分まとめてボタンで保存に変更。
+
+**実装指針**:
+1. `transportAssignments` のローカル編集用 state を別途用意（`pendingChanges: Map<scheduleEntryId, TransportAssignmentRow>`）
+2. `TransportDayView` 側のセル変更は pending state のみ更新
+3. 画面下部に「この日の送迎を保存」ボタン配置 → pending を `assignments` 配列化して /api/transport-assignments に一括 POST
+4. 離脱時（日付タブ切替・月切替）に未保存があれば `confirm()` で警告
+
+#### 2-4-c. 保護者送迎の専用表記
+**要件**: `schedule_entries.pickup_method === 'self'` または `dropoff_method === 'self'` の時は割当不要かつエラー (`isUnassigned`) 扱いにしない。専用マーク表示。
+
+**実装指針**:
+- `currentDayEntries` 構築時に `pickupMethod`/`dropoffMethod` を UI エントリに追加
+- `isUnassigned` の計算ロジックを「method が pickup/dropoff かつ staff_ids が空」に限定
+- `TransportDayView` のセル: 保護者送迎なら `👪 保護者送迎` のような淡色バッジ + 担当ドロップダウン非表示
+- `/api/transport/generate` 側でも method=self の entry は assignment レコード自体を生成しない（あるいは `is_unassigned: false` で空配列を記録）
+
+#### 2-4-d. 場所 + マーク表示
+**要件**: 送迎先の場所文字列 + エリア絵文字マークを各セル内に明示表示。
+
+**実装指針**:
+- UI エントリに既存の `pickupLocation` / `dropoffLocation` / `pickupAreaLabel` / `dropoffAreaLabel` を使用
+- セル内に `{areaLabel} {location}` の 2 行表示（areaLabel は絵文字込み、例: `🏠 田無`）
+- Google Maps リンク化を継続（既に実装あり）
+
+#### 受入条件（2-4 全体）
+- 候補に 16:30 以前退勤者や休み者が出ない
+- 1 日分の編集が 1 クリックで保存できる
+- 保護者送迎の行に赤エラーが出ない
+- 送迎先場所とエリア絵文字が一目で分かる
+
+---
+
+### 2-5. 招待リンクからの職員ログインフロー
+
+#### 問題
+現状のリンク例:
 ```
-1. 送迎パターンリファクタ（最重要・設計変更が大きい）
-2. Supabase Auth接続（本番運用に必須）
-3. Supabase データ連携（モック→実データ）
-4. イレギュラー送迎ログ
-5. 学年自動進級
-6. その他改善
+/login?error=auth_callback_failed#access_token=eyJ...&refresh_token=...&type=invite
 ```
+- `/auth/callback/route.ts` は `?code=` のみ処理（PKCE 前提）
+- Supabase invite はデフォルトで implicit flow の hash fragment を使用
+- hash は **サーバーに送られない** → `exchangeCodeForSession` は空振り → auth_callback_failed へ
+- 加えて、初回パスワード設定画面が未実装
+
+#### 対象ファイル（新規 + 変更）
+- **新規** `src/app/auth/callback/page.tsx` (Client Component) — hash 処理
+- **新規** `src/app/auth/set-password/page.tsx` — 初回パスワード設定
+- 変更 `src/app/auth/callback/route.ts` — 保持（PKCE 用）
+- 変更 `src/app/api/staff/invite/route.ts` — redirectTo を `/auth/callback?next=/auth/set-password` などに変更
+
+#### 実装指針
+1. **方針 A（推奨）: PKCE へ切替**
+   - `generateInviteLink.ts` / `inviteUserByEmail` 側の設定を確認し、PKCE を強制できるなら `?code=` 方式へ統一。callback route.ts はそのまま使える
+   - Supabase の `supabase.auth.admin.inviteUserByEmail` は implicit flow になりがちなので、代替として `admin.generateLink({ type: 'invite' })` の `email_otp` or `magic_link` + PKCE を検証
+2. **方針 B: hash 受け**（実装が確実）
+   - `/auth/callback` を page.tsx（client）に変え、`window.location.hash` を parse
+   - `access_token` + `refresh_token` を `supabase.auth.setSession()` で確立
+   - `type=invite` なら `/auth/set-password` へ、それ以外は `next` パラメータへ遷移
+   - 同パスで route.ts と page.tsx は共存不可。`/auth/confirm` など別パスで受け、route.ts は残すのが無難
+3. **パスワード設定画面**
+   - `/auth/set-password`: 2 回入力 + バリデーション（8 文字以上、CLAUDE.md §7 のエラー日本語化）
+   - `supabase.auth.updateUser({ password })` で設定 → `/dashboard` へ
+   - 既にパスワード設定済みユーザーが直接開いたら弾く（`app_metadata.provider === 'email'` かつ既存確認は困難。シンプルに「パスワード変更」としても運用可）
+
+#### 受入条件
+- 招待メールのリンクをクリック → `/auth/set-password` が開く
+- パスワード 2 回入力 → `/dashboard` に遷移
+- 以降 `/login` から通常ログイン可能
+
+#### 注意点（CLAUDE.md §11 スコープ境界）
+- 保護者向けポータル作成は禁止
+- `staff` テーブルの `user_id` 紐付けは既存の invite API が handling 済み — 2 重更新しない
+- **別ブランチで作業推奨**（動作確認コストが大きく、事故ると全員ログイン不可になり得るため）
 
 ---
 
-## 開発ルール（引き継ぎ）
-- **CLAUDE.md を必ず読んでから着手**
-- **いきなり実装禁止**: 調査 → 計画 → 承認 → 実装
-- **進捗表**: `docs/progress.html` を更新必須
-- **参照マップ**: `reference-map.md` を更新必須
-- **コミット**: 5回に1回でOK
-- **ローカル確認**: localhost:5000（`npm run dev`）で必ず確認
-- **Vercel**: まだ接続しない
-- **デザイン**: diletto design rulebook準拠（ライトテーマ）
-- **pushはOK**: `git push origin main`
+## 3. 横断的ルール（毎タスク厳守）
+
+1. CLAUDE.md §2 の開発フロー（調査→計画→承認→実装）を各タスク頭で再実行
+2. `docs/progress.html` をステップ毎更新
+3. `docs/reference-map.md` に新規カラム/定数/型参照を追記
+4. エラー発生 → 解決したら `docs/error-log.md` に記録
+5. 実装後は `npx tsc --noEmit` で型確認 → ローカル動作確認 → 同意を得てからコミット
+6. デザイントークンのみ使用（ハードコード禁止）
+7. マルチテナント: 全 API/クエリで `tenant_id` 必須
+
+---
+
+## 4. 既知の未適用事項サマリ
+
+- **Supabase 本番**: migration 0022 未適用 → 適用必要
+- **Supabase 本番**: migration 0020/0021 は適用済（前セッションで確認）
+- **ローカル Supabase**: 全マイグレーション適用済み前提で進める
+
+---
+
+## 5. 見積もり（目安）
+
+| タスク | 工数目安 |
+|---|---|
+| 2-1 /shift ヘッダー | 30-45 分 |
+| 2-2 出勤数カウント | 15-20 分 |
+| 2-3 並び替え確認 | 5-10 分 |
+| 2-4 /transport 改修 | 60-90 分（4 サブ項目合算） |
+| 2-5 招待フロー | 60-120 分（PKCE 調査込み） |
+
+---
+
+## 6. セッション終了時の checklist
+
+- [ ] 全タスクの受入条件を満たしている
+- [ ] `npx tsc --noEmit` がエラーなし
+- [ ] `docs/progress.html` がすべて「完了」
+- [ ] `docs/reference-map.md` が最新
+- [ ] `docs/error-log.md` に発生エラー記録済
+- [ ] コミット済・プッシュ済
+- [ ] Supabase 本番への migration 適用有無をユーザーに明示報告
