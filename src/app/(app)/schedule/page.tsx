@@ -292,6 +292,8 @@ export default function SchedulePage() {
         onConfirm={handleBulkImport}
         year={year}
         month={month}
+        existingChildNames={children.map((c) => c.name)}
+        onChildrenRegistered={fetchAll}
       />
 
       <PdfImportModal

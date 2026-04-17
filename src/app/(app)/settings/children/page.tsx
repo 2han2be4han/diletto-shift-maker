@@ -44,6 +44,8 @@ type EditableChild = {
   is_active: boolean;
   parent_contact: string | null;
   home_address: string | null;
+  /** Phase 21: 利用可能なお迎えマーク（複数選択）*/
+  pickup_area_labels: string[];
   patterns: PatternItem[];
   isNew?: boolean;
 };
@@ -65,6 +67,24 @@ const TIME_STEP_SECONDS = 600; /* 10分ステップ */
 /* 迎/送 行内のレイアウト揃えるための固定幅 */
 const LABEL_WIDTH = '3.5rem';
 const METHOD_SELECT_WIDTH = '6rem';
+
+/**
+ * Phase 23: 学年カテゴリ別の行背景（うっすら）
+ *   - 児童発達支援: 未就学 → 淡い青 / 年少・年中・年長 → 淡い赤
+ *   - 放課後等デイサービス (小1 以降) → 淡い緑
+ */
+function getGradeRowBg(grade: GradeType): string {
+  switch (grade) {
+    case 'preschool':
+      return 'rgba(26,62,184,0.05)'; /* 未就学: 青 */
+    case 'nursery_3':
+    case 'nursery_4':
+    case 'nursery_5':
+      return 'rgba(155,51,51,0.05)'; /* 年少・年中・年長: 赤 */
+    default:
+      return 'rgba(42,122,82,0.05)'; /* 小1 以降: 緑 */
+  }
+}
 
 const emptyPattern = (grade?: GradeType): PatternItem => ({
   pattern_name: '',
@@ -133,6 +153,7 @@ export default function ChildrenSettingsPage() {
       is_active: true,
       parent_contact: null,
       home_address: null,
+      pickup_area_labels: [],
       patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
@@ -175,6 +196,7 @@ export default function ChildrenSettingsPage() {
       is_active: child.is_active,
       parent_contact: child.parent_contact,
       home_address: child.home_address,
+      pickup_area_labels: child.pickup_area_labels ?? [],
       patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
   };
@@ -195,6 +217,7 @@ export default function ChildrenSettingsPage() {
             is_active: editing.is_active,
             parent_contact: editing.parent_contact,
             home_address: editing.home_address,
+            pickup_area_labels: editing.pickup_area_labels,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
@@ -210,6 +233,7 @@ export default function ChildrenSettingsPage() {
             is_active: editing.is_active,
             parent_contact: editing.parent_contact,
             home_address: editing.home_address,
+            pickup_area_labels: editing.pickup_area_labels,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
@@ -437,7 +461,7 @@ export default function ChildrenSettingsPage() {
                     className="hover:bg-[var(--accent-pale)] cursor-pointer transition-colors"
                     style={{
                       opacity: isDragging ? 0.4 : 1,
-                      background: isDropTarget ? 'var(--accent-pale)' : undefined,
+                      background: isDropTarget ? 'var(--accent-pale)' : getGradeRowBg(c.grade_type),
                     }}
                     onClick={() => handleEdit(c)}
                   >
@@ -585,6 +609,65 @@ export default function ChildrenSettingsPage() {
                 <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
                   送迎パターンの送り先が未入力の場合、ここが自動で使われます（送迎表 → 地図で開く）
                 </p>
+              </div>
+
+              {/* Phase 21: お迎えマーク（複数選択）*/}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                    お迎えマーク（複数選択）
+                  </label>
+                  <a
+                    href="/settings/tenant"
+                    target="_blank"
+                    rel="noopener"
+                    className="text-xs"
+                    style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                  >
+                    テナント設定で追加 →
+                  </a>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                  選択したマークに設定された時間が送迎表で自動反映されます（個別パターンで上書きも可）
+                </p>
+                {pickupAreas.length === 0 ? (
+                  <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
+                    テナント設定で 迎のエリア を登録してください。
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {pickupAreas.map((a) => {
+                      const label = formatAreaLabel(a);
+                      const checked = editing.pickup_area_labels.includes(label);
+                      return (
+                        <button
+                          type="button"
+                          key={label}
+                          onClick={() => {
+                            const next = checked
+                              ? editing.pickup_area_labels.filter((l) => l !== label)
+                              : [...editing.pickup_area_labels, label];
+                            setEditing({ ...editing, pickup_area_labels: next });
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+                          style={{
+                            background: checked ? 'var(--accent)' : 'var(--bg)',
+                            color: checked ? '#fff' : 'var(--ink-2)',
+                            border: `1px solid ${checked ? 'var(--accent)' : 'var(--rule)'}`,
+                          }}
+                          title={a.time ? `${label}：${a.time}〜` : label}
+                        >
+                          {label}
+                          {a.time && (
+                            <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
+                              {a.time}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </section>
 

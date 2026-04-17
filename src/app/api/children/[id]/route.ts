@@ -13,7 +13,7 @@ export async function PATCH(
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: '不正なリクエストです' }, { status: 400 });
 
-  const allowed = ['name', 'grade_type', 'is_active', 'parent_contact', 'home_address'] as const;
+  const allowed = ['name', 'grade_type', 'is_active', 'parent_contact', 'home_address', 'pickup_area_labels'] as const;
   const payload: Record<string, unknown> = {};
   for (const k of allowed) if (k in body) payload[k] = body[k];
 

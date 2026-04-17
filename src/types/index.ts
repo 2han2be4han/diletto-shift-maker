@@ -85,6 +85,9 @@ export type ChildRow = {
   display_order: number | null;
   /** 自宅住所。送迎パターンの dropoff_location 未入力時の default 値 */
   home_address: string | null;
+  /** お迎えマーク（複数選択）。emoji+name 形式。テナント pickup_areas の選択肢から選ぶ。
+      Phase 21: 送迎パターンを個別登録せずに、マーク選択だけで時間が決まるド王仕様 */
+  pickup_area_labels: string[];
   created_at: string;
 };
 

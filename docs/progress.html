@@ -345,6 +345,51 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 21: 児童にお迎えマーク（複数選択）追加（2026-04-17）</div>
+    <p>
+        <strong>ド王仕様</strong>: 「学年ベース判定+マーク選択（お迎えだけ）、いくつもマーク選択が可能」<br>
+        児童にお迎えマーク複数を持たせ、送迎表では選んだマークの時間が基本値として使用される。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>21-1</td><td>Migration 0017: children.pickup_area_labels text[] default '{}'</td><td>supabase/migrations/0017_children_pickup_marks.sql</td><td class="status-done">完了</td><td>100%</td><td>nullable 互換</td></tr>
+            <tr><td>21-2</td><td>ChildRow に pickup_area_labels 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>21-3</td><td>/api/children POST/PATCH で pickup_area_labels 対応</td><td>src/app/api/children/route.ts, [id]/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>21-4</td><td>児童モーダルにマーク複数選択 UI（トグルボタン + 時間表示）</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>「テナント設定で追加」リンク付き</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 22: Excel貼り付け UX改善（2026-04-17）</div>
+    <p>
+        ユーザー指摘: Excelの全角部首文字（⽒、⾦）/ ヘッダー[営]prefix / 氏名(学年)括弧 などを正規化。
+        加えて未登録児童の自動検出・一括登録フロー。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>22-1</td><td>NFKC 正規化で CJK 部首フォーム → 標準CJKに統一</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>⽒→氏、⾦→金、⼟→土 など</td></tr>
+            <tr><td>22-2</td><td>cleanChildName で "氏名 (学年)" の括弧部分を除去（テナント側 children を正とする）</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>parseChildName 利用</td></tr>
+            <tr><td>22-3</td><td>未登録児童の検出 + バナー表示（プレビュー画面）</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存 children との差分</td></tr>
+            <tr><td>22-4</td><td>一括登録サブダイアログ（氏名/学年/自宅住所）</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>学年は parseChildName から推定、Excel の () は無視</td></tr>
+            <tr><td>22-5</td><td>schedule/page から existingChildNames / onChildrenRegistered を渡す</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>登録完了後 fetchAll で自動再取得</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 23: 児童一覧の学年カテゴリ別うっすら背景色（2026-04-17）</div>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>23-1</td><td>getGradeRowBg ヘルパー + 行 background に適用</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>未就学=淡い青, 年少/中/長=淡い赤, 小1以降=淡い緑（各 0.05 alpha）</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

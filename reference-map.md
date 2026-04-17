@@ -44,6 +44,7 @@
 | is_active | boolean | `src/types/index.ts` (ChildRow) |
 | display_order | integer | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (ORDER BY), `src/app/api/children/reorder/route.ts`, `src/app/(app)/settings/children/page.tsx` (DnD 並び替え) |
 | home_address | text | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (POST), `[id]/route.ts` (PATCH), `src/app/(app)/settings/children/page.tsx` (入力UI + 送り住所fallback), `src/app/(app)/transport/page.tsx` (送迎表表示時fallback) |
+| pickup_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx` (マーク複数選択 UI), Phase 21 ド王仕様 |
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
@@ -220,3 +221,6 @@
 | 2026-04-17 | Phase 18: area 住所の load 時フォールバック（children モーダル + 送迎表）、children.display_order で児童並べ替え（Migration 0015、/api/children/reorder 新設、ドラッグハンドル UI） |
 | 2026-04-17 | Phase 19: VBAのRunAllCoverageChecksをTypeScript移植。ShiftGrid に 有資格者/提供時間/余力 の3行追加（児童11人超は要確認） |
 | 2026-04-17 | Phase 20: children.home_address 追加（Migration 0016）、送り先フォールバックに児童自宅住所を追加、/locations 機能撤去（LocationImage→SignedImage汎用化） |
+| 2026-04-17 | Phase 21: children.pickup_area_labels text[] 追加（Migration 0017）、児童モーダルでお迎えマーク複数選択UI |
+| 2026-04-17 | Phase 22: Excel貼付のNFKC正規化＋児童名の(学年)除去、未登録児童の検出バナー、一括登録サブダイアログ（学年はparseChildName自動推定） |
+| 2026-04-17 | Phase 23: 児童一覧の行背景を学年カテゴリでうっすら色分け（未就学=青/年少-年長=赤/小1以降=緑） |

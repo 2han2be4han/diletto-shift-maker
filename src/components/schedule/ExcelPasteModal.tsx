@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import type { ParsedScheduleEntry } from '@/types';
+import type { ParsedScheduleEntry, GradeType } from '@/types';
 import { parseChildName } from '@/lib/utils/parseChildName';
 
 /**
@@ -27,6 +27,10 @@ type ExcelPasteModalProps = {
   onConfirm: (entries: ParsedScheduleEntry[]) => void;
   year: number;
   month: number;
+  /** Phase 22: 既存の児童名一覧（未登録検出用） */
+  existingChildNames?: string[];
+  /** Phase 22: 登録完了後に呼ばれる再取得コールバック */
+  onChildrenRegistered?: () => Promise<void> | void;
 };
 
 export default function ExcelPasteModal({
@@ -35,6 +39,8 @@ export default function ExcelPasteModal({
   onConfirm,
   year,
   month,
+  existingChildNames = [],
+  onChildrenRegistered,
 }: ExcelPasteModalProps) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedScheduleEntry[]>([]);
@@ -70,6 +76,10 @@ export default function ExcelPasteModal({
   };
 
   const childNames = [...new Set(parsed.map((e) => e.child_name))];
+  /* Phase 22: 未登録の児童名（大文字小文字問わず完全一致でない名前） */
+  const existingSet = new Set(existingChildNames.map((n) => n.trim()));
+  const unknownChildNames = childNames.filter((n) => !existingSet.has(n.trim()));
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   return (
     <Modal
@@ -137,11 +147,25 @@ export default function ExcelPasteModal({
             parsed={parsed}
             onParsedChange={setParsed}
             childNames={childNames}
+            unknownChildNames={unknownChildNames}
             onBack={() => setStep('paste')}
             onConfirm={handleConfirm}
+            onRequestRegister={() => setRegisterOpen(true)}
           />
         )}
       </div>
+
+      {/* Phase 22: 未登録児童の一括登録サブダイアログ */}
+      {registerOpen && (
+        <UnknownChildrenRegisterDialog
+          names={unknownChildNames}
+          onClose={() => setRegisterOpen(false)}
+          onDone={async () => {
+            setRegisterOpen(false);
+            if (onChildrenRegistered) await onChildrenRegistered();
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -155,14 +179,18 @@ function ExcelGridPreview({
   parsed,
   onParsedChange,
   childNames,
+  unknownChildNames,
   onBack,
   onConfirm,
+  onRequestRegister,
 }: {
   parsed: ParsedScheduleEntry[];
   onParsedChange: (entries: ParsedScheduleEntry[]) => void;
   childNames: string[];
+  unknownChildNames: string[];
   onBack: () => void;
   onConfirm: () => void;
+  onRequestRegister: () => void;
 }) {
   const [editingCell, setEditingCell] = useState<{ child: string; date: string } | null>(null);
 
@@ -213,6 +241,33 @@ function ExcelGridPreview({
         <Badge variant="info">{childNames.length}名</Badge>
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>セルをクリックして時間を修正できます</span>
       </div>
+
+      {/* Phase 22: 未登録児童の警告 */}
+      {unknownChildNames.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 px-3 py-2"
+          style={{
+            background: 'var(--gold-pale, #fdf6e3)',
+            border: '1px solid rgba(184,134,11,0.25)',
+            borderRadius: '6px',
+          }}
+        >
+          <span className="text-sm" style={{ color: 'var(--gold, #b8860b)' }}>
+            ⚠ 未登録の児童が <strong>{unknownChildNames.length}名</strong> います:
+          </span>
+          <span className="text-xs flex flex-wrap gap-1" style={{ color: 'var(--ink-2)' }}>
+            {unknownChildNames.slice(0, 5).map((n) => (
+              <span key={n} className="px-1.5 py-0.5 rounded" style={{ background: 'var(--white, #fff)' }}>
+                {n}
+              </span>
+            ))}
+            {unknownChildNames.length > 5 && <span>…他 {unknownChildNames.length - 5}名</span>}
+          </span>
+          <Button variant="primary" onClick={onRequestRegister}>
+            一括登録する
+          </Button>
+        </div>
+      )}
 
       <div
         className="overflow-auto"
@@ -404,7 +459,10 @@ function parseExcelClipboard(
   year: number,
   month: number
 ): ParsedScheduleEntry[] {
-  const rows = parseTsvWithQuotes(raw);
+  /* Phase 22: NFKC 正規化で Unicode 互換文字（⽒→氏、⾦→金 等）を統一。
+     Excelから貼ったときに出る CJK 部首フォームを通常字に変換 */
+  const normalized = raw.normalize('NFKC');
+  const rows = parseTsvWithQuotes(normalized);
   if (rows.length < 2) return [];
 
   /* 1行目をヘッダーとして日付を抽出 */
@@ -648,10 +706,17 @@ function parseVerticalFormat(
   return entries;
 }
 
-/** 児童名のクリーンアップ: 前後の空白、改行、✓マーク除去 */
+/** 児童名のクリーンアップ:
+ *  - 前後の空白、改行、✓マーク除去
+ *  - Phase 22: 末尾の (学年) / （学年） を除去（例: "川島舞桜 (未就学)" → "川島舞桜"）
+ *    ※ 学年はテナント側の children レコードを正とするため Excel の () は無視する
+ */
 function cleanChildName(raw: string | undefined): string {
   if (!raw) return '';
-  return raw.trim().replace(/[✓✅☑]/g, '').replace(/[\n\r]/g, ' ').trim();
+  const stripped = raw.trim().replace(/[✓✅☑]/g, '').replace(/[\n\r]/g, ' ').trim();
+  if (!stripped) return '';
+  /* parseChildName が "name (grade)" 形式を分離してくれるので name 部分だけ返す */
+  return parseChildName(stripped).name;
 }
 
 /** 日付文字列をパース */
@@ -677,4 +742,188 @@ function parseTimeStr(str: string | undefined): string | null {
   const match = str.trim().match(/(\d{1,2}):(\d{2})/);
   if (match) return `${match[1].padStart(2, '0')}:${match[2]}`;
   return null;
+}
+
+/* ================================================================
+ * Phase 22: 未登録児童の一括登録ダイアログ
+ *   - Excel貼付で検出された既存未登録の児童名を一覧化
+ *   - 各行に 氏名 / 学年 / 自宅住所 の入力
+ *   - 「一括登録」で /api/children に逐次POST
+ * ================================================================ */
+type UnknownRow = {
+  name: string;
+  grade_type: GradeType;
+  home_address: string;
+};
+
+const GRADE_OPTIONS: { value: GradeType; label: string }[] = [
+  { value: 'preschool', label: '未就学' },
+  { value: 'nursery_3', label: '年少' },
+  { value: 'nursery_4', label: '年中' },
+  { value: 'nursery_5', label: '年長' },
+  { value: 'elementary_1', label: '小1' },
+  { value: 'elementary_2', label: '小2' },
+  { value: 'elementary_3', label: '小3' },
+  { value: 'elementary_4', label: '小4' },
+  { value: 'elementary_5', label: '小5' },
+  { value: 'elementary_6', label: '小6' },
+  { value: 'junior_high_1', label: '中1' },
+  { value: 'junior_high_2', label: '中2' },
+  { value: 'junior_high_3', label: '中3' },
+  { value: 'high_1', label: '高1' },
+  { value: 'high_2', label: '高2' },
+  { value: 'high_3', label: '高3' },
+];
+
+function UnknownChildrenRegisterDialog({
+  names,
+  onClose,
+  onDone,
+}: {
+  names: string[];
+  onClose: () => void;
+  onDone: () => Promise<void> | void;
+}) {
+  /* 初期値: parseChildName で Excel名から学年推定 */
+  const [rows, setRows] = useState<UnknownRow[]>(() =>
+    names.map((n) => {
+      const parsed = parseChildName(n);
+      return {
+        name: parsed.name || n,
+        grade_type: parsed.grade ?? 'elementary_1',
+        home_address: '',
+      };
+    })
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const updateRow = <K extends keyof UnknownRow>(idx: number, field: K, value: UnknownRow[K]) => {
+    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+  };
+
+  const removeRow = (idx: number) => setRows((rs) => rs.filter((_, i) => i !== idx));
+
+  const handleSubmit = async () => {
+    if (rows.length === 0) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setError('');
+    let okCount = 0;
+    let firstError = '';
+    for (const r of rows) {
+      if (!r.name.trim()) continue;
+      try {
+        const res = await fetch('/api/children', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: r.name.trim(),
+            grade_type: r.grade_type,
+            home_address: r.home_address.trim() || null,
+            is_active: true,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          if (!firstError) firstError = j.error ?? `${r.name} の登録に失敗`;
+        } else {
+          okCount++;
+        }
+      } catch (e) {
+        if (!firstError) firstError = e instanceof Error ? e.message : '登録に失敗';
+      }
+    }
+    setBusy(false);
+    if (firstError && okCount === 0) {
+      setError(firstError);
+      return;
+    }
+    await onDone();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl max-h-[85vh] overflow-auto rounded-lg p-5"
+        style={{ background: 'var(--surface)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
+            未登録児童の一括登録 <span className="text-sm ml-2" style={{ color: 'var(--ink-3)' }}>{rows.length}名</span>
+          </h3>
+          <button onClick={onClose} className="text-xl" style={{ color: 'var(--ink-3)' }} aria-label="閉じる">×</button>
+        </div>
+        <p className="text-xs mb-3" style={{ color: 'var(--ink-3)' }}>
+          Excelの氏名から学年を推定しています。必要に応じて修正してください。自宅住所は任意です（後から児童管理で設定可）。
+        </p>
+
+        {error && (
+          <div className="mb-3 px-3 py-2 text-xs rounded" style={{ background: 'var(--red-pale)', color: 'var(--red)' }}>
+            {error}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 mb-4">
+          {rows.map((r, idx) => (
+            <div
+              key={idx}
+              className="grid grid-cols-12 gap-2 items-center p-2 rounded"
+              style={{ background: 'var(--bg)', border: '1px solid var(--rule)' }}
+            >
+              <input
+                type="text"
+                value={r.name}
+                onChange={(e) => updateRow(idx, 'name', e.target.value)}
+                className="col-span-3 text-sm outline-none px-2 py-1.5 rounded"
+                style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
+                placeholder="氏名"
+              />
+              <select
+                value={r.grade_type}
+                onChange={(e) => updateRow(idx, 'grade_type', e.target.value as GradeType)}
+                className="col-span-2 text-sm outline-none px-2 py-1.5 rounded"
+                style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
+              >
+                {GRADE_OPTIONS.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={r.home_address}
+                onChange={(e) => updateRow(idx, 'home_address', e.target.value)}
+                className="col-span-6 text-xs outline-none px-2 py-1.5 rounded"
+                style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
+                placeholder="自宅住所（任意）"
+              />
+              <button
+                onClick={() => removeRow(idx)}
+                className="col-span-1 text-xs"
+                style={{ color: 'var(--red)' }}
+                aria-label={`${r.name} を登録対象から除外`}
+                title="除外"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>キャンセル</Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={busy || rows.length === 0}>
+            {busy ? '登録中...' : `${rows.length}名を一括登録`}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

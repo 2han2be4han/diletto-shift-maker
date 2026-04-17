@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active ?? true,
       parent_contact: body.parent_contact ?? null,
       home_address: body.home_address ?? null,
+      pickup_area_labels: Array.isArray(body.pickup_area_labels) ? body.pickup_area_labels : [],
     })
     .select()
     .single();
