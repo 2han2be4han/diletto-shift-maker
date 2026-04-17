@@ -171,9 +171,10 @@ export default function ApprovalQueue({ staff, canApprove }: Props) {
               <div style={{ color: 'var(--ink-2)' }}>
                 {selected.snapshot_before ? (
                   <>
-                    {ASSIGNMENT_LABELS[selected.snapshot_before.assignment_type ?? 'normal']}{' '}
-                    {selected.snapshot_before.start_time ?? '--:--'}〜
-                    {selected.snapshot_before.end_time ?? '--:--'}
+                    {ASSIGNMENT_LABELS[selected.snapshot_before.assignment_type ?? 'normal']}
+                    {selected.snapshot_before.start_time && selected.snapshot_before.end_time && (
+                      <> {selected.snapshot_before.start_time}〜{selected.snapshot_before.end_time}</>
+                    )}
                   </>
                 ) : (
                   <span style={{ color: 'var(--ink-3)' }}>（現状シフトなし）</span>
