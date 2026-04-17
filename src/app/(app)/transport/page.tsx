@@ -89,6 +89,8 @@ type UiTransportEntry = {
   /** Phase 26: schedule_entries.pickup_method / dropoff_method ('self'=保護者送迎) */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
+  /** Phase 27: pickup_time / dropoff_time の組合せが児童の登録パターンに存在するか */
+  isPatternRegistered: boolean;
 };
 
 /** Phase 26: ローカル編集用 pending state の単位 */
@@ -262,6 +264,14 @@ export default function TransportPage() {
       const dropoffEmpty = dropoffNeedsStaff && dropoffStaffIds.length === 0;
       const isUnassigned = pickupEmpty || dropoffEmpty;
 
+      /* Phase 27: pickup_time / dropoff_time の組合せが児童のパターンに登録済みか判定 */
+      const childPatterns = patternsByChild.get(e.child_id) ?? [];
+      const pt = normTime(e.pickup_time);
+      const dt = normTime(e.dropoff_time);
+      const isPatternRegistered = childPatterns.some(
+        (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
+      );
+
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
@@ -277,6 +287,7 @@ export default function TransportPage() {
         isConfirmed: t?.is_confirmed ?? false,
         pickupMethod: e.pickup_method,
         dropoffMethod: e.dropoff_method,
+        isPatternRegistered,
       };
     });
     /* Phase 27-A-2: 自動割当の並びに合わせ、pickup_time → dropoff_time → 児童名 で昇順 */
@@ -617,12 +628,20 @@ export default function TransportPage() {
                 isUnassigned: e.isUnassigned,
                 pickupMethod: e.pickupMethod,
                 dropoffMethod: e.dropoffMethod,
+                isPatternRegistered: e.isPatternRegistered,
               }))}
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
-              onAddPattern={() => {
-                alert('児童管理ページで送迎パターンを編集できます');
+              onAddPattern={(childName) => {
+                /* Phase 27: 児童管理ページへ遷移してそのままパターン登録できるようにする
+                   （名前で child_id を逆引き、anchor #pattern-new で該当パネルへスクロール） */
+                const target = children.find((c) => c.name === childName);
+                if (target) {
+                  window.location.href = `/settings/children?child=${target.id}#pattern-new`;
+                } else {
+                  window.location.href = '/settings/children';
+                }
               }}
               disabled={confirmed}
             />

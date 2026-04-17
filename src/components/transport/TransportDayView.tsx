@@ -32,6 +32,8 @@ type TransportChild = {
   /** Phase 26: 'self' なら保護者送迎（担当不要） */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
+  /** Phase 27: この送迎予定の pickup/dropoff 時刻組合せが児童の登録パターンに存在するか */
+  isPatternRegistered: boolean;
 };
 
 type TransportStaff = {
@@ -106,8 +108,8 @@ export default function TransportDayView({
     );
   }
 
-  /* Phase 26.1: 列構成 = 児童名 / 迎え時間 / 迎場所 / 迎え担当 / 送り時間 / 送り場所 / 送り担当 / (設定) */
-  const colSpan = onAddPattern ? 8 : 7;
+  /* Phase 27: 「設定+登録」列を撤去。登録ボタンは展開詳細内（未登録パターンのみ）に移動 */
+  const colSpan = 7;
 
   /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
   const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
@@ -170,9 +172,6 @@ export default function TransportDayView({
             <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: DROP_ACCENT }}>
               <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>
             </th>
-            {onAddPattern && (
-              <th className="text-center" style={{ ...headerBase, minWidth: '60px' }}>設定</th>
-            )}
           </tr>
         </thead>
         <tbody>
@@ -294,25 +293,9 @@ export default function TransportDayView({
                     )}
                   </td>
 
-                  {/* パターン登録ボタン */}
-                  {onAddPattern && (
-                    <td
-                      className="px-2 py-1.5 text-center align-top"
-                      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
-                    >
-                      <button
-                        onClick={() => onAddPattern(child.name, child.pickupTime, child.dropoffTime)}
-                        className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
-                        style={{ color: 'var(--accent)' }}
-                        title={`${child.name}の送迎パターンに登録`}
-                      >
-                        + 登録
-                      </button>
-                    </td>
-                  )}
                 </tr>
 
-                {/* 展開: 送迎場所リスト */}
+                {/* 展開: 送迎場所リスト + 未登録パターン時の登録ボタン */}
                 {isExpanded && (
                   <tr style={{ background: 'var(--bg)' }}>
                     <td
@@ -321,6 +304,33 @@ export default function TransportDayView({
                       style={{ borderBottom: '1px solid var(--rule)' }}
                     >
                       <LocationDetails child={child} />
+                      {onAddPattern && !child.isPatternRegistered && (
+                        <div
+                          className="mt-3 pt-3 flex items-center justify-between flex-wrap gap-2"
+                          style={{ borderTop: '1px dashed var(--rule)' }}
+                        >
+                          <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                            この時刻の組み合わせは、まだ {child.name} さんのパターンに登録されていません。
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onAddPattern(child.name, child.pickupTime, child.dropoffTime)
+                            }
+                            className="rounded-md transition-colors hover:bg-[var(--accent-pale)]"
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: 'var(--accent)',
+                              border: '1px solid var(--accent)',
+                              background: 'var(--white)',
+                            }}
+                          >
+                            ＋ このパターンを登録する
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -596,16 +606,18 @@ function StaffSelect({
               className="shrink-0 text-right"
               style={{
                 display: 'inline-block',
-                width: '3.2em',
+                width: '4.6em',
                 lineHeight: 1,
-                fontSize: '0.9rem',
-                letterSpacing: '-0.05em',
-                opacity: id && !isMissing ? 0.85 : 0,
+                fontSize: '0.95rem',
+                letterSpacing: '-0.02em',
+                whiteSpace: 'nowrap',
+                overflow: 'visible',
+                opacity: id && !isMissing ? 0.9 : 0,
               }}
               title={id && !isMissing && marks.length > 0 ? `この日の担当エリア: ${marks.join(' ')}` : undefined}
               aria-label={id && !isMissing && marks.length > 0 ? `担当エリア ${marks.join(' ')}` : undefined}
             >
-              {id && !isMissing ? marks.join('') : ''}
+              {id && !isMissing ? marks.slice(0, 3).join('') : ''}
             </span>
             <select
               value={id}
@@ -647,7 +659,7 @@ function StaffSelect({
           <span
             aria-hidden
             className="shrink-0"
-            style={{ display: 'inline-block', width: '3.2em' }}
+            style={{ display: 'inline-block', width: '4.6em' }}
           />
           <button
             onClick={handleAdd}
