@@ -42,6 +42,7 @@
 | name | text | `src/types/index.ts` (ChildRow) |
 | grade_type | text | `src/types/index.ts` (ChildRow, GradeType) |
 | is_active | boolean | `src/types/index.ts` (ChildRow) |
+| display_order | integer | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (ORDER BY), `src/app/api/children/reorder/route.ts`, `src/app/(app)/settings/children/page.tsx` (DnD 並び替え) |
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
@@ -214,3 +215,5 @@
 | 2026-04-17 | Phase 14: 送迎表で場所クリック→Google Maps 起動。googleMaps.ts 新設、TransportDayView に TimeWithMapLink 追加、children モーダルで住所メモ入力復活 (MemoInput)。テナントエリアの時間見切れ修正＆ UI 仕上げ |
 | 2026-04-17 | Phase 15: 児童 重複キー修正、「有効→在籍」、tenant 2カラム breakpoint を md に、エリア並び替えを 6点グリップ + HTML5 DnD、staff/page レスポンシブ（md 未満はカード） |
 | 2026-04-17 | Phase 16: AreaLabel.address 追加。tenant でエリアごとに住所入力 → 児童モーダルでエリア選択時に住所が自動入力（手入力は尊重）。/settings/children から /settings/tenant へのショートカットリンク |
+| 2026-04-17 | Phase 17: 送迎表で児童名クリック→場所詳細カード展開。各カードで Google Maps 起動 |
+| 2026-04-17 | Phase 18: area 住所の load 時フォールバック（children モーダル + 送迎表）、children.display_order で児童並べ替え（Migration 0015、/api/children/reorder 新設、ドラッグハンドル UI） |

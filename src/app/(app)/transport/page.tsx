@@ -14,6 +14,8 @@ import type {
   ShiftAssignmentRow,
   ChildTransportPatternRow,
   TransportAssignmentRow,
+  AreaLabel,
+  TenantSettings,
 } from '@/types';
 
 /**
@@ -54,6 +56,9 @@ export default function TransportPage() {
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntryRow[]>([]);
   const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignmentRow[]>([]);
   const [transportAssignments, setTransportAssignments] = useState<TransportAssignmentRow[]>([]);
+  /* エリア設定を取得し、パターンの pickup_location/dropoff_location が未入力のときに住所をフォールバック */
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
+  const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
@@ -82,18 +87,20 @@ export default function TransportPage() {
       const from = `${year}-${String(month).padStart(2, '0')}-01`;
       const to = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      const [sRes, cRes, eRes, aRes, tRes] = await Promise.all([
+      const [sRes, cRes, eRes, aRes, tRes, tenantRes] = await Promise.all([
         fetch('/api/staff'),
         fetch('/api/children'),
         fetch(`/api/schedule-entries?from=${from}&to=${to}`),
         fetch(`/api/shift-assignments?from=${from}&to=${to}`),
         fetch(`/api/transport-assignments?from=${from}&to=${to}`),
+        fetch('/api/tenant'),
       ]);
       const sJson = sRes.ok ? await sRes.json() : { staff: [] };
       const cJson = cRes.ok ? await cRes.json() : { children: [], patterns: [] };
       const eJson = eRes.ok ? await eRes.json() : { entries: [] };
       const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
       const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
+      const tenantJson = tenantRes.ok ? await tenantRes.json() : { tenant: null };
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
@@ -101,6 +108,9 @@ export default function TransportPage() {
       setScheduleEntries(eJson.entries ?? []);
       setShiftAssignments(aJson.assignments ?? []);
       setTransportAssignments(tJson.assignments ?? []);
+      const settings: TenantSettings = tenantJson.tenant?.settings ?? {};
+      setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
+      setDropoffAreas(settings.dropoff_areas ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -121,27 +131,46 @@ export default function TransportPage() {
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
     const patternById = new Map(patterns.map((p) => [p.id, p]));
+    /* エリアラベル → 住所 の逆引きマップ（Phase 18: 個別住所未入力時のフォールバック用） */
+    const areaAddressMap = new Map<string, string>();
+    for (const a of pickupAreas) {
+      if (a.address) areaAddressMap.set(`${a.emoji} ${a.name}`, a.address);
+    }
+    for (const a of dropoffAreas) {
+      if (a.address) areaAddressMap.set(`${a.emoji} ${a.name}`, a.address);
+    }
     return scheduleIds.map((sid) => {
       const e = entryById.get(sid)!;
       const t = assignByEntry.get(sid);
       /* 場所メモ: その schedule_entry に紐付く pattern から取得（Phase 14: Google Maps リンク用） */
       const pattern = e.pattern_id ? patternById.get(e.pattern_id) : undefined;
+      const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
+      const dropoffAreaLabel = pattern?.dropoff_area_label ?? null;
+      /* 個別住所優先、空ならエリア設定の住所をフォールバック */
+      const pickupLocation =
+        pattern?.pickup_location
+        || (pickupAreaLabel ? areaAddressMap.get(pickupAreaLabel) ?? null : null)
+        || null;
+      const dropoffLocation =
+        pattern?.dropoff_location
+        || (dropoffAreaLabel ? areaAddressMap.get(dropoffAreaLabel) ?? null : null)
+        || null;
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
         pickupTime: e.pickup_time,
         dropoffTime: e.dropoff_time,
-        pickupLocation: pattern?.pickup_location ?? null,
-        dropoffLocation: pattern?.dropoff_location ?? null,
-        pickupAreaLabel: pattern?.pickup_area_label ?? pattern?.area_label ?? null,
-        dropoffAreaLabel: pattern?.dropoff_area_label ?? null,
+        pickupLocation,
+        dropoffLocation,
+        pickupAreaLabel,
+        dropoffAreaLabel,
         pickupStaffIds: t?.pickup_staff_ids ?? [],
         dropoffStaffIds: t?.dropoff_staff_ids ?? [],
         isUnassigned: t?.is_unassigned ?? true,
         isConfirmed: t?.is_confirmed ?? false,
       };
     });
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, patterns]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, patterns, pickupAreas, dropoffAreas]);
 
   const unassignedTotal = useMemo(() => {
     return transportAssignments.filter((t) => t.is_unassigned).length;

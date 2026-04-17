@@ -81,6 +81,8 @@ export type ChildRow = {
   grade_type: GradeType;
   is_active: boolean;
   parent_contact: string | null;
+  /** 児童一覧の表示順。NULL の場合は created_at フォールバック */
+  display_order: number | null;
   created_at: string;
 };
 

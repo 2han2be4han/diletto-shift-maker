@@ -288,6 +288,27 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 18: エリア住所反映の強化 + 児童並び替え（2026-04-17）</div>
+    <p>
+        <strong>ユーザー指摘</strong>:<br>
+        ① 「送迎場所のエリア設定をして住所を登録したら児童登録のエリア選択で住所デフォルトで出るようにできる？」<br>
+        ② 「児童管理も並べ替えお願いしたい」<br>
+        ③ 「エリア設定の反映と個別住所が必要だ（ド王仕様）」
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>18-1</td><td>児童モーダル handleEdit: load 時も area.address で location 未入力を補完</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存パターンの修正にもエリア住所が反映される</td></tr>
+            <tr><td>18-2</td><td>送迎表: pattern の location 未入力時に area.address をフォールバック</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>tenant 設定も fetch、個別住所優先</td></tr>
+            <tr><td>18-3</td><td>Migration 0015: children.display_order 追加</td><td>supabase/migrations/0015_children_display_order.sql</td><td class="status-done">完了</td><td>100%</td><td>nullable、NULLS LAST で後方互換</td></tr>
+            <tr><td>18-4</td><td>API 調整: /api/children GET は display_order→created_at でソート、/api/children/reorder POST 新設</td><td>src/app/api/children/route.ts, src/app/api/children/reorder/route.ts</td><td class="status-done">完了</td><td>100%</td><td>editor 以上、RLS でテナント分離</td></tr>
+            <tr><td>18-5</td><td>児童一覧にドラッグハンドル列追加 + HTML5 DnD リオーダー</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>tenant エリアと同じ 6 点グリップ UI</td></tr>
+            <tr><td>18-6</td><td>reference-map.md 更新 + commit + push</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>本番 Supabase に 0015 適用要</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

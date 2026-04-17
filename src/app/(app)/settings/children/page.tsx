@@ -89,6 +89,9 @@ export default function ChildrenSettingsPage() {
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
+  /* ドラッグ並び替え用 */
+  const [draggingChildIdx, setDraggingChildIdx] = useState<number | null>(null);
+  const [dragOverChildIdx, setDragOverChildIdx] = useState<number | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -136,19 +139,29 @@ export default function ChildrenSettingsPage() {
   const handleEdit = (child: ChildRow) => {
     const childPatterns = patterns
       .filter((p) => p.child_id === child.id)
-      .map<PatternItem>((p) => ({
-        id: p.id,
-        pattern_name: p.pattern_name,
-        pickup_location: p.pickup_location ?? '',
-        pickup_time: p.pickup_time ?? '14:00',
-        pickup_method: p.pickup_method,
+      .map<PatternItem>((p) => {
         /* 旧 area_label は互換のため pickup 側のフォールバックに */
-        pickup_area_label: p.pickup_area_label ?? p.area_label ?? '',
-        dropoff_location: p.dropoff_location ?? '',
-        dropoff_time: p.dropoff_time ?? '16:00',
-        dropoff_method: p.dropoff_method,
-        dropoff_area_label: p.dropoff_area_label ?? '',
-      }));
+        const pickupLabel = p.pickup_area_label ?? p.area_label ?? '';
+        const dropoffLabel = p.dropoff_area_label ?? '';
+        /* 個別住所（memo）が未入力の場合、エリア設定の住所を default として表示。
+           保存しても問題なし（個別住所の "既定値" として機能する） */
+        const pickupAreaAddress =
+          pickupAreas.find((a) => formatAreaLabel(a) === pickupLabel)?.address ?? '';
+        const dropoffAreaAddress =
+          dropoffAreas.find((a) => formatAreaLabel(a) === dropoffLabel)?.address ?? '';
+        return {
+          id: p.id,
+          pattern_name: p.pattern_name,
+          pickup_location: p.pickup_location || pickupAreaAddress,
+          pickup_time: p.pickup_time ?? '14:00',
+          pickup_method: p.pickup_method,
+          pickup_area_label: pickupLabel,
+          dropoff_location: p.dropoff_location || dropoffAreaAddress,
+          dropoff_time: p.dropoff_time ?? '16:00',
+          dropoff_method: p.dropoff_method,
+          dropoff_area_label: dropoffLabel,
+        };
+      });
     setEditing({
       id: child.id,
       name: child.name,
@@ -227,6 +240,32 @@ export default function ChildrenSettingsPage() {
       setError(e instanceof Error ? e.message : '削除失敗');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** 児童の並び替え: ドラッグ完了時に配列を splice → display_order を 0,1,2... で再採番 → API */
+  const handleReorderChildren = async (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= children.length || to >= children.length) return;
+    const next = [...children];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    /* 楽観更新 */
+    setChildren(next);
+    try {
+      const orders = next.map((c, idx) => ({ id: c.id, display_order: idx }));
+      const res = await fetch('/api/children/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? '並び替え保存失敗');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '並び替えに失敗しました');
+      /* 失敗時は再取得して元の順序に戻す */
+      await fetchAll();
     }
   };
 
@@ -340,6 +379,13 @@ export default function ChildrenSettingsPage() {
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
             <thead>
               <tr>
+                <th
+                  className="px-2 py-2 text-center font-semibold"
+                  style={{ background: 'var(--ink)', color: '#fff', width: '36px' }}
+                  title="ドラッグで並び替え"
+                >
+                  ↕
+                </th>
                 {['氏名', '学年', 'パターン数', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
@@ -348,15 +394,73 @@ export default function ChildrenSettingsPage() {
             <tbody>
               {children.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  <td colSpan={5} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                     児童が登録されていません
                   </td>
                 </tr>
               )}
-              {children.map((c) => {
+              {children.map((c, idx) => {
                 const count = patterns.filter((p) => p.child_id === c.id).length;
+                const isDragging = draggingChildIdx === idx;
+                const isDropTarget = dragOverChildIdx === idx && draggingChildIdx !== null && draggingChildIdx !== idx;
                 return (
-                  <tr key={c.id} className="hover:bg-[var(--accent-pale)] cursor-pointer" onClick={() => handleEdit(c)}>
+                  <tr
+                    key={c.id}
+                    onDragOver={(e) => {
+                      if (draggingChildIdx === null || draggingChildIdx === idx) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      setDragOverChildIdx(idx);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverChildIdx === idx) setDragOverChildIdx(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggingChildIdx !== null && draggingChildIdx !== idx) {
+                        handleReorderChildren(draggingChildIdx, idx);
+                      }
+                      setDraggingChildIdx(null);
+                      setDragOverChildIdx(null);
+                    }}
+                    className="hover:bg-[var(--accent-pale)] cursor-pointer transition-colors"
+                    style={{
+                      opacity: isDragging ? 0.4 : 1,
+                      background: isDropTarget ? 'var(--accent-pale)' : undefined,
+                    }}
+                    onClick={() => handleEdit(c)}
+                  >
+                    <td
+                      className="px-1 py-2 text-center"
+                      style={{ borderBottom: '1px solid var(--rule)' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggingChildIdx(idx);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(idx));
+                        }}
+                        onDragEnd={() => {
+                          setDraggingChildIdx(null);
+                          setDragOverChildIdx(null);
+                        }}
+                        className="inline-flex items-center justify-center w-6 h-7 rounded transition-colors hover:bg-[var(--bg)]"
+                        style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                        aria-label="ドラッグして並び替え"
+                        title="ドラッグして並び替え"
+                      >
+                        <svg width="14" height="18" viewBox="0 0 14 18" fill="var(--ink-3)" aria-hidden>
+                          <circle cx="4" cy="4" r="1.3" />
+                          <circle cx="10" cy="4" r="1.3" />
+                          <circle cx="4" cy="9" r="1.3" />
+                          <circle cx="10" cy="9" r="1.3" />
+                          <circle cx="4" cy="14" r="1.3" />
+                          <circle cx="10" cy="14" r="1.3" />
+                        </svg>
+                      </div>
+                    </td>
                     <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>{c.name}</td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                       <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>

@@ -7,10 +7,12 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   const supabase = await createClient();
+  /* display_order が NULL のレコードは末尾、その後 created_at ASC で安定ソート */
   const { data: children, error: cErr } = await supabase
     .from('children')
     .select('*')
-    .order('name');
+    .order('display_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
 
   const { data: patterns, error: pErr } = await supabase
