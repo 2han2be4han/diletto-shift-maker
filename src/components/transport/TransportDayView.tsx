@@ -39,8 +39,10 @@ type TransportStaff = {
   name: string;
   /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
   endTime: string | null;
-  /** Phase 26.1: その日に担当している送迎先の絵文字マーク配列（例: ['🌳', '🍶']）。重複なし */
-  areaMarks: string[];
+  /** Phase 27: 迎で担当しているエリア絵文字。重複なし */
+  pickupAreaMarks: string[];
+  /** Phase 27: 送で担当しているエリア絵文字。重複なし */
+  dropoffAreaMarks: string[];
 };
 
 type TransportDayViewProps = {
@@ -241,6 +243,7 @@ export default function TransportDayView({
                         availableStaff={eligibleStaff}
                         onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
                         disabled={disabled}
+                        direction="pickup"
                       />
                     )}
                   </td>
@@ -273,6 +276,7 @@ export default function TransportDayView({
                         availableStaff={eligibleStaff}
                         onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
                         disabled={disabled}
+                        direction="dropoff"
                       />
                     )}
                   </td>
@@ -531,11 +535,14 @@ function StaffSelect({
   availableStaff,
   onChange,
   disabled,
+  direction,
 }: {
   staffIds: string[];
   availableStaff: TransportStaff[];
   onChange: (ids: string[]) => void;
   disabled: boolean;
+  /** Phase 27: 迎担当=pickup のマークのみ表示、送担当=dropoff のマークのみ表示 */
+  direction: 'pickup' | 'dropoff';
 }) {
   const handleChange = (index: number, newId: string) => {
     const updated = [...staffIds];
@@ -557,9 +564,11 @@ function StaffSelect({
       {staffIds.map((id, i) => {
         /* Phase 26: 候補外（退勤時間 < 16:31 / 欠勤）でも既存選択は残す */
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
-        /* Phase 26.1: 選択中の職員が他に担当しているエリアマークを横に表示 */
+        /* Phase 27: 選択中の職員が同方向で担当している他エリアのマークを表示（迎/送別） */
         const selectedStaff = availableStaff.find((s) => s.id === id);
-        const marks = selectedStaff?.areaMarks ?? [];
+        const marks = (direction === 'pickup'
+          ? selectedStaff?.pickupAreaMarks
+          : selectedStaff?.dropoffAreaMarks) ?? [];
         return (
           <div key={i} className="inline-flex items-center gap-1">
             <select

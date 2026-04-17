@@ -300,23 +300,27 @@ export default function TransportPage() {
   const generated = transportAssignments.length > 0;
 
   /**
-   * Phase 26.1: 職員ごとに「この日担当しているエリア絵文字」を集計
-   * - 既存 transportAssignments + 未保存 pendingChanges の両方を見る
-   * - 各 schedule_entry の pattern から pickup/dropoff_area_label を取得し、先頭絵文字を抽出
-   * - staff_id ごとにユニーク絵文字配列を返す
+   * Phase 26.1 / 27: 職員ごとに「この日担当しているエリア絵文字」を集計。
+   * 迎/送で **別々** に持つ（同じ職員でも迎担当と送担当で違うエリアを持つため）。
    */
   const staffAreaMarksForDay = useMemo(() => {
-    const result = new Map<string, string[]>();
+    const pickupResult = new Map<string, string[]>();
+    const dropoffResult = new Map<string, string[]>();
     const dayEntries = scheduleEntries.filter((e) => e.date === selectedDate);
-    const entryById = new Map(dayEntries.map((e) => [e.id, e]));
     const patternById = new Map(patterns.map((p) => [p.id, p]));
-    /* Phase 27-A-2 (interim): 児童ごとに patterns をグルーピングして resolver フォールバック */
     const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
     for (const p of patterns) {
       const list = patternsByChild.get(p.child_id) ?? [];
       list.push(p);
       patternsByChild.set(p.child_id, list);
     }
+
+    const addMark = (target: Map<string, string[]>, staffId: string, mark: string | null) => {
+      if (!staffId || !mark) return;
+      const arr = target.get(staffId) ?? [];
+      if (!arr.includes(mark)) arr.push(mark);
+      target.set(staffId, arr);
+    };
 
     for (const entry of dayEntries) {
       const pattern = resolvePattern(entry, patternsByChild, patternById);
@@ -325,28 +329,18 @@ export default function TransportPage() {
       const pickupEmoji = pickupArea ? pickupArea.trim().split(' ')[0] : null;
       const dropoffEmoji = dropoffArea ? dropoffArea.trim().split(' ')[0] : null;
 
-      /* 既存 assignment or pending の staff_ids を取得 */
       const pending = pendingChanges.get(entry.id);
       const existing = transportAssignments.find((t) => t.schedule_entry_id === entry.id);
       const pickupIds = pending?.pickupStaffIds ?? existing?.pickup_staff_ids ?? [];
       const dropoffIds = pending?.dropoffStaffIds ?? existing?.dropoff_staff_ids ?? [];
 
-      const addMark = (staffId: string, mark: string | null) => {
-        if (!staffId || !mark) return;
-        const arr = result.get(staffId) ?? [];
-        if (!arr.includes(mark)) arr.push(mark);
-        result.set(staffId, arr);
-      };
-
-      pickupIds.forEach((sid) => addMark(sid, pickupEmoji));
-      dropoffIds.forEach((sid) => addMark(sid, dropoffEmoji));
+      pickupIds.forEach((sid) => addMark(pickupResult, sid, pickupEmoji));
+      dropoffIds.forEach((sid) => addMark(dropoffResult, sid, dropoffEmoji));
     }
-    /* entryById は side-effect 読み取りだが、今後のデバッグ用に参照を保持 */
-    void entryById;
-    return result;
+    return { pickup: pickupResult, dropoff: dropoffResult };
   }, [scheduleEntries, selectedDate, patterns, pendingChanges, transportAssignments]);
 
-  /* Phase 26: 当日に出勤している職員を endTime / areaMarks 付きで UI へ渡す */
+  /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す */
   const availableStaffForDay = useMemo(() => {
     return staff.map((s) => {
       const shift = shiftAssignments.find(
@@ -359,7 +353,8 @@ export default function TransportPage() {
         id: s.id,
         name: s.name,
         endTime: shift?.end_time ?? null,
-        areaMarks: staffAreaMarksForDay.get(s.id) ?? [],
+        pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
+        dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],
       };
     });
   }, [staff, shiftAssignments, selectedDate, staffAreaMarksForDay]);
