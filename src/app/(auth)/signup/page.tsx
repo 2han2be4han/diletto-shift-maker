@@ -30,8 +30,16 @@ export default function SignupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, tenantName, userName }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? '登録に失敗しました');
+
+      /* 非 JSON レスポンス（middleware リダイレクト等）の保険 */
+      const text = await res.text();
+      let json: { error?: string; ok?: boolean } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`サーバー応答が不正です (${res.status})`);
+      }
+      if (!res.ok) throw new Error(json.error ?? `登録に失敗しました (${res.status})`);
 
       /* 2. サインインしてセッション取得 */
       const supabase = createClient();
