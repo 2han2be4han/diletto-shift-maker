@@ -32,6 +32,8 @@ type UiTransportEntry = {
   childName: string;
   pickupTime: string | null;
   dropoffTime: string | null;
+  pickupLocation: string | null;
+  dropoffLocation: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -116,21 +118,26 @@ export default function TransportPage() {
     const scheduleIds = scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id);
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
+    const patternById = new Map(patterns.map((p) => [p.id, p]));
     return scheduleIds.map((sid) => {
       const e = entryById.get(sid)!;
       const t = assignByEntry.get(sid);
+      /* 場所メモ: その schedule_entry に紐付く pattern から取得（Phase 14: Google Maps リンク用） */
+      const pattern = e.pattern_id ? patternById.get(e.pattern_id) : undefined;
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
         pickupTime: e.pickup_time,
         dropoffTime: e.dropoff_time,
+        pickupLocation: pattern?.pickup_location ?? null,
+        dropoffLocation: pattern?.dropoff_location ?? null,
         pickupStaffIds: t?.pickup_staff_ids ?? [],
         dropoffStaffIds: t?.dropoff_staff_ids ?? [],
         isUnassigned: t?.is_unassigned ?? true,
         isConfirmed: t?.is_confirmed ?? false,
       };
     });
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, patterns]);
 
   const unassignedTotal = useMemo(() => {
     return transportAssignments.filter((t) => t.is_unassigned).length;
@@ -319,6 +326,8 @@ export default function TransportPage() {
                 name: e.childName,
                 pickupTime: e.pickupTime,
                 dropoffTime: e.dropoffTime,
+                pickupLocation: e.pickupLocation,
+                dropoffLocation: e.dropoffLocation,
                 pickupStaffIds: e.pickupStaffIds,
                 dropoffStaffIds: e.dropoffStaffIds,
                 isUnassigned: e.isUnassigned,

@@ -333,24 +333,50 @@ function AreaListSection({
   inputStyle,
   emptyMessage,
 }: AreaListSectionProps) {
+  /* カラムごとの統一スタイル（マーク・名前・時間・削除） */
+  const emojiStyle: React.CSSProperties = {
+    ...inputStyle,
+    width: '3rem',
+    textAlign: 'center',
+    padding: '8px 6px',
+    fontSize: '1.05rem',
+  };
+  const nameStyle: React.CSSProperties = { ...inputStyle, padding: '8px 12px' };
+  const timeStyle: React.CSSProperties = {
+    ...inputStyle,
+    width: '7rem',
+    padding: '8px 10px',
+    fontVariantNumeric: 'tabular-nums',
+  };
+
   return (
     <div
-      className="flex flex-col gap-2 p-3"
-      style={{ border: '1px solid var(--rule)', borderRadius: '10px', background: 'var(--surface)' }}
+      className="flex flex-col gap-3 p-4"
+      style={{
+        border: '1px solid var(--rule)',
+        borderRadius: '12px',
+        background: 'var(--surface)',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+      }}
     >
-      <h3 className="text-sm font-bold" style={{ color: titleColor }}>{title}</h3>
+      <h3 className="text-sm font-bold tracking-wide" style={{ color: titleColor }}>{title}</h3>
       {areas.length === 0 && (
-        <p className="text-xs py-2" style={{ color: 'var(--ink-3)' }}>{emptyMessage}</p>
+        <p className="text-xs py-3 text-center" style={{ color: 'var(--ink-3)' }}>
+          {emptyMessage}
+        </p>
       )}
       <div className="flex flex-col gap-2">
         {areas.map((area, i) => (
-          <div key={i} className="flex items-center gap-2">
+          <div
+            key={i}
+            className="flex items-center gap-2 p-1.5 rounded-lg transition-colors hover:bg-[var(--accent-pale)]"
+          >
             <input
               type="text"
               value={area.emoji}
               onChange={(e) => onChange(i, 'emoji', e.target.value)}
-              className="w-12 text-center outline-none"
-              style={inputStyle}
+              className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              style={emojiStyle}
               placeholder="🏠"
               aria-label="マーク"
             />
@@ -358,8 +384,8 @@ function AreaListSection({
               type="text"
               value={area.name}
               onChange={(e) => onChange(i, 'name', e.target.value)}
-              className="flex-1 min-w-0 outline-none"
-              style={inputStyle}
+              className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              style={nameStyle}
               placeholder="エリア名"
               aria-label="エリア名"
             />
@@ -368,16 +394,18 @@ function AreaListSection({
               step={AREA_TIME_STEP_SECONDS}
               value={area.time ?? ''}
               onChange={(e) => onChange(i, 'time', e.target.value)}
-              className="w-24 outline-none"
-              style={inputStyle}
+              className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              style={timeStyle}
               aria-label="基準時間"
             />
             <button
               onClick={() => onRemove(i)}
-              className="text-xs px-2 py-2 rounded transition-colors hover:bg-[var(--red-pale)]"
+              className="shrink-0 text-xs px-2 py-2 rounded-md transition-colors hover:bg-[var(--red-pale)]"
               style={{ color: 'var(--red)' }}
+              aria-label={`${area.name || 'エリア'}を削除`}
+              title="削除"
             >
-              削除
+              ✕
             </button>
           </div>
         ))}

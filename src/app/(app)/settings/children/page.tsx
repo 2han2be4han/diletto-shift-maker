@@ -479,6 +479,7 @@ export default function ChildrenSettingsPage() {
                     onMethodChange={(v) => updatePattern(i, 'pickup_method', v)}
                     onAreaChange={(v) => handlePickupAreaChange(i, v)}
                     onTimeChange={(v) => updatePattern(i, 'pickup_time', v)}
+                    onLocationChange={(v) => updatePattern(i, 'pickup_location', v)}
                   />
                   {/* 送 行 */}
                   <DropoffRow
@@ -487,6 +488,7 @@ export default function ChildrenSettingsPage() {
                     onMethodChange={(v) => updatePattern(i, 'dropoff_method', v)}
                     onAreaChange={(v) => handleDropoffAreaChange(i, v)}
                     onTimeChange={(v) => updatePattern(i, 'dropoff_time', v)}
+                    onLocationChange={(v) => updatePattern(i, 'dropoff_location', v)}
                   />
                 </div>
               ))}
@@ -531,54 +533,64 @@ type PickupRowProps = {
   onMethodChange: (v: PickupMethod) => void;
   onAreaChange: (v: string) => void;
   onTimeChange: (v: string) => void;
+  onLocationChange: (v: string) => void;
 };
 
 function PickupRow({
-  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange,
+  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange, onLocationChange,
 }: PickupRowProps) {
   return (
     <div
-      className="flex items-center gap-2 px-2.5 py-2"
+      className="flex flex-col gap-1.5 px-2.5 py-2"
       style={{
         background: 'var(--accent-pale)',
         border: '1px solid rgba(26,62,184,0.15)',
         borderRadius: '8px',
       }}
     >
-      <span
-        className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
-        style={{ color: 'var(--accent)', width: LABEL_WIDTH }}
-      >
-        迎 🚗←
-      </span>
-      <select
-        value={pattern.pickup_method}
-        onChange={(e) => onMethodChange(e.target.value as PickupMethod)}
-        className="outline-none text-xs font-medium shrink-0"
-        style={methodSelectStyle('var(--accent)')}
-      >
-        {Object.entries(PICKUP_METHOD_LABELS).map(([k, v]) => (
-          <option key={k} value={k}>{v}</option>
-        ))}
-      </select>
-      <select
-        value={pattern.pickup_area_label}
-        onChange={(e) => onAreaChange(e.target.value)}
-        className="outline-none text-xs flex-1 min-w-0"
-        style={areaSelectStyle()}
-        aria-label="迎のエリア"
-      >
-        <option value="">エリア選択</option>
-        {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
-      </select>
-      <input
-        type="time"
-        step={TIME_STEP_SECONDS}
-        value={pattern.pickup_time}
-        onChange={(e) => onTimeChange(e.target.value)}
-        className="outline-none text-xs shrink-0"
-        style={timeInputStyle()}
-        aria-label="迎の時間"
+      <div className="flex items-center gap-2">
+        <span
+          className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
+          style={{ color: 'var(--accent)', width: LABEL_WIDTH }}
+        >
+          迎 🚗←
+        </span>
+        <select
+          value={pattern.pickup_method}
+          onChange={(e) => onMethodChange(e.target.value as PickupMethod)}
+          className="outline-none text-xs font-medium shrink-0"
+          style={methodSelectStyle('var(--accent)')}
+        >
+          {Object.entries(PICKUP_METHOD_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <select
+          value={pattern.pickup_area_label}
+          onChange={(e) => onAreaChange(e.target.value)}
+          className="outline-none text-xs flex-1 min-w-0"
+          style={areaSelectStyle()}
+          aria-label="迎のエリア"
+        >
+          <option value="">エリア選択</option>
+          {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+        </select>
+        <input
+          type="time"
+          step={TIME_STEP_SECONDS}
+          value={pattern.pickup_time}
+          onChange={(e) => onTimeChange(e.target.value)}
+          className="outline-none text-xs shrink-0"
+          style={timeInputStyle()}
+          aria-label="迎の時間"
+        />
+      </div>
+      <MemoInput
+        icon="📍"
+        value={pattern.pickup_location}
+        onChange={onLocationChange}
+        placeholder="住所・目印（Mapsで開く）例: 大府市吉田町123"
+        ariaLabel="迎の住所メモ"
       />
     </div>
   );
@@ -591,54 +603,98 @@ type DropoffRowProps = {
   onMethodChange: (v: DropoffMethod) => void;
   onAreaChange: (v: string) => void;
   onTimeChange: (v: string) => void;
+  onLocationChange: (v: string) => void;
 };
 
 function DropoffRow({
-  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange,
+  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange, onLocationChange,
 }: DropoffRowProps) {
   return (
     <div
-      className="flex items-center gap-2 px-2.5 py-2"
+      className="flex flex-col gap-1.5 px-2.5 py-2"
       style={{
         background: 'var(--green-pale)',
         border: '1px solid rgba(42,122,82,0.15)',
         borderRadius: '8px',
       }}
     >
-      <span
-        className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
-        style={{ color: 'var(--green)', width: LABEL_WIDTH }}
-      >
-        送 🚗→
+      <div className="flex items-center gap-2">
+        <span
+          className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
+          style={{ color: 'var(--green)', width: LABEL_WIDTH }}
+        >
+          送 🚗→
+        </span>
+        <select
+          value={pattern.dropoff_method}
+          onChange={(e) => onMethodChange(e.target.value as DropoffMethod)}
+          className="outline-none text-xs font-medium shrink-0"
+          style={methodSelectStyle('var(--green)')}
+        >
+          {Object.entries(DROPOFF_METHOD_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <select
+          value={pattern.dropoff_area_label}
+          onChange={(e) => onAreaChange(e.target.value)}
+          className="outline-none text-xs flex-1 min-w-0"
+          style={areaSelectStyle()}
+          aria-label="送のエリア"
+        >
+          <option value="">エリア選択</option>
+          {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+        </select>
+        <input
+          type="time"
+          step={TIME_STEP_SECONDS}
+          value={pattern.dropoff_time}
+          onChange={(e) => onTimeChange(e.target.value)}
+          className="outline-none text-xs shrink-0"
+          style={timeInputStyle()}
+          aria-label="送の時間"
+        />
+      </div>
+      <MemoInput
+        icon="📍"
+        value={pattern.dropoff_location}
+        onChange={onLocationChange}
+        placeholder="住所・目印（Mapsで開く）例: 自宅 玄関前"
+        ariaLabel="送の住所メモ"
+      />
+    </div>
+  );
+}
+
+/* ---------- 住所メモ入力（Phase 14: 送迎表で Google Maps 起動に使用） ---------- */
+type MemoInputProps = {
+  icon: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+};
+
+function MemoInput({ icon, value, onChange, placeholder, ariaLabel }: MemoInputProps) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs shrink-0" style={{ color: 'var(--ink-3)', width: LABEL_WIDTH, textAlign: 'center' }}>
+        {icon}
       </span>
-      <select
-        value={pattern.dropoff_method}
-        onChange={(e) => onMethodChange(e.target.value as DropoffMethod)}
-        className="outline-none text-xs font-medium shrink-0"
-        style={methodSelectStyle('var(--green)')}
-      >
-        {Object.entries(DROPOFF_METHOD_LABELS).map(([k, v]) => (
-          <option key={k} value={k}>{v}</option>
-        ))}
-      </select>
-      <select
-        value={pattern.dropoff_area_label}
-        onChange={(e) => onAreaChange(e.target.value)}
-        className="outline-none text-xs flex-1 min-w-0"
-        style={areaSelectStyle()}
-        aria-label="送のエリア"
-      >
-        <option value="">エリア選択</option>
-        {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
-      </select>
       <input
-        type="time"
-        step={TIME_STEP_SECONDS}
-        value={pattern.dropoff_time}
-        onChange={(e) => onTimeChange(e.target.value)}
-        className="outline-none text-xs shrink-0"
-        style={timeInputStyle()}
-        aria-label="送の時間"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className="outline-none text-xs flex-1 min-w-0"
+        style={{
+          background: 'var(--surface)',
+          color: 'var(--ink)',
+          border: '1px solid var(--rule)',
+          borderRadius: '6px',
+          padding: '6px 10px',
+        }}
       />
     </div>
   );

@@ -243,11 +243,12 @@
             <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
         </thead>
         <tbody>
-            <tr><td>14-1</td><td>Google Maps URL ビルダーユーティリティ新規</td><td>src/lib/utils/googleMaps.ts</td><td class="status-todo">未着手</td><td>0%</td><td>search/?api=1&query= で iOS/Android アプリ自動起動</td></tr>
-            <tr><td>14-2</td><td>児童モーダル: 住所メモ欄を迎/送各カードの2行目に復活</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>プレースホルダ「住所・目印（Mapsで開く）」</td></tr>
-            <tr><td>14-3</td><td>送迎表: 場所テキストを Maps リンク化</td><td>src/components/transport/TransportDayView.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>クリックで新タブ or アプリ起動</td></tr>
-            <tr><td>14-4</td><td>reference-map.md + progress.html 更新</td><td>reference-map.md, docs/progress.html</td><td class="status-todo">未着手</td><td>0%</td><td>依存マップ維持</td></tr>
-            <tr><td>14-5</td><td>tsc + dev server 動作確認 → コミット</td><td>（全体）</td><td class="status-todo">未着手</td><td>0%</td><td>Phase 15 で /locations 連携に拡張予定</td></tr>
+            <tr><td>14-1</td><td>Google Maps URL ビルダーユーティリティ新規</td><td>src/lib/utils/googleMaps.ts</td><td class="status-done">完了</td><td>100%</td><td>search/?api=1&query= で iOS/Android アプリ自動起動</td></tr>
+            <tr><td>14-2</td><td>児童モーダル: 住所メモ欄を迎/送各カードの2行目に復活</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>MemoInput サブコンポーネントで共通化</td></tr>
+            <tr><td>14-3</td><td>送迎表: 場所テキストを Maps リンク化（TimeWithMapLink）</td><td>src/components/transport/TransportDayView.tsx, src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>schedule_entry.pattern_id 経由でパターンの location を解決</td></tr>
+            <tr><td>14-4</td><td>テナント設定のエリアリスト UI 仕上げ（時間見切れ修正・ホバー・フォーカスリング）</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ユーザー指摘「時間見切れ・スタイリッシュに」対応</td></tr>
+            <tr><td>14-5</td><td>reference-map.md + progress.html 更新</td><td>reference-map.md, docs/progress.html</td><td class="status-done">完了</td><td>100%</td><td>依存マップ維持</td></tr>
+            <tr><td>14-6</td><td>tsc 通過 → コミット</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>Phase 15 で /locations 連携に拡張予定</td></tr>
         </tbody>
     </table>
 

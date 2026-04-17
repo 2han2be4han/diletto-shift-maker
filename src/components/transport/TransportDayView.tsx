@@ -1,11 +1,14 @@
 'use client';
 
+import { openInGoogleMaps } from '@/lib/utils/googleMaps';
+
 /**
  * 日別送迎表ビュー
  * - 行: 児童名（利用予定のある児童）
  * - 列: 迎え時間 / 迎え担当 / 送り時間 / 送り担当
  * - 担当はドロップダウンで変更可能
  * - 未割り当て（is_unassigned）は赤ハイライト
+ * - 時間の下に場所メモ（児童パターン由来）を表示し、クリックで Google Maps 起動
  */
 
 type TransportChild = {
@@ -14,6 +17,8 @@ type TransportChild = {
   name: string;
   pickupTime: string | null;
   dropoffTime: string | null;
+  pickupLocation: string | null;
+  dropoffLocation: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -127,12 +132,16 @@ export default function TransportDayView({
                 </div>
               </td>
 
-              {/* 迎え時間 */}
+              {/* 迎え時間 + 場所リンク */}
               <td
                 className="px-3 py-2 text-center"
-                style={{ borderBottom: '1px solid var(--rule)', color: 'var(--accent)' }}
+                style={{ borderBottom: '1px solid var(--rule)' }}
               >
-                {child.pickupTime || '-'}
+                <TimeWithMapLink
+                  time={child.pickupTime}
+                  location={child.pickupLocation}
+                  color="var(--accent)"
+                />
               </td>
 
               {/* 迎え担当 */}
@@ -148,12 +157,16 @@ export default function TransportDayView({
                 />
               </td>
 
-              {/* 送り時間 */}
+              {/* 送り時間 + 場所リンク */}
               <td
                 className="px-3 py-2 text-center"
-                style={{ borderBottom: '1px solid var(--rule)', color: 'var(--green)' }}
+                style={{ borderBottom: '1px solid var(--rule)' }}
               >
-                {child.dropoffTime || '-'}
+                <TimeWithMapLink
+                  time={child.dropoffTime}
+                  location={child.dropoffLocation}
+                  color="var(--green)"
+                />
               </td>
 
               {/* 送り担当 */}
@@ -189,6 +202,39 @@ export default function TransportDayView({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * 時間 + 場所メモ表示（Phase 14）
+ * - 時間を色付きで表示
+ * - 場所メモが設定されていれば 🗺 アイコン付きで下に表示し、クリックで Google Maps 起動
+ */
+function TimeWithMapLink({
+  time, location, color,
+}: { time: string | null; location: string | null; color: string }) {
+  const hasLocation = !!location && location.trim().length > 0;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="font-medium" style={{ color }}>{time || '-'}</span>
+      {hasLocation && (
+        <button
+          type="button"
+          onClick={() => openInGoogleMaps(location)}
+          className="text-xs inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+          style={{
+            color,
+            background: 'transparent',
+            border: `1px dashed ${color}`,
+            maxWidth: '140px',
+          }}
+          title={`Google Maps で開く: ${location}`}
+        >
+          <span aria-hidden>🗺</span>
+          <span className="truncate" style={{ fontSize: '0.7rem' }}>{location}</span>
+        </button>
+      )}
     </div>
   );
 }
