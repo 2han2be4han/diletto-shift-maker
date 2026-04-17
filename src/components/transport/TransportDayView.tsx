@@ -217,16 +217,6 @@ export default function TransportDayView({
                         ▶
                       </span>
                       <span>{child.name}</span>
-                      {hasAnyLocation && (
-                        <span
-                          aria-hidden
-                          className="text-xs"
-                          style={{ color: 'var(--ink-3)' }}
-                          title="場所情報あり"
-                        >
-                          🗺
-                        </span>
-                      )}
                     </button>
                     {child.isUnassigned && (
                       <span
@@ -436,15 +426,6 @@ function LocationCellInline({
               {name}
             </span>
           )}
-          {clickable && location && (
-            <span
-              aria-hidden
-              className="shrink-0 opacity-50"
-              style={{ fontSize: '0.72rem' }}
-            >
-              🗺
-            </span>
-          )}
         </button>
       )}
     </td>
@@ -610,6 +591,22 @@ function StaffSelect({
           : selectedStaff?.dropoffAreaMarks) ?? [];
         return (
           <div key={i} className="flex items-center gap-1.5">
+            {/* Phase 27: マーク → 名前 の並びがマスト（ユーザー指定） */}
+            <span
+              className="shrink-0 text-right"
+              style={{
+                display: 'inline-block',
+                width: '3.2em',
+                lineHeight: 1,
+                fontSize: '0.9rem',
+                letterSpacing: '-0.05em',
+                opacity: id && !isMissing ? 0.85 : 0,
+              }}
+              title={id && !isMissing && marks.length > 0 ? `この日の担当エリア: ${marks.join(' ')}` : undefined}
+              aria-label={id && !isMissing && marks.length > 0 ? `担当エリア ${marks.join(' ')}` : undefined}
+            >
+              {id && !isMissing ? marks.join('') : ''}
+            </span>
             <select
               value={id}
               onChange={(e) => handleChange(i, e.target.value)}
@@ -640,21 +637,6 @@ function StaffSelect({
                 </option>
               ))}
             </select>
-            {id && !isMissing && marks.length > 0 && (
-              <span
-                className="shrink-0"
-                style={{
-                  lineHeight: 1,
-                  fontSize: '0.88rem',
-                  letterSpacing: '-0.05em',
-                  opacity: 0.8,
-                }}
-                title={`この日の担当エリア: ${marks.join(' ')}`}
-                aria-label={`担当エリア ${marks.join(' ')}`}
-              >
-                {marks.join('')}
-              </span>
-            )}
           </div>
         );
       })}
