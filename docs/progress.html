@@ -504,6 +504,19 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 27-D: 職員対応エリアの迎/送分割（バックエンド先行）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>27-D-1</td><td>Migration 0026（staff に pickup_transport_areas / dropoff_transport_areas 追加 + 既存値コピー）</td><td>supabase/migrations/0026_staff_split_transport_areas.sql</td><td class="status-done">完了</td><td>100%</td><td>ファイル作成のみ。ユーザーが Supabase Studio で手動適用</td></tr>
+            <tr><td>27-D-2</td><td>StaffRow 型に新カラム追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>必須フィールド。UI 未更新箇所では transport_areas と同期</td></tr>
+            <tr><td>27-D-3</td><td>staff API 3 本更新: POST / PATCH / invite が新カラム受け入れ（未指定時は transport_areas フォールバック）</td><td>src/app/api/staff/route.ts + /[id]/route.ts + /invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-D-4</td><td>generateTransport に direction 引数追加。pickup/dropoff でエリアフィルタ分岐。新カラム空時は旧 transport_areas フォールバック</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>外部シグネチャ不変</td></tr>
+            <tr><td>27-D-5</td><td>UI 側（settings/staff モーダル D-4 分割 + 一覧ポップ化 G）</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>モーダル: 迎対応(accent)/送り対応(green) 2 セクション。一覧: 迎/送を別チップで色分け（accent-pale/green-pale）。モバイル行も同様</td></tr>
+            <tr><td>27-D-6</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

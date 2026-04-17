@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
       default_start_time: body.default_start_time ?? null,
       default_end_time: body.default_end_time ?? null,
       transport_areas: body.transport_areas ?? [],
+      /* Phase 27-D: 未指定時は transport_areas にフォールバック（互換維持） */
+      pickup_transport_areas: body.pickup_transport_areas ?? body.transport_areas ?? [],
+      dropoff_transport_areas: body.dropoff_transport_areas ?? body.transport_areas ?? [],
       qualifications: body.qualifications ?? [],
       is_qualified: body.is_qualified ?? false,
     })

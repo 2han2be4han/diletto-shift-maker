@@ -90,6 +90,7 @@ export function generateTransportAssignments(
           date,
           time: pickupTime,
           areaLabel,
+          direction: 'pickup',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
         })
@@ -103,6 +104,7 @@ export function generateTransportAssignments(
           date,
           time: dropoffTime,
           areaLabel,
+          direction: 'dropoff',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
         })
@@ -134,6 +136,7 @@ function selectStaff({
   date,
   time,
   areaLabel,
+  direction,
   staffAssignCount,
   maxStaff,
 }: {
@@ -142,6 +145,8 @@ function selectStaff({
   date: string;
   time: string | null;
   areaLabel: string | null;
+  /** Phase 27-D: 迎=pickup, 送=dropoff。エリアフィルタに使う職員側カラムを切替 */
+  direction: 'pickup' | 'dropoff';
   staffAssignCount: Map<string, number>;
   maxStaff: number;
 }): StaffRow[] {
@@ -156,9 +161,15 @@ function selectStaff({
     /* ② 送迎時間が勤務時間内か */
     if (!isTimeInRange(time, shift.start_time, shift.end_time)) return false;
 
-    /* ③ エリア一致（エリア指定がある場合） */
-    if (areaLabel && s.transport_areas.length > 0) {
-      if (!s.transport_areas.includes(areaLabel)) return false;
+    /* ③ エリア一致（エリア指定がある場合）。
+       Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。
+       両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。 */
+    if (areaLabel) {
+      const directionAreas =
+        direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
+      const effective =
+        (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
+      if (effective.length > 0 && !effective.includes(areaLabel)) return false;
     }
 
     return true;
