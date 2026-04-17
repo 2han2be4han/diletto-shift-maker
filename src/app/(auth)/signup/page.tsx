@@ -171,7 +171,7 @@ export default function SignupPage() {
                   type="text"
                   value={tenantName}
                   onChange={(e) => setTenantName(e.target.value)}
-                  placeholder="Diletto 藤江"
+                  placeholder="○○デイサービス"
                   required
                   maxLength={80}
                   className="w-full outline-none"
