@@ -27,14 +27,14 @@ const TYPE_LABELS = {
 
 type Props = {
   staff: StaffRow[];
-  /** 現在のユーザが出勤中 admin か（承認ボタン活性/非活性の判定） */
+  /** 現在のユーザが admin か（承認ボタン表示判定） */
   canApprove: boolean;
 };
 
 /**
  * Phase 25: シフト変更申請の承認キュー。
- * admin のみ表示（親側で制御）。承認/却下操作は出勤中 admin のみ。
- * 出勤中でない admin は情報参照のみ。
+ * admin のみ表示（親側で制御）。Phase 25-C-7a で出勤中制約を撤廃し、
+ * admin ロールなら承認/却下操作が可能。
  */
 export default function ApprovalQueue({ staff, canApprove }: Props) {
   const [requests, setRequests] = useState<ShiftChangeRequestRow[]>([]);
@@ -93,11 +93,6 @@ export default function ApprovalQueue({ staff, canApprove }: Props) {
         <span className="font-bold" style={{ color: 'var(--accent)' }}>
           🔔 シフト変更申請 {requests.length}件 承認待ち
         </span>
-        {!canApprove && (
-          <Badge variant="warning">
-            承認は出勤中の管理者のみ（閲覧のみ）
-          </Badge>
-        )}
       </div>
       <ul className="flex flex-col gap-1.5">
         {requests.map((r) => (
@@ -241,14 +236,6 @@ export default function ApprovalQueue({ staff, canApprove }: Props) {
               )}
             </div>
 
-            {!canApprove && (
-              <div
-                className="px-2 py-1 rounded text-xs"
-                style={{ background: 'var(--gold-pale)', color: 'var(--gold)' }}
-              >
-                現在出勤中の管理者のみ承認/却下できます。
-              </div>
-            )}
           </div>
         )}
       </Modal>

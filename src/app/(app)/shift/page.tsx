@@ -67,16 +67,16 @@ export default function ShiftPage() {
   /* Phase 26: 確定済シフトでも「編集モード」ON でセル編集可能にする */
   const [editMode, setEditMode] = useState(false);
 
-  /* Phase 25: 自分の role と出勤中admin判定（承認UI表示用） */
+  /* Phase 25: 自分の role（承認UI表示用）。
+     Phase 25-C-7a で出勤中制約を撤廃したため on_duty_admin は参照しない */
   const [myRole, setMyRole] = useState<StaffRole | null>(null);
-  const [onDutyAdmin, setOnDutyAdmin] = useState(false);
+  const isAdmin = myRole === 'admin';
 
   useEffect(() => {
     void fetch('/api/me')
       .then((r) => r.json())
       .then((d) => {
         setMyRole(d.staff?.role ?? null);
-        setOnDutyAdmin(Boolean(d.on_duty_admin));
       })
       .catch(() => {});
   }, []);
@@ -317,9 +317,9 @@ export default function ShiftPage() {
       <Header title="シフト表" showMonthSelector actions={headerActions} />
 
       <div className="flex-1 overflow-auto p-6">
-        {/* Phase 25: admin のみ承認キュー表示。出勤中でないと承認ボタン非活性 */}
-        {myRole === 'admin' && (
-          <ApprovalQueue staff={staff} canApprove={onDutyAdmin} />
+        {/* Phase 25: admin のみ承認キュー表示。Phase 25-C-7a で出勤中制約撤廃 */}
+        {isAdmin && (
+          <ApprovalQueue staff={staff} canApprove={isAdmin} />
         )}
 
         {/* Phase 26: h2 年月 + 再生成/確定ボタンは Header actions に移設済。ここはバッジのみ。 */}

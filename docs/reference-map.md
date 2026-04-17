@@ -308,3 +308,27 @@
 | `src/app/(app)/settings/tenant/page.tsx` | 「送迎担当の最低退勤時刻」time input 追加 |
 | `src/app/api/staff/invite/route.ts` | redirectTo を /auth/confirm?next=/auth/set-password に |
 
+---
+
+## Phase 25-C-7a: admin 承認の出勤制約撤廃（2026-04-17）
+
+### 変更
+- `src/app/api/shift-change-requests/[id]/route.ts`: approve/reject ゲートを `requireOnDutyAdmin()` → `requireRole('admin')` に変更
+- `src/components/shift/ApprovalQueue.tsx`: 「承認は出勤中の管理者のみ」バッジ削除、「現在出勤中の管理者のみ承認/却下できます。」注意文言削除、コメント更新
+- `src/app/(app)/shift/page.tsx`: `onDutyAdmin` state → `isAdmin = myRole === 'admin'` に変更、`/api/me` の `on_duty_admin` 参照削除、`canApprove={isAdmin}` に
+
+### 残置（削除しない／将来のメール通知で再利用）
+- `src/lib/auth/requireRole.ts` の `requireOnDutyAdmin`
+- `src/lib/auth/isOnDutyAdmin.ts`
+- `src/app/api/me/route.ts` の `on_duty_admin` レスポンスフィールド
+
+### ロール参照
+- `shift_change_requests` approve/reject: admin ロール（API で `requireRole('admin')`）
+- `shift_change_requests` cancel: 申請者本人（`requireAuthenticated` + staff_id 一致）
+
+## Phase 25-C-7b: /settings/tenant 文言調整（2026-04-17）
+
+### 変更
+- `src/app/(app)/settings/tenant/page.tsx`:
+  - ラベル「送迎担当の最低退勤時刻」 → 「送迎候補に含める退勤時刻の下限」
+  - 説明文「この時刻以降に退勤する職員のみ、送迎表で割当候補に含めます（標準 16:31 = 送迎最早 16:30 の直後）。」 → 「この時刻より早く退勤する職員は、送迎表の担当候補から外します。例：16:31 にすると、送り送迎 16:30 開始時に退勤前の職員も候補に残せます。」
