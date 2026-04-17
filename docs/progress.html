@@ -50,11 +50,11 @@
             <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
         </thead>
         <tbody>
-            <tr><td>1-1</td><td>8 既存テーブル作成 SQL（tenants, staff, children, child_transport_patterns, schedule_entries, shift_requests, shift_assignments, transport_assignments）</td><td>supabase/migrations/0001_initial_schema.sql</td><td class="status-doing">進行中</td><td>0%</td><td>全テーブル tenant_id 必須</td></tr>
-            <tr><td>1-2</td><td>新設テーブル: comments, comment_images, notifications, child_dropoff_locations</td><td>supabase/migrations/0002_comments_and_notifications.sql</td><td class="status-todo">未着手</td><td>0%</td><td>ポリモーフィック設計</td></tr>
-            <tr><td>1-3</td><td>RLS ポリシー（全テーブル tenant 分離・ロール別）</td><td>supabase/migrations/0003_rls_policies.sql</td><td class="status-todo">未着手</td><td>0%</td><td>viewer は自分のみ編集可</td></tr>
-            <tr><td>1-4</td><td>Storage バケット（comment_images, child_location_images）</td><td>supabase/migrations/0004_storage.sql</td><td class="status-todo">未着手</td><td>0%</td><td>tenant 別 prefix</td></tr>
-            <tr><td>1-5</td><td>auth.users → staff リンクトリガー</td><td>supabase/migrations/0005_auth_trigger.sql</td><td class="status-todo">未着手</td><td>0%</td><td>email 一致で自動リンク</td></tr>
+            <tr><td>1-1</td><td>8 既存テーブル作成 SQL（tenants, staff, children, child_transport_patterns, schedule_entries, shift_requests, shift_assignments, transport_assignments）</td><td>supabase/migrations/0001_initial_schema.sql</td><td class="status-done">完了</td><td>100%</td><td>全テーブル tenant_id 必須</td></tr>
+            <tr><td>1-2</td><td>新設テーブル: comments, comment_images, notifications, child_dropoff_locations</td><td>supabase/migrations/0002_comments_and_notifications.sql</td><td class="status-done">完了</td><td>100%</td><td>ポリモーフィック設計</td></tr>
+            <tr><td>1-3</td><td>RLS ポリシー（全テーブル tenant 分離・ロール別）</td><td>supabase/migrations/0003_rls_policies.sql</td><td class="status-done">完了</td><td>100%</td><td>viewer は自分のみ編集可</td></tr>
+            <tr><td>1-4</td><td>Storage バケット（comment_images, child_location_images）</td><td>supabase/migrations/0004_storage.sql</td><td class="status-done">完了</td><td>100%</td><td>tenant 別 prefix</td></tr>
+            <tr><td>1-5</td><td>auth.users → staff リンクトリガー</td><td>supabase/migrations/0005_auth_trigger.sql</td><td class="status-done">完了</td><td>100%</td><td>email 一致で自動リンク</td></tr>
         </tbody>
     </table>
 
@@ -62,9 +62,9 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>2-1</td><td>CommentRow / CommentStatus / CommentTargetType 型追加</td><td>src/types/index.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>2-2</td><td>NotificationRow 型追加</td><td>src/types/index.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>2-3</td><td>ChildDropoffLocationRow 型追加</td><td>src/types/index.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>2-1</td><td>CommentRow / CommentStatus / CommentTargetType 型追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>2-2</td><td>NotificationRow 型追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>2-3</td><td>ChildDropoffLocationRow 型追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -72,12 +72,12 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>3-1</td><td>middleware: Supabase 設定有時は本認証、無時は dev スキップ</td><td>src/middleware.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>3-2</td><td>getCurrentStaff() helper（セッション→staff レコード）</td><td>src/lib/auth/getCurrentStaff.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>3-3</td><td>requireRole() helper（admin / editor / viewer ガード）</td><td>src/lib/auth/requireRole.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>3-4</td><td>ログインページ: Magic Link + パスワード両対応</td><td>src/app/(auth)/login/page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>3-5</td><td>認証コールバック route（/auth/callback）</td><td>src/app/auth/callback/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>3-6</td><td>ログアウト route</td><td>src/app/auth/signout/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>3-1</td><td>middleware: Supabase 設定有時は本認証、無時は dev スキップ</td><td>src/middleware.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>3-2</td><td>getCurrentStaff() helper（セッション→staff レコード）</td><td>src/lib/auth/getCurrentStaff.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>3-3</td><td>requireRole() helper（admin / editor / viewer ガード）</td><td>src/lib/auth/requireRole.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>3-4</td><td>ログインページ: Magic Link + パスワード両対応</td><td>src/app/(auth)/login/page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>3-5</td><td>認証コールバック route（/auth/callback）</td><td>src/app/auth/callback/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>3-6</td><td>ログアウト route</td><td>src/app/auth/signout/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -85,10 +85,10 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>4-1</td><td>ロール判定でサイドバー内容を変える</td><td>src/components/layout/Sidebar.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>4-2</td><td>スタッフ向けダッシュボード（①休み希望 ②送迎表 ③シフト ④送り場所 + 自分宛通知）</td><td>src/app/(app)/dashboard/page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>4-3</td><td>職員招待 API（admin → Supabase invite）</td><td>src/app/api/staff/invite/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>4-4</td><td>settings/staff から招待ボタン連携</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>4-1</td><td>ロール判定でサイドバー内容を変える</td><td>src/components/layout/Sidebar.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>4-2</td><td>スタッフ向けダッシュボード（①休み希望 ②送迎表 ③シフト ④送り場所 + 自分宛通知）</td><td>src/app/(app)/dashboard/page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>4-3</td><td>職員招待 API（admin → Supabase invite）</td><td>src/app/api/staff/invite/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>4-4</td><td>settings/staff から招待ボタン連携</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -96,14 +96,14 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>5-1</td><td>/settings/tenant → tenants 読み書き</td><td>settings/tenant/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-2</td><td>/settings/staff → staff 読み書き（招待含む）</td><td>settings/staff/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-3</td><td>/settings/children → children + patterns 読み書き</td><td>settings/children/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-4</td><td>/schedule → schedule_entries 読み書き</td><td>schedule/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-5</td><td>/request → shift_requests 読み書き（自分の分のみ）</td><td>request/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-6</td><td>/shift → shift_assignments 読み書き</td><td>shift/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-7</td><td>/transport → transport_assignments 読み書き</td><td>transport/page.tsx + api</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>5-8</td><td>旧 /request/submit 撤去（個別ログインに一本化）</td><td>src/app/request/submit/*</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>5-1</td><td>/settings/tenant → tenants 読み書き</td><td>settings/tenant/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-2</td><td>/settings/staff → staff 読み書き（招待含む）</td><td>settings/staff/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-3</td><td>/settings/children → children + patterns 読み書き</td><td>settings/children/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-4</td><td>/schedule → schedule_entries 読み書き</td><td>schedule/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-5</td><td>/request → shift_requests 読み書き（自分の分のみ）</td><td>request/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-6</td><td>/shift → shift_assignments 読み書き</td><td>shift/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-7</td><td>/transport → transport_assignments 読み書き</td><td>transport/page.tsx + api</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>5-8</td><td>旧 /request/submit 撤去（個別ログインに一本化）</td><td>src/app/request/submit/*</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -111,9 +111,9 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>6-1</td><td>/locations ページ新設（児童×送り場所一覧）</td><td>src/app/(app)/locations/page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>6-2</td><td>画像アップロード UI（Supabase Storage）</td><td>components/locations/LocationCard.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>6-3</td><td>CRUD API（admin/editor 書き込み、viewer 閲覧）</td><td>src/app/api/locations/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>6-1</td><td>/locations ページ新設（児童×送り場所一覧）</td><td>src/app/(app)/locations/page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>6-2</td><td>画像アップロード UI（Supabase Storage）</td><td>components/locations/LocationCard.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>6-3</td><td>CRUD API（admin/editor 書き込み、viewer 閲覧）</td><td>src/app/api/locations/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -121,11 +121,11 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>7-1</td><td>CommentThread コンポーネント（汎用）</td><td>components/comments/CommentThread.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>7-2</td><td>画像添付（Storage アップロード）</td><td>components/comments/CommentImageUpload.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>7-3</td><td>コメント投稿 API（status=pending で作成）</td><td>src/app/api/comments/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>7-4</td><td>承認/却下 API（admin のみ）→ approved 時に他職員へ通知</td><td>src/app/api/comments/[id]/approve/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>7-5</td><td>4 画面にコメントエリア組み込み（休み希望・送迎・シフト・送り場所）</td><td>各 page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>7-1</td><td>CommentThread コンポーネント（汎用）</td><td>components/comments/CommentThread.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>7-2</td><td>画像添付（Storage アップロード）</td><td>components/comments/CommentImageUpload.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>7-3</td><td>コメント投稿 API（status=pending で作成）</td><td>src/app/api/comments/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>7-4</td><td>承認/却下 API（admin のみ）→ approved 時に他職員へ通知</td><td>src/app/api/comments/[id]/approve/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>7-5</td><td>4 画面にコメントエリア組み込み（休み希望・送迎・シフト・送り場所）</td><td>各 page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -133,10 +133,10 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>8-1</td><td>ヘッダーにベルアイコン + 未読件数</td><td>components/layout/NotificationBell.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>8-2</td><td>通知一覧ポップオーバー</td><td>components/layout/NotificationPopover.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>8-3</td><td>通知 API（list / mark_read）</td><td>src/app/api/notifications/route.ts</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>8-4</td><td>コメント投稿・承認時に通知 insert（DB トリガー）</td><td>migrations/0006_notification_triggers.sql</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>8-1</td><td>ヘッダーにベルアイコン + 未読件数</td><td>components/layout/NotificationBell.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>8-2</td><td>通知一覧ポップオーバー</td><td>components/layout/NotificationPopover.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>8-3</td><td>通知 API（list / mark_read）</td><td>src/app/api/notifications/route.ts</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>8-4</td><td>コメント投稿・承認時に通知 insert（DB トリガー）</td><td>migrations/0006_notification_triggers.sql</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -147,7 +147,7 @@
             <tr><td>10-1</td><td>Vercel 環境変数設定（NEXT_PUBLIC_SUPABASE_URL / ANON_KEY / SERVICE_ROLE_KEY）</td><td>Vercel Dashboard</td><td class="status-done">完了</td><td>100%</td></tr>
             <tr><td>10-2</td><td>main ブランチにマージして production デプロイ</td><td>git</td><td class="status-done">完了</td><td>100%</td></tr>
             <tr><td>10-3</td><td>Supabase Auth の Site URL と Redirect URL にドメイン追加</td><td>Supabase Dashboard</td><td class="status-done">完了</td><td>100%</td></tr>
-            <tr><td>10-4</td><td>本番ドメインで動作確認（ログイン・データ取得・招待）</td><td>shift-maker.diletto-s.com</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>10-4</td><td>本番ドメインで動作確認（ログイン・データ取得・招待）</td><td>shift-maker.diletto-s.com</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 
@@ -155,12 +155,12 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th></tr></thead>
         <tbody>
-            <tr><td>9-1</td><td>viewer は編集ボタン非表示（全画面）</td><td>各 page.tsx</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>9-2</td><td>admin 以外は /settings/* にアクセス時 403</td><td>settings/* layout</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>9-3</td><td>ユーザー向けセットアップガイド（Supabase 手順）</td><td>docs/setup-supabase.md</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>9-4</td><td>.env.example 更新（新規キーがあれば）</td><td>.env.example</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>9-5</td><td>error-log.md / reference-map.md 更新</td><td>docs/*</td><td class="status-todo">未着手</td><td>0%</td></tr>
-            <tr><td>9-6</td><td>npm run build / dev 動作確認</td><td>（全体）</td><td class="status-todo">未着手</td><td>0%</td></tr>
+            <tr><td>9-1</td><td>viewer は編集ボタン非表示（全画面）</td><td>各 page.tsx</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>9-2</td><td>admin 以外は /settings/* にアクセス時 403</td><td>settings/* layout</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>9-3</td><td>ユーザー向けセットアップガイド（Supabase 手順）</td><td>docs/setup-supabase.md</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>9-4</td><td>.env.example 更新（新規キーがあれば）</td><td>.env.example</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>9-5</td><td>error-log.md / reference-map.md 更新</td><td>docs/*</td><td class="status-done">完了</td><td>100%</td></tr>
+            <tr><td>9-6</td><td>npm run build / dev 動作確認</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td></tr>
         </tbody>
     </table>
 

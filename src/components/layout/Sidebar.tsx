@@ -179,6 +179,25 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
         </ul>
       </div>
       )}
+
+      {/* サインアウト（常時表示） */}
+      <div className={`px-2.5 pb-4 ${canSeeBilling ? '' : 'mt-auto border-t pt-4'}`} style={{ borderColor: 'var(--rule)' }}>
+        <form action="/auth/signout" method="POST">
+          <button
+            type="submit"
+            className="w-full flex items-center h-10 px-2.5 rounded-md transition-all hover:bg-[var(--red-pale)]"
+            title={!isOpen ? 'サインアウト' : undefined}
+            style={{ color: 'var(--ink-3)' }}
+          >
+            <span className="text-xl w-7 flex items-center justify-center shrink-0">🚪</span>
+            <span
+              className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+            >
+              サインアウト
+            </span>
+          </button>
+        </form>
+      </div>
     </div>
   );
 

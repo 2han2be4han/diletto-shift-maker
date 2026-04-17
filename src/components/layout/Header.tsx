@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useSidebarToggle } from '@/components/layout/AppShell';
+import NotificationBell from '@/components/layout/NotificationBell';
 
 type HeaderProps = {
   title: string;
@@ -48,11 +49,10 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
         </h1>
       </div>
 
-      {actions && (
-        <div className="flex items-center gap-2">
-          {actions}
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {actions}
+        <NotificationBell />
+      </div>
     </header>
   );
 }
