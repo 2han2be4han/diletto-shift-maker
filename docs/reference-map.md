@@ -29,7 +29,9 @@
 | employment_type | text | `src/types/index.ts` (StaffRow, EmploymentType) |
 | default_start_time | time | `src/types/index.ts` (StaffRow) |
 | default_end_time | time | `src/types/index.ts` (StaffRow) |
-| transport_areas | text[] | `src/types/index.ts` (StaffRow) |
+| transport_areas | text[] | `src/types/index.ts` (StaffRow)。**旧・後方互換**（Phase 27-D 以降は pickup_/dropoff_ を使用） |
+| pickup_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（迎担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
+| dropoff_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（送担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
 | is_qualified | boolean | `src/types/index.ts` (StaffRow) |
 | created_at | timestamptz | `src/types/index.ts` (StaffRow) |
 | last_invited_at | timestamptz | `src/app/api/staff/invite/route.ts`, `src/app/api/staff/[id]/resend-invite/route.ts`（招待クールダウン判定） |
@@ -308,3 +310,38 @@
 | `src/app/(app)/settings/tenant/page.tsx` | 「送迎担当の最低退勤時刻」time input 追加 |
 | `src/app/api/staff/invite/route.ts` | redirectTo を /auth/confirm?next=/auth/set-password に |
 
+---
+
+## Phase 27-D: 職員対応エリアの迎/送分割（バックエンド先行・2026-04-17）
+
+### 新規 migration
+- `supabase/migrations/0026_staff_split_transport_areas.sql`
+  - staff に `pickup_transport_areas text[]` と `dropoff_transport_areas text[]` 追加（default '{}'）
+  - 既存 `transport_areas` を両カラムにコピー（1 回限り、既に値のあるレコードはスキップ）
+  - 旧 `transport_areas` は残置・コメント更新
+  - **本番 Supabase への適用はユーザー手動**（Supabase Studio で SQL 実行）
+
+### 型変更
+- `StaffRow` に `pickup_transport_areas: string[]` / `dropoff_transport_areas: string[]` 追加（必須）
+  - 旧 `transport_areas` は残置・互換用
+
+### API 変更
+- `POST /api/staff/route.ts`: `pickup_transport_areas` / `dropoff_transport_areas` 受け入れ。未指定時は `transport_areas` にフォールバック
+- `PATCH /api/staff/[id]/route.ts`: allowedFields に 2 カラム追加
+- `POST /api/staff/invite/route.ts`: body 型拡張 + insert で 2 カラム設定
+
+### ロジック変更
+- `src/lib/logic/generateTransport.ts`:
+  - `selectStaff()` に `direction: 'pickup' | 'dropoff'` 引数追加
+  - 迎は `s.pickup_transport_areas`、送は `s.dropoff_transport_areas` でフィルタ
+  - 両カラムが空（migration 未適用 or 未設定）の場合は旧 `s.transport_areas` にフォールバック
+  - 外部公開の `generateTransportAssignments` シグネチャは不変
+
+### UI（未実装・後続タスク）
+- `src/app/(app)/settings/staff/page.tsx` の編集モーダルで迎/送分割（D-4）
+- 一覧テーブルのチップ化（G）
+- いずれも migration 適用後、別ブランチで実装予定
+
+### 触らない / 残置
+- `src/app/(app)/settings/staff/page.tsx` の既存 `transport_areas` 参照（UI 未更新のため残す。新カラム空時のフォールバックが効く）
+- `src/app/(app)/settings/tenant/page.tsx` / `transport/page.tsx` / `output/daily/page.tsx` / `settings/children/page.tsx` の `settings.transport_areas`（**テナント設定**側で別モノ・変更不要）

@@ -24,7 +24,8 @@ export async function PATCH(
   const allowed = [
     'name', 'email', 'role', 'employment_type',
     'default_start_time', 'default_end_time',
-    'transport_areas', 'qualifications', 'is_qualified',
+    'transport_areas', 'pickup_transport_areas', 'dropoff_transport_areas',
+    'qualifications', 'is_qualified',
     'is_active',
   ] as const;
   const payload: Record<string, unknown> = {};

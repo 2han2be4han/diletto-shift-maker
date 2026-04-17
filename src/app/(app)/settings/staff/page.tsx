@@ -37,6 +37,9 @@ const emptyStaff = (): EditableStaff => ({
   default_start_time: DEFAULT_START_TIME,
   default_end_time: DEFAULT_END_TIME,
   transport_areas: [],
+  /* Phase 27-D: 未 UI。保存時に transport_areas と同期（D-4 UI で上書き） */
+  pickup_transport_areas: [],
+  dropoff_transport_areas: [],
   qualifications: [],
   is_qualified: false,
   display_order: null,
@@ -138,6 +141,9 @@ export default function StaffSettingsPage() {
       default_start_time: s.default_start_time ?? DEFAULT_START_TIME,
       default_end_time: s.default_end_time ?? DEFAULT_END_TIME,
       transport_areas: s.transport_areas,
+      /* Phase 27-D: 未 UI。現状は StaffRow の値をそのまま引き継ぐ（未適用テナントでは []） */
+      pickup_transport_areas: s.pickup_transport_areas ?? [],
+      dropoff_transport_areas: s.dropoff_transport_areas ?? [],
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
       display_order: s.display_order,

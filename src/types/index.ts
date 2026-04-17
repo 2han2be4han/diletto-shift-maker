@@ -54,6 +54,11 @@ export type StaffRow = {
   default_start_time: string | null;
   default_end_time: string | null;
   transport_areas: string[];
+  /** Phase 27-D: 迎対応エリア。migration 0026 適用前の古いレコードでは空配列。
+   *  旧 transport_areas を読む側は、空配列の場合 transport_areas へフォールバックして扱うこと。 */
+  pickup_transport_areas: string[];
+  /** Phase 27-D: 送り対応エリア。上と同様のフォールバック運用。 */
+  dropoff_transport_areas: string[];
   qualifications: string[];
   is_qualified: boolean;
   /** Phase 24: 一覧・シフト表の表示順。NULL は name フォールバック */
