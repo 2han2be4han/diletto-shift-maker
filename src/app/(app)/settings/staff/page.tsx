@@ -170,7 +170,10 @@ export default function StaffSettingsPage() {
             employment_type: editing.employment_type,
             default_start_time: editing.default_start_time,
             default_end_time: editing.default_end_time,
-            transport_areas: editing.transport_areas,
+            /* Phase 27-D: transport_areas は pickup ∪ dropoff のユニオンで後方互換維持 */
+            transport_areas: Array.from(new Set([...editing.pickup_transport_areas, ...editing.dropoff_transport_areas])),
+            pickup_transport_areas: editing.pickup_transport_areas,
+            dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
           }),
@@ -190,7 +193,10 @@ export default function StaffSettingsPage() {
             employment_type: editing.employment_type,
             default_start_time: editing.default_start_time,
             default_end_time: editing.default_end_time,
-            transport_areas: editing.transport_areas,
+            /* Phase 27-D: transport_areas は pickup ∪ dropoff のユニオンで後方互換維持 */
+            transport_areas: Array.from(new Set([...editing.pickup_transport_areas, ...editing.dropoff_transport_areas])),
+            pickup_transport_areas: editing.pickup_transport_areas,
+            dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
           }),
@@ -255,14 +261,15 @@ export default function StaffSettingsPage() {
     }
   };
 
-  const handleAreaToggle = (area: string) => {
+  /* Phase 27-D: 迎/送 別々にトグル */
+  const handleAreaToggle = (direction: 'pickup' | 'dropoff', area: string) => {
     if (!editing) return;
-    const has = editing.transport_areas.includes(area);
+    const key = direction === 'pickup' ? 'pickup_transport_areas' : 'dropoff_transport_areas';
+    const current = editing[key];
+    const has = current.includes(area);
     setEditing({
       ...editing,
-      transport_areas: has
-        ? editing.transport_areas.filter((a) => a !== area)
-        : [...editing.transport_areas, area],
+      [key]: has ? current.filter((a) => a !== area) : [...current, area],
     });
   };
 
@@ -465,13 +472,61 @@ export default function StaffSettingsPage() {
                   <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                    <div className="flex flex-wrap gap-x-2 gap-y-1">
-                      {s.transport_areas.map((a, idx) => (
-                        <span key={`${idx}-${a}`} className="whitespace-nowrap text-xs">{a}</span>
-                      ))}
-                      {s.transport_areas.length === 0 && <span style={{ color: 'var(--ink-3)' }}>-</span>}
-                    </div>
+                  {/* Phase 27-D+G: 迎/送をチップで分離表示。新カラム空時は旧 transport_areas にフォールバック */}
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                    {(() => {
+                      const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
+                      const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
+                      if (pickup.length === 0 && dropoff.length === 0) {
+                        return <span style={{ color: 'var(--ink-3)' }}>-</span>;
+                      }
+                      return (
+                        <div className="flex flex-col gap-1">
+                          {pickup.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[0.65rem] font-bold" style={{ color: 'var(--accent)', minWidth: '1.3em' }}>迎</span>
+                              {pickup.map((a, idx) => (
+                                <span
+                                  key={`p-${idx}-${a}`}
+                                  className="inline-flex items-center rounded-lg whitespace-nowrap"
+                                  style={{
+                                    padding: '2px 8px',
+                                    fontSize: '0.7rem',
+                                    background: 'var(--accent-pale)',
+                                    color: 'var(--accent)',
+                                    border: '1px solid var(--accent)',
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {a}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {dropoff.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[0.65rem] font-bold" style={{ color: 'var(--green)', minWidth: '1.3em' }}>送</span>
+                              {dropoff.map((a, idx) => (
+                                <span
+                                  key={`d-${idx}-${a}`}
+                                  className="inline-flex items-center rounded-lg whitespace-nowrap"
+                                  style={{
+                                    padding: '2px 8px',
+                                    fontSize: '0.7rem',
+                                    background: 'var(--green-pale)',
+                                    color: 'var(--green)',
+                                    border: '1px solid var(--green)',
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {a}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
                     {s.qualifications.length > 0 ? (
@@ -562,16 +617,44 @@ export default function StaffSettingsPage() {
                 {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
               </div>
 
-              {s.transport_areas.length > 0 && (
-                <div className="text-xs mb-1" style={{ color: 'var(--ink-2)' }}>
-                  <span className="font-medium">エリア: </span>
-                  <span className="inline-flex flex-wrap gap-x-2 gap-y-0.5">
-                    {s.transport_areas.map((a, idx) => (
-                      <span key={`${idx}-${a}`} className="whitespace-nowrap">{a}</span>
-                    ))}
-                  </span>
-                </div>
-              )}
+              {/* Phase 27-D+G: モバイル行の対応エリアも迎/送チップで表示 */}
+              {(() => {
+                const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
+                const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
+                if (pickup.length === 0 && dropoff.length === 0) return null;
+                return (
+                  <div className="flex flex-col gap-1 mb-1">
+                    {pickup.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[0.65rem] font-bold" style={{ color: 'var(--accent)' }}>迎</span>
+                        {pickup.map((a, idx) => (
+                          <span
+                            key={`p-${idx}-${a}`}
+                            className="inline-flex items-center rounded-lg whitespace-nowrap"
+                            style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: 500 }}
+                          >
+                            {a}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {dropoff.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[0.65rem] font-bold" style={{ color: 'var(--green)' }}>送</span>
+                        {dropoff.map((a, idx) => (
+                          <span
+                            key={`d-${idx}-${a}`}
+                            className="inline-flex items-center rounded-lg whitespace-nowrap"
+                            style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--green-pale)', color: 'var(--green)', border: '1px solid var(--green)', fontWeight: 500 }}
+                          >
+                            {a}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {s.qualifications.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -663,53 +746,62 @@ export default function StaffSettingsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>対応エリア</label>
-                {areaLabels.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditing({ ...editing, transport_areas: [...areaLabels] })}
-                      className="text-xs transition-colors"
-                      style={{ color: 'var(--accent)', textDecoration: 'underline' }}
-                    >
-                      全選択
-                    </button>
-                    <span className="text-xs" style={{ color: 'var(--ink-3)' }}>/</span>
-                    <button
-                      type="button"
-                      onClick={() => setEditing({ ...editing, transport_areas: [] })}
-                      className="text-xs transition-colors"
-                      style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
-                    >
-                      全解除
-                    </button>
+            {/* Phase 27-D: 対応エリアを迎/送に分割。迎=accent(青系), 送=green(緑系) */}
+            {(['pickup', 'dropoff'] as const).map((direction) => {
+              const key = direction === 'pickup' ? 'pickup_transport_areas' : 'dropoff_transport_areas';
+              const label = direction === 'pickup' ? '迎対応' : '送り対応';
+              const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+              const selected = editing[key];
+              return (
+                <div key={direction} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{label}エリア</label>
+                    {areaLabels.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ ...editing, [key]: [...areaLabels] })}
+                          className="text-xs transition-colors"
+                          style={{ color: accentVar, textDecoration: 'underline' }}
+                        >
+                          全選択
+                        </button>
+                        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>/</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ ...editing, [key]: [] })}
+                          className="text-xs transition-colors"
+                          style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
+                        >
+                          全解除
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {areaLabels.length === 0 && (
-                  <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                    （テナント設定でエリアを追加してください）
-                  </p>
-                )}
-                {areaLabels.map((area) => (
-                  <button
-                    key={area}
-                    onClick={() => handleAreaToggle(area)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
-                    style={{
-                      background: editing.transport_areas.includes(area) ? 'var(--accent)' : 'var(--bg)',
-                      color: editing.transport_areas.includes(area) ? '#fff' : 'var(--ink-2)',
-                      border: `1px solid ${editing.transport_areas.includes(area) ? 'var(--accent)' : 'var(--rule)'}`,
-                    }}
-                  >
-                    {area}
-                  </button>
-                ))}
-              </div>
-            </div>
+                  <div className="flex flex-wrap gap-2">
+                    {areaLabels.length === 0 && (
+                      <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                        （テナント設定でエリアを追加してください）
+                      </p>
+                    )}
+                    {areaLabels.map((area) => (
+                      <button
+                        key={area}
+                        onClick={() => handleAreaToggle(direction, area)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+                        style={{
+                          background: selected.includes(area) ? accentVar : 'var(--bg)',
+                          color: selected.includes(area) ? '#fff' : 'var(--ink-2)',
+                          border: `1px solid ${selected.includes(area) ? accentVar : 'var(--rule)'}`,
+                        }}
+                      >
+                        {area}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保有資格</label>

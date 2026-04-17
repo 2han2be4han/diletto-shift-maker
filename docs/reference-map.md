@@ -337,10 +337,14 @@
   - 両カラムが空（migration 未適用 or 未設定）の場合は旧 `s.transport_areas` にフォールバック
   - 外部公開の `generateTransportAssignments` シグネチャは不変
 
-### UI（未実装・後続タスク）
-- `src/app/(app)/settings/staff/page.tsx` の編集モーダルで迎/送分割（D-4）
-- 一覧テーブルのチップ化（G）
-- いずれも migration 適用後、別ブランチで実装予定
+### UI（2026-04-17 実装完了・同ブランチ追加コミット）
+- `src/app/(app)/settings/staff/page.tsx`:
+  - 編集モーダル: 「対応エリア」1 セクション → 「迎対応エリア」(accent 青系) + 「送り対応エリア」(green 緑系) 2 セクションに分割。全選択/全解除ボタンも各セクション個別
+  - `handleAreaToggle(direction, area)` に改修
+  - 保存時 `transport_areas` は pickup ∪ dropoff のユニオンをクライアント側で計算送信（旧テナント互換）
+  - 一覧テーブル: プレーンテキスト → 迎=`--accent-pale`/`--accent` チップ、送=`--green-pale`/`--green` チップで分離表示
+  - モバイルカード行も同じチップ化
+  - 新カラム空時は旧 `transport_areas` にフォールバック表示
 
 ### 触らない / 残置
 - `src/app/(app)/settings/staff/page.tsx` の既存 `transport_areas` 参照（UI 未更新のため残す。新カラム空時のフォールバックが効く）
