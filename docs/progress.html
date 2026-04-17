@@ -474,6 +474,8 @@
             <tr><td>25-C-5</td><td>利用予定モーダル: 当日の出欠ステータスUI（5段階）+ 履歴インラインパネル</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ロール編集可</td></tr>
             <tr><td>25-C-6</td><td>/request ページに ShiftChangeRequestSection（申請フォーム+自分の申請一覧）追加</td><td>src/app/(app)/request/page.tsx + src/components/request/ShiftChangeRequestSection.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>25-C-7</td><td>/shift に ApprovalQueue コンポーネント（admin のみ表示、onDutyAdmin のみ承認可）</td><td>src/app/(app)/shift/page.tsx + src/components/shift/ApprovalQueue.tsx + /api/me (on_duty_admin)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-7a</td><td>admin 承認の出勤制約撤廃: /api/shift-change-requests/[id] のゲートを requireRole('admin') に変更、ApprovalQueue の「出勤中のみ」文言削除、/shift の canApprove を role 判定に変更</td><td>src/app/api/shift-change-requests/[id]/route.ts + src/components/shift/ApprovalQueue.tsx + src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>feat/admin-approval-no-onduty-gate。requireOnDutyAdmin / isOnDutyAdmin / /api/me.on_duty_admin は通知用に残置。tsc 0 件通過</td></tr>
+            <tr><td>25-C-7b</td><td>/settings/tenant 文言調整: 「送迎担当の最低退勤時刻」→「送迎候補に含める退勤時刻の下限」、説明文に例を併記</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>feat/admin-approval-no-onduty-gate 同ブランチ</td></tr>
             <tr><td>25-C-8</td><td>職員管理: 「退職」ボタン（ソフト削除）、「復帰」ボタン、「退職者も表示」チェックボックス、退職バッジ</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>25-C-9</td><td>ずれ確認: tsc 通過 + next build 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>エラー0</td></tr>
         </tbody>
@@ -499,6 +501,29 @@
             <tr><td>25-E-1</td><td>CLAUDE.md §8 権限制御ルール刷新（出欠例外 / 退職フラグ / 承認フロー / 出欠記録 / シフト変更申請セクション追加）</td><td>CLAUDE.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>25-E-2</td><td>reference-map.md に Phase 25 変更一覧追記（新テーブル/新カラム/新APIルート/新lib/新UI）</td><td>reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>25-E-3</td><td>error-log.md 記載すべき詰まりなし（tsc/next build 一発通過）</td><td>error-log.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 27-D: 職員対応エリアの迎/送分割（バックエンド先行）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>27-D-1</td><td>Migration 0026（staff に pickup_transport_areas / dropoff_transport_areas 追加 + 既存値コピー）</td><td>supabase/migrations/0026_staff_split_transport_areas.sql</td><td class="status-done">完了</td><td>100%</td><td>ファイル作成のみ。ユーザーが Supabase Studio で手動適用</td></tr>
+            <tr><td>27-D-2</td><td>StaffRow 型に新カラム追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>必須フィールド。UI 未更新箇所では transport_areas と同期</td></tr>
+            <tr><td>27-D-3</td><td>staff API 3 本更新: POST / PATCH / invite が新カラム受け入れ（未指定時は transport_areas フォールバック）</td><td>src/app/api/staff/route.ts + /[id]/route.ts + /invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-D-4</td><td>generateTransport に direction 引数追加。pickup/dropoff でエリアフィルタ分岐。新カラム空時は旧 transport_areas フォールバック</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>外部シグネチャ不変</td></tr>
+            <tr><td>27-D-5</td><td>UI 側（settings/staff モーダル D-4 分割 + 一覧ポップ化 G）</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>モーダル: 迎対応(accent)/送り対応(green) 2 セクション。一覧: 迎/送を別チップで色分け（accent-pale/green-pale）。モバイル行も同様</td></tr>
+            <tr><td>27-D-6</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+    <div class="phase-head">Phase 27-A-1: PDF import の pattern selector（B 案・デフォルト＋明示切替）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>27-A-1-1</td><td>ParsedScheduleEntry 型に pattern_id 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>optional。undefined=未設定 / null=該当なし明示選択</td></tr>
+            <tr><td>27-A-1-2</td><td>schedule/page で過去12ヶ月の schedule_entries から child_id→最頻 pattern_id を集計 (patternUsage)。patterns も state に保持</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-3</td><td>PdfImportModal に childList / patterns / patternUsage 受け入れ。解析結果に assignPatternIds で初期 pattern_id 付与（時刻完全一致 → 最頻 → 最初の1件 → null）</td><td>src/components/schedule/PdfImportModal.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-4</td><td>PdfConfirmTable にパターン選択列追加。児童名に 🔗 (紐付け済) / ⚠ (該当なし) マーク。時刻不一致時は注記表示。未選択件数サマリ</td><td>src/components/schedule/PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>27-A-1-5</td><td>handleBulkImport で pattern_id を送信</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>API 側は Phase 5 から受け入れ対応済</td></tr>
+            <tr><td>27-A-1-6</td><td>ずれ確認: tsc 通過 / ExcelPasteModal は既存フロー（pattern_id=undefined→null）で互換</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>Excel 側の pattern selector は A-2 で対応</td></tr>
         </tbody>
     </table>
 

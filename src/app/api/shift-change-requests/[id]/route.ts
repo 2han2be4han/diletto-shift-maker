@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   requireAuthenticated,
-  requireOnDutyAdmin,
+  requireRole,
 } from '@/lib/auth/requireRole';
 import type {
   ShiftAssignmentType,
@@ -16,7 +16,9 @@ import type {
  *   body: { action: 'approve' | 'reject' | 'cancel', admin_note?: string }
  *
  * Phase 25:
- *   - approve / reject: 出勤中 admin のみ。承認時に shift_assignments を更新。
+ *   - approve / reject: admin ロールのみ。承認時に shift_assignments を更新。
+ *     (Phase 25-C-7a: 出勤中制約を撤廃。将来のメール通知で isOnDutyAdmin を
+ *      受信者フィルタとして再利用する予定)
  *   - cancel: 申請者本人が pending のまま取り下げる場合。
  */
 
@@ -69,9 +71,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'action が不正です' }, { status: 400 });
   }
 
-  /* cancel は申請者本人（認証済）、approve/reject は出勤中 admin */
+  /* cancel は申請者本人（認証済）、approve/reject は admin ロール */
   const gate =
-    action === 'cancel' ? await requireAuthenticated() : await requireOnDutyAdmin();
+    action === 'cancel' ? await requireAuthenticated() : await requireRole('admin');
   if (!gate.ok) return gate.response;
 
   const supabase = await createClient();

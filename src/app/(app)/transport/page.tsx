@@ -34,6 +34,45 @@ function defaultNextMonthStr(): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** "HH:MM:SS" → "HH:MM" */
+function normTime(t: string | null | undefined): string | null {
+  if (!t) return null;
+  return t.length >= 5 ? t.slice(0, 5) : t;
+}
+
+/**
+ * Phase 27-A-2 (interim): schedule_entry.pattern_id が未セットでも、
+ * 児童の送迎パターン群から最適な 1 件を推定する。
+ *   1. entry.pattern_id が有効ならそれを使う
+ *   2. 時刻が両方一致するパターン
+ *   3. pickup_time のみ一致
+ *   4. dropoff_time のみ一致
+ *   5. 児童の最初のパターン
+ */
+function resolvePattern(
+  entry: ScheduleEntryRow,
+  patternsByChild: Map<string, ChildTransportPatternRow[]>,
+  patternById: Map<string, ChildTransportPatternRow>,
+): ChildTransportPatternRow | undefined {
+  if (entry.pattern_id) {
+    const p = patternById.get(entry.pattern_id);
+    if (p) return p;
+  }
+  const list = patternsByChild.get(entry.child_id) ?? [];
+  if (list.length === 0) return undefined;
+  const pt = normTime(entry.pickup_time);
+  const dt = normTime(entry.dropoff_time);
+  const exact = list.find(
+    (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
+  );
+  if (exact) return exact;
+  const byPickup = list.find((p) => pt && normTime(p.pickup_time) === pt);
+  if (byPickup) return byPickup;
+  const byDropoff = list.find((p) => dt && normTime(p.dropoff_time) === dt);
+  if (byDropoff) return byDropoff;
+  return list[0];
+}
+
 type UiTransportEntry = {
   scheduleEntryId: string;
   childName: string;
@@ -50,6 +89,8 @@ type UiTransportEntry = {
   /** Phase 26: schedule_entries.pickup_method / dropoff_method ('self'=保護者送迎) */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
+  /** Phase 27: pickup_time / dropoff_time の組合せが児童の登録パターンに存在するか */
+  isPatternRegistered: boolean;
 };
 
 /** Phase 26: ローカル編集用 pending state の単位 */
@@ -175,6 +216,13 @@ export default function TransportPage() {
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
     const patternById = new Map(patterns.map((p) => [p.id, p]));
+    /* Phase 27-A-2 (interim): 児童ごとにパターンをグルーピングして pattern_id=null 時のフォールバック用に渡す */
+    const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
+    for (const p of patterns) {
+      const list = patternsByChild.get(p.child_id) ?? [];
+      list.push(p);
+      patternsByChild.set(p.child_id, list);
+    }
     /* エリアラベル → 住所 の逆引きマップ（Phase 18: 個別住所未入力時のフォールバック用） */
     const areaAddressMap = new Map<string, string>();
     for (const a of pickupAreas) {
@@ -183,11 +231,11 @@ export default function TransportPage() {
     for (const a of dropoffAreas) {
       if (a.address) areaAddressMap.set(`${a.emoji} ${a.name}`, a.address);
     }
-    return scheduleIds.map((sid) => {
+    const rows = scheduleIds.map((sid) => {
       const e = entryById.get(sid)!;
       const t = assignByEntry.get(sid);
-      /* 場所メモ: その schedule_entry に紐付く pattern から取得（Phase 14: Google Maps リンク用） */
-      const pattern = e.pattern_id ? patternById.get(e.pattern_id) : undefined;
+      /* 場所メモ: pattern_id が未セットでも児童の patterns からフォールバック推定 */
+      const pattern = resolvePattern(e, patternsByChild, patternById);
       const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
       const dropoffAreaLabel = pattern?.dropoff_area_label ?? null;
       /* 住所フォールバック優先順位:
@@ -216,6 +264,14 @@ export default function TransportPage() {
       const dropoffEmpty = dropoffNeedsStaff && dropoffStaffIds.length === 0;
       const isUnassigned = pickupEmpty || dropoffEmpty;
 
+      /* Phase 27: pickup_time / dropoff_time の組合せが児童のパターンに登録済みか判定 */
+      const childPatterns = patternsByChild.get(e.child_id) ?? [];
+      const pt = normTime(e.pickup_time);
+      const dt = normTime(e.dropoff_time);
+      const isPatternRegistered = childPatterns.some(
+        (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
+      );
+
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
@@ -231,8 +287,20 @@ export default function TransportPage() {
         isConfirmed: t?.is_confirmed ?? false,
         pickupMethod: e.pickup_method,
         dropoffMethod: e.dropoff_method,
+        isPatternRegistered,
       };
     });
+    /* Phase 27-A-2: 自動割当の並びに合わせ、pickup_time → dropoff_time → 児童名 で昇順 */
+    rows.sort((a, b) => {
+      const pa = a.pickupTime ?? '99:99';
+      const pb = b.pickupTime ?? '99:99';
+      if (pa !== pb) return pa < pb ? -1 : 1;
+      const da = a.dropoffTime ?? '99:99';
+      const db = b.dropoffTime ?? '99:99';
+      if (da !== db) return da < db ? -1 : 1;
+      return a.childName.localeCompare(b.childName, 'ja');
+    });
+    return rows;
   }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, childHomeAddressMap, patterns, pickupAreas, dropoffAreas, pendingChanges]);
 
   const unassignedTotal = useMemo(() => {
@@ -243,46 +311,53 @@ export default function TransportPage() {
   const generated = transportAssignments.length > 0;
 
   /**
-   * Phase 26.1: 職員ごとに「この日担当しているエリア絵文字」を集計
-   * - 既存 transportAssignments + 未保存 pendingChanges の両方を見る
-   * - 各 schedule_entry の pattern から pickup/dropoff_area_label を取得し、先頭絵文字を抽出
-   * - staff_id ごとにユニーク絵文字配列を返す
+   * Phase 26.1 / 27: 職員ごとに「この日担当しているエリア絵文字」を集計。
+   * 迎/送で **別々** に持つ（同じ職員でも迎担当と送担当で違うエリアを持つため）。
    */
   const staffAreaMarksForDay = useMemo(() => {
-    const result = new Map<string, string[]>();
+    const pickupResult = new Map<string, string[]>();
+    const dropoffResult = new Map<string, string[]>();
     const dayEntries = scheduleEntries.filter((e) => e.date === selectedDate);
-    const entryById = new Map(dayEntries.map((e) => [e.id, e]));
     const patternById = new Map(patterns.map((p) => [p.id, p]));
+    const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
+    for (const p of patterns) {
+      const list = patternsByChild.get(p.child_id) ?? [];
+      list.push(p);
+      patternsByChild.set(p.child_id, list);
+    }
+
+    const addMark = (target: Map<string, string[]>, staffId: string, mark: string | null) => {
+      if (!staffId || !mark) return;
+      const arr = target.get(staffId) ?? [];
+      if (!arr.includes(mark)) arr.push(mark);
+      target.set(staffId, arr);
+    };
 
     for (const entry of dayEntries) {
-      const pattern = entry.pattern_id ? patternById.get(entry.pattern_id) : undefined;
+      const pattern = resolvePattern(entry, patternsByChild, patternById);
       const pickupArea = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
       const dropoffArea = pattern?.dropoff_area_label ?? null;
       const pickupEmoji = pickupArea ? pickupArea.trim().split(' ')[0] : null;
       const dropoffEmoji = dropoffArea ? dropoffArea.trim().split(' ')[0] : null;
 
-      /* 既存 assignment or pending の staff_ids を取得 */
       const pending = pendingChanges.get(entry.id);
       const existing = transportAssignments.find((t) => t.schedule_entry_id === entry.id);
       const pickupIds = pending?.pickupStaffIds ?? existing?.pickup_staff_ids ?? [];
       const dropoffIds = pending?.dropoffStaffIds ?? existing?.dropoff_staff_ids ?? [];
 
-      const addMark = (staffId: string, mark: string | null) => {
-        if (!staffId || !mark) return;
-        const arr = result.get(staffId) ?? [];
-        if (!arr.includes(mark)) arr.push(mark);
-        result.set(staffId, arr);
-      };
-
-      pickupIds.forEach((sid) => addMark(sid, pickupEmoji));
-      dropoffIds.forEach((sid) => addMark(sid, dropoffEmoji));
+      /* Phase 27 fix: 保護者送迎（method='self'）は担当不要。stale な staff_ids が
+         残っていても迎/送マークに反映しない（🧩 保護者の絵文字が他職員に付く問題対策） */
+      if (entry.pickup_method !== 'self') {
+        pickupIds.forEach((sid) => addMark(pickupResult, sid, pickupEmoji));
+      }
+      if (entry.dropoff_method !== 'self') {
+        dropoffIds.forEach((sid) => addMark(dropoffResult, sid, dropoffEmoji));
+      }
     }
-    /* entryById は side-effect 読み取りだが、今後のデバッグ用に参照を保持 */
-    void entryById;
-    return result;
+    return { pickup: pickupResult, dropoff: dropoffResult };
   }, [scheduleEntries, selectedDate, patterns, pendingChanges, transportAssignments]);
 
-  /* Phase 26: 当日に出勤している職員を endTime / areaMarks 付きで UI へ渡す */
+  /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す */
   const availableStaffForDay = useMemo(() => {
     return staff.map((s) => {
       const shift = shiftAssignments.find(
@@ -295,7 +370,8 @@ export default function TransportPage() {
         id: s.id,
         name: s.name,
         endTime: shift?.end_time ?? null,
-        areaMarks: staffAreaMarksForDay.get(s.id) ?? [],
+        pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
+        dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],
       };
     });
   }, [staff, shiftAssignments, selectedDate, staffAreaMarksForDay]);
@@ -552,12 +628,20 @@ export default function TransportPage() {
                 isUnassigned: e.isUnassigned,
                 pickupMethod: e.pickupMethod,
                 dropoffMethod: e.dropoffMethod,
+                isPatternRegistered: e.isPatternRegistered,
               }))}
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
-              onAddPattern={() => {
-                alert('児童管理ページで送迎パターンを編集できます');
+              onAddPattern={(childName) => {
+                /* Phase 27: 児童管理ページへ遷移してそのままパターン登録できるようにする
+                   （名前で child_id を逆引き、anchor #pattern-new で該当パネルへスクロール） */
+                const target = children.find((c) => c.name === childName);
+                if (target) {
+                  window.location.href = `/settings/children?child=${target.id}#pattern-new`;
+                } else {
+                  window.location.href = '/settings/children';
+                }
               }}
               disabled={confirmed}
             />

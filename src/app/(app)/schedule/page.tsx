@@ -13,6 +13,7 @@ import { ja } from 'date-fns/locale';
 import type {
   ParsedScheduleEntry,
   ChildRow,
+  ChildTransportPatternRow,
   ScheduleEntryRow,
   AttendanceStatus,
   AttendanceAuditLogRow,
@@ -105,6 +106,9 @@ export default function SchedulePage() {
     return { year: y, month: m };
   }, [urlMonth]);
   const [children, setChildren] = useState<ChildRow[]>([]);
+  const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
+  /* Phase 27-A-1: 過去の schedule_entries 全件から child_id→pattern_id 使用頻度を集計（最頻パターン初期選択用） */
+  const [patternUsage, setPatternUsage] = useState<Map<string, string>>(new Map());
   const [cells, setCells] = useState<CellData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -134,18 +138,49 @@ export default function SchedulePage() {
       const lastDay = getDaysInMonth(new Date(year, month - 1));
       const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      const [cRes, eRes] = await Promise.all([
+      /* Phase 27-A-1: patternUsage 計算用に過去12ヶ月分の entries も別途取得（表示には使わない） */
+      const usageFrom = `${year - 1}-${String(month).padStart(2, '0')}-01`;
+      const usageTo = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+      const [cRes, eRes, uRes] = await Promise.all([
         fetch('/api/children'),
         fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+        fetch(`/api/schedule-entries?from=${usageFrom}&to=${usageTo}`),
       ]);
 
       if (!cRes.ok) throw new Error('児童の取得に失敗しました');
       if (!eRes.ok) throw new Error('利用予定の取得に失敗しました');
 
-      const { children: ch } = await cRes.json();
+      const { children: ch, patterns: pt } = await cRes.json();
       const { entries } = await eRes.json();
+      const uJson = uRes.ok ? await uRes.json() : { entries: [] };
 
       setChildren((ch as ChildRow[]).filter((c) => c.is_active));
+      setPatterns((pt as ChildTransportPatternRow[]) ?? []);
+
+      /* child_id ごとに pattern_id 使用回数を数え、最頻（同数なら最新）を初期候補に */
+      const countByChild = new Map<string, Map<string, { count: number; latest: string }>>();
+      for (const e of (uJson.entries as ScheduleEntryRow[] | undefined) ?? []) {
+        if (!e.pattern_id) continue;
+        const inner = countByChild.get(e.child_id) ?? new Map();
+        const cur = inner.get(e.pattern_id) ?? { count: 0, latest: '' };
+        inner.set(e.pattern_id, {
+          count: cur.count + 1,
+          latest: e.date > cur.latest ? e.date : cur.latest,
+        });
+        countByChild.set(e.child_id, inner);
+      }
+      const usage = new Map<string, string>();
+      for (const [childId, inner] of countByChild) {
+        let best: { patternId: string; count: number; latest: string } | null = null;
+        for (const [pid, v] of inner) {
+          if (!best || v.count > best.count || (v.count === best.count && v.latest > best.latest)) {
+            best = { patternId: pid, count: v.count, latest: v.latest };
+          }
+        }
+        if (best) usage.set(childId, best.patternId);
+      }
+      setPatternUsage(usage);
       setCells(
         (entries as ScheduleEntryRow[]).map<CellData>((e) => ({
           entry_id: e.id,
@@ -299,6 +334,8 @@ export default function SchedulePage() {
         dropoff_time: e.dropoff_time,
         pickup_method: e.pickup_method ?? 'pickup',
         dropoff_method: e.dropoff_method ?? 'dropoff',
+        /* Phase 27-A-1: 確認画面で選択された pattern_id を送信（null=該当なし） */
+        pattern_id: e.pattern_id ?? null,
       }));
     if (rows.length === 0) {
       alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
@@ -378,6 +415,9 @@ export default function SchedulePage() {
         isOpen={pdfModalOpen}
         onClose={() => setPdfModalOpen(false)}
         onConfirm={handleBulkImport}
+        childList={children}
+        patterns={patterns}
+        patternUsage={patternUsage}
       />
 
       <Modal

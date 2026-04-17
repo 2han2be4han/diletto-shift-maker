@@ -73,7 +73,12 @@ export function generateTransportAssignments(
     if (entry.date !== date) continue;
 
     const pattern = entry.pattern_id ? patternMap.get(entry.pattern_id) : null;
-    const areaLabel = pattern?.area_label || null;
+    /* Phase 27: 迎は pickup_area_label、送は dropoff_area_label を優先し、
+       両者とも無い旧データは legacy area_label にフォールバック。
+       これにより職員の pickup_transport_areas / dropoff_transport_areas とのマッチが
+       実際の方向のエリアで行われる。 */
+    const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
+    const dropoffAreaLabel = pattern?.dropoff_area_label ?? pattern?.area_label ?? null;
     const pickupTime = entry.pickup_time;
     const dropoffTime = entry.dropoff_time;
 
@@ -89,7 +94,8 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: pickupTime,
-          areaLabel,
+          areaLabel: pickupAreaLabel,
+          direction: 'pickup',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
         })
@@ -102,7 +108,8 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: dropoffTime,
-          areaLabel,
+          areaLabel: dropoffAreaLabel,
+          direction: 'dropoff',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
         })
@@ -134,6 +141,7 @@ function selectStaff({
   date,
   time,
   areaLabel,
+  direction,
   staffAssignCount,
   maxStaff,
 }: {
@@ -142,6 +150,8 @@ function selectStaff({
   date: string;
   time: string | null;
   areaLabel: string | null;
+  /** Phase 27-D: 迎=pickup, 送=dropoff。エリアフィルタに使う職員側カラムを切替 */
+  direction: 'pickup' | 'dropoff';
   staffAssignCount: Map<string, number>;
   maxStaff: number;
 }): StaffRow[] {
@@ -156,9 +166,17 @@ function selectStaff({
     /* ② 送迎時間が勤務時間内か */
     if (!isTimeInRange(time, shift.start_time, shift.end_time)) return false;
 
-    /* ③ エリア一致（エリア指定がある場合） */
-    if (areaLabel && s.transport_areas.length > 0) {
-      if (!s.transport_areas.includes(areaLabel)) return false;
+    /* ③ エリア一致（エリア指定がある場合）。
+       Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。
+       両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。
+       Phase 27 fix: 空エリア = 「対応不可（候補から除外）」として扱う。
+       未対応エリアに職員を送り込まない運用ルールをロジックで担保する。 */
+    if (areaLabel) {
+      const directionAreas =
+        direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
+      const effective =
+        (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
+      if (!effective.includes(areaLabel)) return false;
     }
 
     return true;

@@ -46,6 +46,8 @@ type EditableChild = {
   home_address: string | null;
   /** Phase 21: 利用可能なお迎えマーク（複数選択）*/
   pickup_area_labels: string[];
+  /** Phase 27: 送りマーク（複数選択） */
+  dropoff_area_labels: string[];
   patterns: PatternItem[];
   isNew?: boolean;
 };
@@ -154,6 +156,7 @@ export default function ChildrenSettingsPage() {
       parent_contact: null,
       home_address: null,
       pickup_area_labels: [],
+      dropoff_area_labels: [],
       patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
@@ -197,6 +200,7 @@ export default function ChildrenSettingsPage() {
       parent_contact: child.parent_contact,
       home_address: child.home_address,
       pickup_area_labels: child.pickup_area_labels ?? [],
+      dropoff_area_labels: child.dropoff_area_labels ?? [],
       patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
   };
@@ -218,6 +222,7 @@ export default function ChildrenSettingsPage() {
             parent_contact: editing.parent_contact,
             home_address: editing.home_address,
             pickup_area_labels: editing.pickup_area_labels,
+            dropoff_area_labels: editing.dropoff_area_labels,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
@@ -234,6 +239,7 @@ export default function ChildrenSettingsPage() {
             parent_contact: editing.parent_contact,
             home_address: editing.home_address,
             pickup_area_labels: editing.pickup_area_labels,
+            dropoff_area_labels: editing.dropoff_area_labels,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
@@ -611,63 +617,107 @@ export default function ChildrenSettingsPage() {
                 </p>
               </div>
 
-              {/* Phase 21: お迎えマーク（複数選択）*/}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
-                    お迎えマーク（複数選択）
-                  </label>
-                  <a
-                    href="/settings/tenant"
-                    target="_blank"
-                    rel="noopener"
-                    className="text-xs"
-                    style={{ color: 'var(--accent)', textDecoration: 'underline' }}
-                  >
-                    テナント設定で追加 →
-                  </a>
-                </div>
-                <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                  選択したマークに設定された時間が送迎表で自動反映されます（個別パターンで上書きも可）
-                </p>
-                {pickupAreas.length === 0 ? (
-                  <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
-                    テナント設定で 迎のエリア を登録してください。
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {pickupAreas.map((a) => {
-                      const label = formatAreaLabel(a);
-                      const checked = editing.pickup_area_labels.includes(label);
-                      return (
-                        <button
-                          type="button"
-                          key={label}
-                          onClick={() => {
-                            const next = checked
-                              ? editing.pickup_area_labels.filter((l) => l !== label)
-                              : [...editing.pickup_area_labels, label];
-                            setEditing({ ...editing, pickup_area_labels: next });
-                          }}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
-                          style={{
-                            background: checked ? 'var(--accent)' : 'var(--bg)',
-                            color: checked ? '#fff' : 'var(--ink-2)',
-                            border: `1px solid ${checked ? 'var(--accent)' : 'var(--rule)'}`,
-                          }}
-                          title={a.time ? `${label}：${a.time}〜` : label}
-                        >
+              {/* Phase 27: 迎/送 の 2 カラム並列。職員管理と同レイアウト。
+                  テナント設定のマーク・時間がそのまま候補として並び、選択したら送迎表で自動使用。 */}
+              <div className="flex items-center justify-end">
+                <a
+                  href="/settings/tenant"
+                  target="_blank"
+                  rel="noopener"
+                  className="text-xs"
+                  style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                >
+                  テナント設定で追加 →
+                </a>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['pickup', 'dropoff'] as const).map((direction) => {
+                  const key = direction === 'pickup' ? 'pickup_area_labels' : 'dropoff_area_labels';
+                  const label = direction === 'pickup' ? 'お迎えマーク' : 'お送りマーク';
+                  const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+                  const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
+                  const areas = direction === 'pickup' ? pickupAreas : dropoffAreas;
+                  const selected = editing[key];
+                  return (
+                    <div
+                      key={direction}
+                      className="flex flex-col gap-1.5 rounded-md p-2"
+                      style={{ border: '1px solid var(--rule)', background: palVar }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold" style={{ color: accentVar }}>
                           {label}
-                          {a.time && (
-                            <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
-                              {a.time}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                        </label>
+                        {areas.length > 0 && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditing({
+                                  ...editing,
+                                  [key]: areas.map((a) => formatAreaLabel(a)),
+                                })
+                              }
+                              style={{ color: accentVar, textDecoration: 'underline' }}
+                            >
+                              全選択
+                            </button>
+                            <span style={{ color: 'var(--ink-3)' }}>/</span>
+                            <button
+                              type="button"
+                              onClick={() => setEditing({ ...editing, [key]: [] })}
+                              style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
+                            >
+                              全解除
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {areas.length === 0 ? (
+                        <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                          （テナント設定で{label.replace('マーク', '')}エリアを追加してください）
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          {areas.map((a, idx) => {
+                            const ll = formatAreaLabel(a);
+                            const checked = selected.includes(ll);
+                            return (
+                              <button
+                                type="button"
+                                key={`${idx}-${ll}`}
+                                onClick={() => {
+                                  const next = checked
+                                    ? selected.filter((l) => l !== ll)
+                                    : [...selected, ll];
+                                  setEditing({ ...editing, [key]: next });
+                                }}
+                                className="rounded-md transition-all text-left"
+                                style={{
+                                  padding: '5px 10px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 500,
+                                  background: checked ? accentVar : 'var(--white)',
+                                  color: checked ? '#fff' : 'var(--ink-2)',
+                                  border: `1px solid ${checked ? accentVar : 'var(--rule)'}`,
+                                }}
+                                title={a.time ? `${ll}：${a.time}〜` : ll}
+                              >
+                                {checked ? '✓ ' : ''}
+                                {ll}
+                                {a.time && (
+                                  <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
+                                    {a.time}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </section>
 

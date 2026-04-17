@@ -54,6 +54,11 @@ export type StaffRow = {
   default_start_time: string | null;
   default_end_time: string | null;
   transport_areas: string[];
+  /** Phase 27-D: 迎対応エリア。migration 0026 適用前の古いレコードでは空配列。
+   *  旧 transport_areas を読む側は、空配列の場合 transport_areas へフォールバックして扱うこと。 */
+  pickup_transport_areas: string[];
+  /** Phase 27-D: 送り対応エリア。上と同様のフォールバック運用。 */
+  dropoff_transport_areas: string[];
   qualifications: string[];
   is_qualified: boolean;
   /** Phase 24: 一覧・シフト表の表示順。NULL は name フォールバック */
@@ -99,6 +104,9 @@ export type ChildRow = {
   /** お迎えマーク（複数選択）。emoji+name 形式。テナント pickup_areas の選択肢から選ぶ。
       Phase 21: 送迎パターンを個別登録せずに、マーク選択だけで時間が決まるド王仕様 */
   pickup_area_labels: string[];
+  /** 送りマーク（複数選択）。emoji+name 形式。テナント dropoff_areas の選択肢から選ぶ。
+      Phase 27 追加: 児童に送り側マークを持たせて送迎表で自動反映。 */
+  dropoff_area_labels: string[];
   created_at: string;
 };
 
@@ -277,6 +285,9 @@ export type ParsedScheduleEntry = {
   /** Phase 24: Excel貼付で「迎/送」ラベル無しは self 扱い（任意、未設定は pickup/dropoff 扱い） */
   pickup_method?: ScheduleEntryPickupMethod;
   dropoff_method?: ScheduleEntryDropoffMethod;
+  /** Phase 27-A-1: PDF import の pattern selector。確認画面で初期選択される（時刻一致 → 過去最頻 → 最初の1件 → null）。
+   *  null は明示的に「該当なし」を選んだ状態 */
+  pattern_id?: string | null;
 };
 
 // ----- コメント（4機能にポリモーフィック） -----

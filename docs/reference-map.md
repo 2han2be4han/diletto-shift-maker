@@ -29,7 +29,9 @@
 | employment_type | text | `src/types/index.ts` (StaffRow, EmploymentType) |
 | default_start_time | time | `src/types/index.ts` (StaffRow) |
 | default_end_time | time | `src/types/index.ts` (StaffRow) |
-| transport_areas | text[] | `src/types/index.ts` (StaffRow) |
+| transport_areas | text[] | `src/types/index.ts` (StaffRow)。**旧・後方互換**（Phase 27-D 以降は pickup_/dropoff_ を使用） |
+| pickup_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（迎担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
+| dropoff_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（送担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
 | is_qualified | boolean | `src/types/index.ts` (StaffRow) |
 | created_at | timestamptz | `src/types/index.ts` (StaffRow) |
 | last_invited_at | timestamptz | `src/app/api/staff/invite/route.ts`, `src/app/api/staff/[id]/resend-invite/route.ts`（招待クールダウン判定） |
@@ -308,3 +310,91 @@
 | `src/app/(app)/settings/tenant/page.tsx` | 「送迎担当の最低退勤時刻」time input 追加 |
 | `src/app/api/staff/invite/route.ts` | redirectTo を /auth/confirm?next=/auth/set-password に |
 
+---
+
+## Phase 25-C-7a: admin 承認の出勤制約撤廃（2026-04-17）
+
+### 変更
+- `src/app/api/shift-change-requests/[id]/route.ts`: approve/reject ゲートを `requireOnDutyAdmin()` → `requireRole('admin')` に変更
+- `src/components/shift/ApprovalQueue.tsx`: 「承認は出勤中の管理者のみ」バッジ削除、「現在出勤中の管理者のみ承認/却下できます。」注意文言削除、コメント更新
+- `src/app/(app)/shift/page.tsx`: `onDutyAdmin` state → `isAdmin = myRole === 'admin'` に変更、`/api/me` の `on_duty_admin` 参照削除、`canApprove={isAdmin}` に
+
+### 残置（削除しない／将来のメール通知で再利用）
+- `src/lib/auth/requireRole.ts` の `requireOnDutyAdmin`
+- `src/lib/auth/isOnDutyAdmin.ts`
+- `src/app/api/me/route.ts` の `on_duty_admin` レスポンスフィールド
+
+### ロール参照
+- `shift_change_requests` approve/reject: admin ロール（API で `requireRole('admin')`）
+- `shift_change_requests` cancel: 申請者本人（`requireAuthenticated` + staff_id 一致）
+
+## Phase 25-C-7b: /settings/tenant 文言調整（2026-04-17）
+
+### 変更
+- `src/app/(app)/settings/tenant/page.tsx`:
+  - ラベル「送迎担当の最低退勤時刻」 → 「送迎候補に含める退勤時刻の下限」
+  - 説明文「この時刻以降に退勤する職員のみ、送迎表で割当候補に含めます（標準 16:31 = 送迎最早 16:30 の直後）。」 → 「退勤時刻がこの値より早い職員は、送迎の担当候補に含めません。送り送迎の最早時刻（例 16:30）より少し後に設定するのが標準です。」（ユーザー合意の B 案）
+
+---
+
+## Phase 27-D: 職員対応エリアの迎/送分割（バックエンド先行・2026-04-17）
+
+### 新規 migration
+- `supabase/migrations/0026_staff_split_transport_areas.sql`
+  - staff に `pickup_transport_areas text[]` と `dropoff_transport_areas text[]` 追加（default '{}'）
+  - 既存 `transport_areas` を両カラムにコピー（1 回限り、既に値のあるレコードはスキップ）
+  - 旧 `transport_areas` は残置・コメント更新
+  - **本番 Supabase への適用はユーザー手動**（Supabase Studio で SQL 実行）
+
+### 型変更
+- `StaffRow` に `pickup_transport_areas: string[]` / `dropoff_transport_areas: string[]` 追加（必須）
+  - 旧 `transport_areas` は残置・互換用
+
+### API 変更
+- `POST /api/staff/route.ts`: `pickup_transport_areas` / `dropoff_transport_areas` 受け入れ。未指定時は `transport_areas` にフォールバック
+- `PATCH /api/staff/[id]/route.ts`: allowedFields に 2 カラム追加
+- `POST /api/staff/invite/route.ts`: body 型拡張 + insert で 2 カラム設定
+
+### ロジック変更
+- `src/lib/logic/generateTransport.ts`:
+  - `selectStaff()` に `direction: 'pickup' | 'dropoff'` 引数追加
+  - 迎は `s.pickup_transport_areas`、送は `s.dropoff_transport_areas` でフィルタ
+  - 両カラムが空（migration 未適用 or 未設定）の場合は旧 `s.transport_areas` にフォールバック
+  - 外部公開の `generateTransportAssignments` シグネチャは不変
+
+### UI（2026-04-17 実装完了・同ブランチ追加コミット）
+- `src/app/(app)/settings/staff/page.tsx`:
+  - 編集モーダル: 「対応エリア」1 セクション → 「迎対応エリア」(accent 青系) + 「送り対応エリア」(green 緑系) 2 セクションに分割。全選択/全解除ボタンも各セクション個別
+  - `handleAreaToggle(direction, area)` に改修
+  - 保存時 `transport_areas` は pickup ∪ dropoff のユニオンをクライアント側で計算送信（旧テナント互換）
+  - 一覧テーブル: プレーンテキスト → 迎=`--accent-pale`/`--accent` チップ、送=`--green-pale`/`--green` チップで分離表示
+  - モバイルカード行も同じチップ化
+  - 新カラム空時は旧 `transport_areas` にフォールバック表示
+
+### 触らない / 残置
+- `src/app/(app)/settings/staff/page.tsx` の既存 `transport_areas` 参照（UI 未更新のため残す。新カラム空時のフォールバックが効く）
+- `src/app/(app)/settings/tenant/page.tsx` / `transport/page.tsx` / `output/daily/page.tsx` / `settings/children/page.tsx` の `settings.transport_areas`（**テナント設定**側で別モノ・変更不要）
+## Phase 27-A-1: PDF import の pattern selector（2026-04-17）
+
+### 型
+- `ParsedScheduleEntry.pattern_id?: string | null` 追加（optional、undefined=未設定／null=該当なし明示）
+
+### schedule/page.tsx
+- `patterns` state 追加（`/api/children` から取得、従来は捨てていた）
+- `patternUsage: Map<child_id, pattern_id>` 追加（過去12ヶ月の schedule_entries から最頻パターンを集計）
+- `handleBulkImport` で `pattern_id` を `/api/schedule-entries` POST に含める
+
+### PdfImportModal
+- props に `childList` / `patterns` / `patternUsage` 追加
+- 解析結果受け取り時に `assignPatternIds()` で初期 pattern_id 付与
+  - 優先順位: 時刻完全一致 → 過去最頻 → 児童の最初の 1 件 → null
+
+### PdfConfirmTable
+- props に `childList` / `patterns` 追加
+- 「備考」列を「パターン」列に置換。児童の全パターンをドロップダウン表示（pattern_name + area + 時刻）
+- 児童名先頭に 🔗（紐付け済）/ ⚠（該当なし）マーク
+- 選択パターンの時刻と PDF 時刻が異なる場合は注記表示
+- サマリ行に「⚠ パターン未選択: N 件」
+
+### 触らない / 残置
+- ExcelPasteModal は A-1 スコープ外。pattern_id=undefined で送信され、API 側で null 保存。Excel 側 UI は A-2 で対応予定

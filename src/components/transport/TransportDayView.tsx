@@ -32,6 +32,8 @@ type TransportChild = {
   /** Phase 26: 'self' なら保護者送迎（担当不要） */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
+  /** Phase 27: この送迎予定の pickup/dropoff 時刻組合せが児童の登録パターンに存在するか */
+  isPatternRegistered: boolean;
 };
 
 type TransportStaff = {
@@ -39,8 +41,10 @@ type TransportStaff = {
   name: string;
   /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
   endTime: string | null;
-  /** Phase 26.1: その日に担当している送迎先の絵文字マーク配列（例: ['🌳', '🍶']）。重複なし */
-  areaMarks: string[];
+  /** Phase 27: 迎で担当しているエリア絵文字。重複なし */
+  pickupAreaMarks: string[];
+  /** Phase 27: 送で担当しているエリア絵文字。重複なし */
+  dropoffAreaMarks: string[];
 };
 
 type TransportDayViewProps = {
@@ -104,8 +108,8 @@ export default function TransportDayView({
     );
   }
 
-  /* Phase 26.1: 列構成 = 児童名 / 迎え時間 / 迎場所 / 迎え担当 / 送り時間 / 送り場所 / 送り担当 / (設定) */
-  const colSpan = onAddPattern ? 8 : 7;
+  /* Phase 27: 「設定+登録」列を撤去。登録ボタンは展開詳細内（未登録パターンのみ）に移動 */
+  const colSpan = 7;
 
   /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
   const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
@@ -115,39 +119,59 @@ export default function TransportDayView({
     return em !== null && em >= minEndMin;
   });
 
-  const headerCellStyle = { background: 'var(--ink)', color: '#fff' } as const;
+  /* Phase 27 (layout revised): ダーク帯 + 方向別アクセントカラーでセクション感を出す。
+     迎=accent(青)、送=green(緑)でヘッダーにドット記号を入れて視線を誘導。 */
+  const PICK_ACCENT = 'var(--accent)';
+  const DROP_ACCENT = 'var(--green)';
+  const headerBase: React.CSSProperties = {
+    background: 'var(--ink)',
+    color: '#fff',
+    fontSize: '0.72rem',
+    letterSpacing: '0.08em',
+    padding: '10px 12px',
+    fontWeight: 700,
+    textTransform: 'none',
+    whiteSpace: 'nowrap',
+  };
+  const SectionLabel = ({ color, children }: { color: string; children: React.ReactNode }) => (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: color }} />
+      <span>{children}</span>
+    </span>
+  );
 
   return (
-    <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+    <div
+      className="overflow-x-auto"
+      style={{
+        borderRadius: '10px',
+        border: '1px solid var(--rule)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        background: 'var(--white)',
+      }}
+    >
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
         <thead>
           <tr>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '140px' }}>
-              児童名
+            <th className="text-left" style={{ ...headerBase, minWidth: '140px' }}>児童名</th>
+            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 時刻</SectionLabel>
             </th>
-            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
-              迎え時間
+            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 場所</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
-              迎場所
+            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: PICK_ACCENT }}>
+              <SectionLabel color={PICK_ACCENT}>迎 担当</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
-              迎え担当
+            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 時刻</SectionLabel>
             </th>
-            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
-              送り時間
+            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 場所</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
-              送り場所
+            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: DROP_ACCENT }}>
+              <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>
             </th>
-            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
-              送り担当
-            </th>
-            {onAddPattern && (
-              <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '60px' }}>
-                設定
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
@@ -192,16 +216,6 @@ export default function TransportDayView({
                         ▶
                       </span>
                       <span>{child.name}</span>
-                      {hasAnyLocation && (
-                        <span
-                          aria-hidden
-                          className="text-xs"
-                          style={{ color: 'var(--ink-3)' }}
-                          title="場所情報あり"
-                        >
-                          🗺
-                        </span>
-                      )}
                     </button>
                     {child.isUnassigned && (
                       <span
@@ -241,6 +255,7 @@ export default function TransportDayView({
                         availableStaff={eligibleStaff}
                         onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
                         disabled={disabled}
+                        direction="pickup"
                       />
                     )}
                   </td>
@@ -273,29 +288,14 @@ export default function TransportDayView({
                         availableStaff={eligibleStaff}
                         onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
                         disabled={disabled}
+                        direction="dropoff"
                       />
                     )}
                   </td>
 
-                  {/* パターン登録ボタン */}
-                  {onAddPattern && (
-                    <td
-                      className="px-2 py-1.5 text-center align-top"
-                      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
-                    >
-                      <button
-                        onClick={() => onAddPattern(child.name, child.pickupTime, child.dropoffTime)}
-                        className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
-                        style={{ color: 'var(--accent)' }}
-                        title={`${child.name}の送迎パターンに登録`}
-                      >
-                        + 登録
-                      </button>
-                    </td>
-                  )}
                 </tr>
 
-                {/* 展開: 送迎場所リスト */}
+                {/* 展開: 送迎場所リスト + 未登録パターン時の登録ボタン */}
                 {isExpanded && (
                   <tr style={{ background: 'var(--bg)' }}>
                     <td
@@ -304,6 +304,33 @@ export default function TransportDayView({
                       style={{ borderBottom: '1px solid var(--rule)' }}
                     >
                       <LocationDetails child={child} />
+                      {onAddPattern && !child.isPatternRegistered && (
+                        <div
+                          className="mt-3 pt-3 flex items-center justify-between flex-wrap gap-2"
+                          style={{ borderTop: '1px dashed var(--rule)' }}
+                        >
+                          <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                            この時刻の組み合わせは、まだ {child.name} さんのパターンに登録されていません。
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onAddPattern(child.name, child.pickupTime, child.dropoffTime)
+                            }
+                            className="rounded-md transition-colors hover:bg-[var(--accent-pale)]"
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: 'var(--accent)',
+                              border: '1px solid var(--accent)',
+                              background: 'var(--white)',
+                            }}
+                          >
+                            ＋ このパターンを登録する
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -344,9 +371,10 @@ function TimeCell({
 }
 
 /**
- * 場所セル（Phase 26.1）
- * - エリア絵文字を大きく、エリア名、住所をまとめて表示
- * - 住所があれば Google Maps リンク
+ * 場所セル（Phase 27 redesigned）
+ * - 単行レイアウトで全行の高さを統一
+ * - エリア名自体がクリッカブル（Google Maps）
+ * - 住所は title (tooltip) で確認できる
  */
 function LocationCellInline({
   areaLabel,
@@ -362,6 +390,9 @@ function LocationCellInline({
   const { emoji, name } = splitAreaLabel(areaLabel);
   const hasAny = !!(emoji || name || location);
   const query = location ?? areaLabel ?? '';
+  const clickable = !!query;
+  const tooltip = location ? `${name ?? ''} — ${location}（クリックで Google Maps）`.trim() : name ?? '';
+
   return (
     <td
       className="px-3 py-2 align-middle"
@@ -370,40 +401,42 @@ function LocationCellInline({
       {!hasAny ? (
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>—</span>
       ) : (
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={() => clickable && openInGoogleMaps(query)}
+          disabled={!clickable}
+          className="inline-flex items-center gap-2 min-w-0 max-w-full rounded-md text-left transition-colors"
+          style={{
+            padding: '4px 8px',
+            background: clickable ? 'transparent' : 'transparent',
+            cursor: clickable ? 'pointer' : 'default',
+          }}
+          onMouseEnter={(e) => {
+            if (clickable) e.currentTarget.style.background = 'var(--bg)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+          title={tooltip}
+        >
           {emoji && (
             <span
               className="shrink-0"
-              style={{ fontSize: '1.4rem', lineHeight: 1 }}
+              style={{ fontSize: '1.2rem', lineHeight: 1 }}
               aria-hidden
             >
               {emoji}
             </span>
           )}
-          <div className="flex flex-col min-w-0 gap-0.5 leading-tight">
-            {name && (
-              <span
-                className="font-semibold truncate"
-                style={{ color: accentColor, fontSize: '0.82rem' }}
-                title={name}
-              >
-                {name}
-              </span>
-            )}
-            {location && (
-              <button
-                type="button"
-                onClick={() => openInGoogleMaps(query)}
-                className="inline-flex items-center gap-1 text-left truncate hover:underline"
-                style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}
-                title={`${location}（Google Maps で開く）`}
-              >
-                <span aria-hidden>📍</span>
-                <span className="truncate">{location}</span>
-              </button>
-            )}
-          </div>
-        </div>
+          {name && (
+            <span
+              className="font-semibold truncate"
+              style={{ color: accentColor, fontSize: '0.85rem' }}
+            >
+              {name}
+            </span>
+          )}
+        </button>
       )}
     </td>
   );
@@ -531,11 +564,14 @@ function StaffSelect({
   availableStaff,
   onChange,
   disabled,
+  direction,
 }: {
   staffIds: string[];
   availableStaff: TransportStaff[];
   onChange: (ids: string[]) => void;
   disabled: boolean;
+  /** Phase 27: 迎担当=pickup のマークのみ表示、送担当=dropoff のマークのみ表示 */
+  direction: 'pickup' | 'dropoff';
 }) {
   const handleChange = (index: number, newId: string) => {
     const updated = [...staffIds];
@@ -552,27 +588,50 @@ function StaffSelect({
     onChange([...staffIds, '']);
   };
 
+  /* Phase 27 redesigned: 各スロットを縦並びでコンパクトに揃える。
+     select は固定幅、マークは右側に薄く表示、＋追加は下に小さく。 */
+  const SELECT_WIDTH = 130;
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex flex-col gap-1">
       {staffIds.map((id, i) => {
-        /* Phase 26: 候補外（退勤時間 < 16:31 / 欠勤）でも既存選択は残す */
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
-        /* Phase 26.1: 選択中の職員が他に担当しているエリアマークを横に表示 */
         const selectedStaff = availableStaff.find((s) => s.id === id);
-        const marks = selectedStaff?.areaMarks ?? [];
+        const marks = (direction === 'pickup'
+          ? selectedStaff?.pickupAreaMarks
+          : selectedStaff?.dropoffAreaMarks) ?? [];
         return (
-          <div key={i} className="inline-flex items-center gap-1">
+          <div key={i} className="flex items-center gap-1.5">
+            {/* Phase 27: マーク → 名前 の並びがマスト（ユーザー指定） */}
+            <span
+              className="shrink-0 text-right"
+              style={{
+                display: 'inline-block',
+                width: '4.6em',
+                lineHeight: 1,
+                fontSize: '0.95rem',
+                letterSpacing: '-0.02em',
+                whiteSpace: 'nowrap',
+                overflow: 'visible',
+                opacity: id && !isMissing ? 0.9 : 0,
+              }}
+              title={id && !isMissing && marks.length > 0 ? `この日の担当エリア: ${marks.join(' ')}` : undefined}
+              aria-label={id && !isMissing && marks.length > 0 ? `担当エリア ${marks.join(' ')}` : undefined}
+            >
+              {id && !isMissing ? marks.slice(0, 3).join('') : ''}
+            </span>
             <select
               value={id}
               onChange={(e) => handleChange(i, e.target.value)}
               disabled={disabled}
-              className="px-2 py-1 text-xs outline-none disabled:opacity-60"
+              className="outline-none disabled:opacity-60"
               style={{
-                border: `1px solid ${isMissing ? 'var(--red)' : 'var(--rule)'}`,
-                borderRadius: '4px',
+                width: SELECT_WIDTH,
+                padding: '5px 8px',
+                fontSize: '0.78rem',
+                border: `1px solid ${isMissing ? 'var(--red)' : id ? 'var(--rule)' : 'var(--red)'}`,
+                borderRadius: '6px',
                 color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
                 background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
-                minWidth: '90px',
               }}
               title={
                 isMissing
@@ -584,49 +643,42 @@ function StaffSelect({
             >
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
-              {availableStaff.map((s) => {
-                /* 各候補の担当マークを option label の先頭に含める（🌳🍶 本岡 恵 のように） */
-                const optMarks = s.areaMarks.length > 0 ? `${s.areaMarks.join('')} ` : '';
-                return (
-                  <option key={s.id} value={s.id}>
-                    {optMarks}
-                    {s.name}
-                  </option>
-                );
-              })}
+              {availableStaff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
             </select>
-            {/* 選択中職員のマーク表示（select の value は option label の装飾を見せないので補足表示） */}
-            {id && !isMissing && marks.length > 0 && (
-              <span
-                className="text-xs shrink-0 order-first"
-                style={{ lineHeight: 1 }}
-                title={`この日の担当エリア: ${marks.join(' ')}`}
-                aria-label={`担当エリア ${marks.join(' ')}`}
-              >
-                {marks.join('')}
-              </span>
-            )}
           </div>
         );
       })}
-      {staffIds.length < 2 && !disabled && (
-        <button
-          onClick={handleAdd}
-          className="px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[var(--accent-pale)]"
-          style={{ color: 'var(--accent)', border: '1px dashed var(--accent)' }}
-        >
-          + 追加
-        </button>
-      )}
-      {staffIds.length === 0 && (
-        <button
-          onClick={handleAdd}
-          disabled={disabled}
-          className="px-2 py-1 text-xs font-medium rounded disabled:opacity-60"
-          style={{ color: 'var(--red)', border: '1px dashed var(--red)' }}
-        >
-          担当を選択
-        </button>
+      {/* ＋追加 / 担当を選択 ボタンは select と同じレイアウトラインに揃える
+         （先頭にマーク幅の透明プレースホルダを置く） */}
+      {(staffIds.length === 0 || (staffIds.length < 2 && !disabled)) && (
+        <div className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="shrink-0"
+            style={{ display: 'inline-block', width: '4.6em' }}
+          />
+          <button
+            onClick={handleAdd}
+            disabled={disabled}
+            className="rounded-md transition-colors disabled:opacity-60"
+            style={{
+              width: SELECT_WIDTH,
+              padding: '5px 8px',
+              fontSize: '0.74rem',
+              fontWeight: 500,
+              color: staffIds.length === 0 ? 'var(--red)' : 'var(--accent)',
+              border: `1px dashed ${staffIds.length === 0 ? 'var(--red)' : 'var(--accent)'}`,
+              background: 'transparent',
+              textAlign: 'center',
+            }}
+          >
+            {staffIds.length === 0 ? '担当を選択' : '＋ 追加'}
+          </button>
+        </div>
       )}
     </div>
   );

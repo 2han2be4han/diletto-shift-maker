@@ -303,9 +303,9 @@ export default function TenantSettingsPage() {
           </div>
 
           <div className="flex flex-col gap-2 max-w-2xl">
-            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎担当の最低退勤時刻</label>
+            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎候補に含める退勤時刻の下限</label>
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              この時刻以降に退勤する職員のみ、送迎表で割当候補に含めます（標準 16:31 = 送迎最早 16:30 の直後）。
+              退勤時刻がこの値より早い職員は、送迎の担当候補に含めません。送り送迎の最早時刻（例 16:30）より少し後に設定するのが標準です。
             </p>
             <input
               type="time"
