@@ -33,9 +33,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </h1>
           <p className="text-sm mb-6 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
             このメールアドレスに紐づく職員アカウントが見つかりませんでした。
-            <br />
-            管理者に連絡して、招待を受けてください。
           </p>
+
+          <div
+            className="text-left text-xs mb-6 p-4"
+            style={{ background: 'var(--bg)', borderRadius: '8px', color: 'var(--ink-2)' }}
+          >
+            <p className="font-semibold mb-2" style={{ color: 'var(--ink)' }}>
+              対処方法
+            </p>
+            <ul className="space-y-1.5 list-disc list-inside">
+              <li>
+                新しく事業所を登録する場合は
+                <a href="/signup" style={{ color: 'var(--accent)', textDecoration: 'underline', marginLeft: '4px' }}>
+                  新規登録
+                </a>
+                へ
+              </li>
+              <li>既存事業所に参加する場合は、管理者から招待を受けてください</li>
+            </ul>
+          </div>
+
           <form action="/auth/signout" method="POST">
             <button
               type="submit"
@@ -50,12 +68,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 cursor: 'pointer',
               }}
             >
-              別のアカウントでログイン
+              サインアウトして別のアカウントでログイン
             </button>
           </form>
-          <p className="text-xs mt-4" style={{ color: 'var(--ink-3)' }}>
-            ※ 初回セットアップ時は <code>supabase/migrations/0007_seed_first_tenant.sql</code> を実行してください
-          </p>
         </div>
       </div>
     );
