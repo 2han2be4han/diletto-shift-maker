@@ -39,6 +39,8 @@ type TransportStaff = {
   name: string;
   /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
   endTime: string | null;
+  /** Phase 26.1: その日に担当している送迎先の絵文字マーク配列（例: ['🌳', '🍶']）。重複なし */
+  areaMarks: string[];
 };
 
 type TransportDayViewProps = {
@@ -64,6 +66,24 @@ function timeToMinutes(t: string | null | undefined): number | null {
   return h * 60 + m;
 }
 
+/** "HH:MM:SS" や "HH:MM" を "HH:MM" 表示に正規化（秒を捨てる） */
+function formatHourMinute(t: string | null): string {
+  if (!t) return '-';
+  const parts = t.split(':');
+  if (parts.length < 2) return t;
+  return `${parts[0]}:${parts[1]}`;
+}
+
+/** エリアラベル "🏠 藤江" から絵文字と名前を分離 */
+function splitAreaLabel(label: string | null): { emoji: string | null; name: string | null } {
+  if (!label) return { emoji: null, name: null };
+  /* 最初の空白で分ける: "🏠 藤江" → emoji="🏠", name="藤江" */
+  const trimmed = label.trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  if (spaceIdx === -1) return { emoji: null, name: trimmed };
+  return { emoji: trimmed.slice(0, spaceIdx), name: trimmed.slice(spaceIdx + 1).trim() };
+}
+
 export default function TransportDayView({
   children,
   availableStaff,
@@ -84,7 +104,8 @@ export default function TransportDayView({
     );
   }
 
-  const colSpan = onAddPattern ? 6 : 5;
+  /* Phase 26.1: 列構成 = 児童名 / 迎え時間 / 迎場所 / 迎え担当 / 送り時間 / 送り場所 / 送り担当 / (設定) */
+  const colSpan = onAddPattern ? 8 : 7;
 
   /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
   const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
@@ -94,46 +115,36 @@ export default function TransportDayView({
     return em !== null && em >= minEndMin;
   });
 
+  const headerCellStyle = { background: 'var(--ink)', color: '#fff' } as const;
+
   return (
     <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
         <thead>
           <tr>
-            <th
-              className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '140px' }}
-            >
+            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '140px' }}>
               児童名
             </th>
-            <th
-              className="px-3 py-2 text-center font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '70px' }}
-            >
-              迎え
+            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
+              迎え時間
             </th>
-            <th
-              className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '200px' }}
-            >
+            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
+              迎場所
+            </th>
+            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
               迎え担当
             </th>
-            <th
-              className="px-3 py-2 text-center font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '70px' }}
-            >
-              送り
+            <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '64px' }}>
+              送り時間
             </th>
-            <th
-              className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '200px' }}
-            >
+            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '160px' }}>
+              送り場所
+            </th>
+            <th className="px-3 py-2 text-left font-semibold" style={{ ...headerCellStyle, minWidth: '220px' }}>
               送り担当
             </th>
             {onAddPattern && (
-              <th
-                className="px-2 py-2 text-center font-semibold"
-                style={{ background: 'var(--ink)', color: '#fff', minWidth: '60px' }}
-              >
+              <th className="px-2 py-2 text-center font-semibold" style={{ ...headerCellStyle, minWidth: '60px' }}>
                 設定
               </th>
             )}
@@ -202,12 +213,18 @@ export default function TransportDayView({
                     )}
                   </td>
 
-                  {/* 迎え（時刻 + エリア + 場所短縮） */}
-                  <TimeAreaCell
+                  {/* 迎え時間（HH:MM） */}
+                  <TimeCell
                     time={child.pickupTime}
+                    timeColor="var(--accent)"
+                    isExpanded={isExpanded}
+                  />
+
+                  {/* 迎場所: エリア絵文字 + 名称 + 住所（Maps リンク） */}
+                  <LocationCellInline
                     areaLabel={child.pickupAreaLabel}
                     location={child.pickupLocation}
-                    timeColor="var(--accent)"
+                    accentColor="var(--accent)"
                     isExpanded={isExpanded}
                   />
 
@@ -228,12 +245,18 @@ export default function TransportDayView({
                     )}
                   </td>
 
-                  {/* 送り */}
-                  <TimeAreaCell
+                  {/* 送り時間（HH:MM） */}
+                  <TimeCell
                     time={child.dropoffTime}
+                    timeColor="var(--green)"
+                    isExpanded={isExpanded}
+                  />
+
+                  {/* 送り場所 */}
+                  <LocationCellInline
                     areaLabel={child.dropoffAreaLabel}
                     location={child.dropoffLocation}
-                    timeColor="var(--green)"
+                    accentColor="var(--green)"
                     isExpanded={isExpanded}
                   />
 
@@ -294,55 +317,94 @@ export default function TransportDayView({
 }
 
 /**
- * 時刻 + エリア絵文字/名称 + 住所短縮を縦に並べるセル（Phase 26 2-4-d）
+ * 時刻のみのセル（Phase 26.1: HH:MM 表示、秒カット）
  */
-function TimeAreaCell({
+function TimeCell({
   time,
-  areaLabel,
-  location,
   timeColor,
   isExpanded,
 }: {
   time: string | null;
-  areaLabel: string | null;
-  location: string | null;
   timeColor: string;
   isExpanded: boolean;
 }) {
   return (
     <td
-      className="px-2 py-2 align-top"
+      className="px-2 py-2 text-center align-middle font-semibold"
       style={{
         borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
-        minWidth: '110px',
+        color: timeColor,
+        fontSize: '0.95rem',
+        letterSpacing: '0.02em',
       }}
     >
-      <div className="flex flex-col gap-0.5 leading-tight">
-        <div
-          className="text-center font-semibold"
-          style={{ color: timeColor, fontSize: '0.85rem' }}
-        >
-          {time || '-'}
+      {formatHourMinute(time)}
+    </td>
+  );
+}
+
+/**
+ * 場所セル（Phase 26.1）
+ * - エリア絵文字を大きく、エリア名、住所をまとめて表示
+ * - 住所があれば Google Maps リンク
+ */
+function LocationCellInline({
+  areaLabel,
+  location,
+  accentColor,
+  isExpanded,
+}: {
+  areaLabel: string | null;
+  location: string | null;
+  accentColor: string;
+  isExpanded: boolean;
+}) {
+  const { emoji, name } = splitAreaLabel(areaLabel);
+  const hasAny = !!(emoji || name || location);
+  const query = location ?? areaLabel ?? '';
+  return (
+    <td
+      className="px-3 py-2 align-middle"
+      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
+    >
+      {!hasAny ? (
+        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>—</span>
+      ) : (
+        <div className="flex items-center gap-2 min-w-0">
+          {emoji && (
+            <span
+              className="shrink-0"
+              style={{ fontSize: '1.4rem', lineHeight: 1 }}
+              aria-hidden
+            >
+              {emoji}
+            </span>
+          )}
+          <div className="flex flex-col min-w-0 gap-0.5 leading-tight">
+            {name && (
+              <span
+                className="font-semibold truncate"
+                style={{ color: accentColor, fontSize: '0.82rem' }}
+                title={name}
+              >
+                {name}
+              </span>
+            )}
+            {location && (
+              <button
+                type="button"
+                onClick={() => openInGoogleMaps(query)}
+                className="inline-flex items-center gap-1 text-left truncate hover:underline"
+                style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}
+                title={`${location}（Google Maps で開く）`}
+              >
+                <span aria-hidden>📍</span>
+                <span className="truncate">{location}</span>
+              </button>
+            )}
+          </div>
         </div>
-        {areaLabel && (
-          <div
-            className="text-xs text-center truncate"
-            style={{ color: 'var(--ink-2)', fontSize: '0.7rem' }}
-            title={areaLabel}
-          >
-            {areaLabel}
-          </div>
-        )}
-        {location && (
-          <div
-            className="text-center truncate"
-            style={{ color: 'var(--ink-3)', fontSize: '0.62rem' }}
-            title={location}
-          >
-            📍{location}
-          </div>
-        )}
-      </div>
+      )}
     </td>
   );
 }
@@ -495,32 +557,56 @@ function StaffSelect({
       {staffIds.map((id, i) => {
         /* Phase 26: 候補外（退勤時間 < 16:31 / 欠勤）でも既存選択は残す */
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
+        /* Phase 26.1: 選択中の職員が他に担当しているエリアマークを横に表示 */
+        const selectedStaff = availableStaff.find((s) => s.id === id);
+        const marks = selectedStaff?.areaMarks ?? [];
         return (
-          <select
-            key={i}
-            value={id}
-            onChange={(e) => handleChange(i, e.target.value)}
-            disabled={disabled}
-            className="px-2 py-1 text-xs outline-none disabled:opacity-60"
-            style={{
-              border: `1px solid ${isMissing ? 'var(--red)' : 'var(--rule)'}`,
-              borderRadius: '4px',
-              color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
-              background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
-              minWidth: '90px',
-            }}
-            title={isMissing ? 'この職員は当日の送迎候補外です（勤務時間を確認してください）' : undefined}
-          >
-            <option value="">未選択</option>
-            {isMissing && (
-              <option value={id}>（候補外）</option>
+          <div key={i} className="inline-flex items-center gap-1">
+            <select
+              value={id}
+              onChange={(e) => handleChange(i, e.target.value)}
+              disabled={disabled}
+              className="px-2 py-1 text-xs outline-none disabled:opacity-60"
+              style={{
+                border: `1px solid ${isMissing ? 'var(--red)' : 'var(--rule)'}`,
+                borderRadius: '4px',
+                color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
+                background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
+                minWidth: '90px',
+              }}
+              title={
+                isMissing
+                  ? 'この職員は当日の送迎候補外です（勤務時間を確認してください）'
+                  : marks.length > 0
+                  ? `この日の担当エリア: ${marks.join(' ')}`
+                  : undefined
+              }
+            >
+              <option value="">未選択</option>
+              {isMissing && <option value={id}>（候補外）</option>}
+              {availableStaff.map((s) => {
+                /* 各候補の担当マークを option label に含める（🌳🍶 のように） */
+                const optMarks = s.areaMarks.length > 0 ? ` ${s.areaMarks.join('')}` : '';
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {optMarks}
+                  </option>
+                );
+              })}
+            </select>
+            {/* 選択中職員のマーク表示（select の value は option label の装飾を見せないので補足表示） */}
+            {id && !isMissing && marks.length > 0 && (
+              <span
+                className="text-xs"
+                style={{ lineHeight: 1 }}
+                title={`この日の担当エリア: ${marks.join(' ')}`}
+                aria-label={`担当エリア ${marks.join(' ')}`}
+              >
+                {marks.join('')}
+              </span>
             )}
-            {availableStaff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          </div>
         );
       })}
       {staffIds.length < 2 && !disabled && (
