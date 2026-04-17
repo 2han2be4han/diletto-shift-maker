@@ -306,7 +306,7 @@ export default function ChildrenSettingsPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>児童一覧</h2>
-            <Badge variant="info">{activeCount}名（有効）</Badge>
+            <Badge variant="info">{activeCount}名（在籍）</Badge>
           </div>
           <Button variant="primary" onClick={handleAdd}>+ 児童追加</Button>
         </div>
@@ -346,7 +346,7 @@ export default function ChildrenSettingsPage() {
                       {count}パターン
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                      <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
+                      <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '在籍' : '退籍'}</Badge>
                     </td>
                   </tr>
                 );
@@ -430,7 +430,7 @@ export default function ChildrenSettingsPage() {
                     onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
                   />
                   <span className="text-sm font-medium" style={{ color: editing.is_active ? 'var(--green)' : 'var(--ink-3)' }}>
-                    {editing.is_active ? '有効' : '無効'}
+                    {editing.is_active ? '在籍' : '退籍'}
                   </span>
                 </label>
               </div>
@@ -573,7 +573,7 @@ function PickupRow({
           aria-label="迎のエリア"
         >
           <option value="">エリア選択</option>
-          {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+          {areaOptions.map((a, idx) => (<option key={`${idx}-${a}`} value={a}>{a}</option>))}
         </select>
         <input
           type="time"
@@ -643,7 +643,7 @@ function DropoffRow({
           aria-label="送のエリア"
         >
           <option value="">エリア選択</option>
-          {areaOptions.map((a) => (<option key={a} value={a}>{a}</option>))}
+          {areaOptions.map((a, idx) => (<option key={`${idx}-${a}`} value={a}>{a}</option>))}
         </select>
         <input
           type="time"

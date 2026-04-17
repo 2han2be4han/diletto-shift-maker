@@ -83,6 +83,15 @@ export default function TenantSettingsPage() {
     })();
   }, []);
 
+  /** 配列内の要素を from 位置から to 位置へ移動（splice → insert） */
+  const reorderItem = <T,>(arr: T[], from: number, to: number): T[] => {
+    if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return arr;
+    const next = [...arr];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
+  };
+
   /* --- 迎エリア操作 --- */
   const handleAddPickupArea = () =>
     setPickupAreas([...pickupAreas, { emoji: '📍', name: '', time: '' }]);
@@ -90,6 +99,8 @@ export default function TenantSettingsPage() {
     setPickupAreas(pickupAreas.filter((_, idx) => idx !== i));
   const handlePickupAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
     setPickupAreas(pickupAreas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
+  const handleReorderPickupArea = (from: number, to: number) =>
+    setPickupAreas(reorderItem(pickupAreas, from, to));
 
   /* --- 送エリア操作 --- */
   const handleAddDropoffArea = () =>
@@ -98,6 +109,8 @@ export default function TenantSettingsPage() {
     setDropoffAreas(dropoffAreas.filter((_, idx) => idx !== i));
   const handleDropoffAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
     setDropoffAreas(dropoffAreas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
+  const handleReorderDropoffArea = (from: number, to: number) =>
+    setDropoffAreas(reorderItem(dropoffAreas, from, to));
 
   const handleSave = async () => {
     setSaving(true);
@@ -184,7 +197,7 @@ export default function TenantSettingsPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* 迎エリア */}
               <AreaListSection
                 title="迎のエリア"
@@ -193,6 +206,7 @@ export default function TenantSettingsPage() {
                 onChange={handlePickupAreaChange}
                 onRemove={handleRemovePickupArea}
                 onAdd={handleAddPickupArea}
+                onReorder={handleReorderPickupArea}
                 inputStyle={inputStyle}
                 emptyMessage="迎のエリアを追加してください"
               />
@@ -204,6 +218,7 @@ export default function TenantSettingsPage() {
                 onChange={handleDropoffAreaChange}
                 onRemove={handleRemoveDropoffArea}
                 onAdd={handleAddDropoffArea}
+                onReorder={handleReorderDropoffArea}
                 inputStyle={inputStyle}
                 emptyMessage="送のエリアを追加してください"
               />
@@ -319,9 +334,24 @@ type AreaListSectionProps = {
   onChange: (i: number, field: keyof AreaLabel, value: string) => void;
   onRemove: (i: number) => void;
   onAdd: () => void;
+  onReorder: (from: number, to: number) => void;
   inputStyle: React.CSSProperties;
   emptyMessage: string;
 };
+
+/** 6点グリップ（ドラッグハンドル）アイコン */
+function GripIcon({ color }: { color: string }) {
+  return (
+    <svg width="14" height="18" viewBox="0 0 14 18" fill={color} aria-hidden>
+      <circle cx="4" cy="4" r="1.3" />
+      <circle cx="10" cy="4" r="1.3" />
+      <circle cx="4" cy="9" r="1.3" />
+      <circle cx="10" cy="9" r="1.3" />
+      <circle cx="4" cy="14" r="1.3" />
+      <circle cx="10" cy="14" r="1.3" />
+    </svg>
+  );
+}
 
 function AreaListSection({
   title,
@@ -330,9 +360,12 @@ function AreaListSection({
   onChange,
   onRemove,
   onAdd,
+  onReorder,
   inputStyle,
   emptyMessage,
 }: AreaListSectionProps) {
+  const [draggingIndex, setDraggingIndex] = React.useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = React.useState<number | null>(null);
   /* カラムごとの統一スタイル（マーク・名前・時間・削除） */
   const emojiStyle: React.CSSProperties = {
     ...inputStyle,
@@ -366,49 +399,99 @@ function AreaListSection({
         </p>
       )}
       <div className="flex flex-col gap-2">
-        {areas.map((area, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 p-1.5 rounded-lg transition-colors hover:bg-[var(--accent-pale)]"
-          >
-            <input
-              type="text"
-              value={area.emoji}
-              onChange={(e) => onChange(i, 'emoji', e.target.value)}
-              className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-              style={emojiStyle}
-              placeholder="🏠"
-              aria-label="マーク"
-            />
-            <input
-              type="text"
-              value={area.name}
-              onChange={(e) => onChange(i, 'name', e.target.value)}
-              className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-              style={nameStyle}
-              placeholder="エリア名"
-              aria-label="エリア名"
-            />
-            <input
-              type="time"
-              step={AREA_TIME_STEP_SECONDS}
-              value={area.time ?? ''}
-              onChange={(e) => onChange(i, 'time', e.target.value)}
-              className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-              style={timeStyle}
-              aria-label="基準時間"
-            />
-            <button
-              onClick={() => onRemove(i)}
-              className="shrink-0 text-xs px-2 py-2 rounded-md transition-colors hover:bg-[var(--red-pale)]"
-              style={{ color: 'var(--red)' }}
-              aria-label={`${area.name || 'エリア'}を削除`}
-              title="削除"
+        {areas.map((area, i) => {
+          const isDragging = draggingIndex === i;
+          const isDropTarget = dragOverIndex === i && draggingIndex !== null && draggingIndex !== i;
+          return (
+            <div
+              key={i}
+              onDragOver={(e) => {
+                if (draggingIndex === null || draggingIndex === i) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOverIndex(i);
+              }}
+              onDragLeave={() => {
+                if (dragOverIndex === i) setDragOverIndex(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggingIndex !== null && draggingIndex !== i) {
+                  onReorder(draggingIndex, i);
+                }
+                setDraggingIndex(null);
+                setDragOverIndex(null);
+              }}
+              className="flex items-center gap-2 p-1.5 rounded-lg transition-all hover:bg-[var(--accent-pale)]"
+              style={{
+                background: isDropTarget ? 'var(--accent-pale)' : undefined,
+                borderTop: isDropTarget && draggingIndex !== null && draggingIndex > i
+                  ? `2px solid ${titleColor}`
+                  : '2px solid transparent',
+                borderBottom: isDropTarget && draggingIndex !== null && draggingIndex < i
+                  ? `2px solid ${titleColor}`
+                  : '2px solid transparent',
+                opacity: isDragging ? 0.4 : 1,
+              }}
             >
-              ✕
-            </button>
-          </div>
-        ))}
+              {/* ドラッグハンドル（6点グリップ） */}
+              <div
+                draggable
+                onDragStart={(e) => {
+                  setDraggingIndex(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', String(i));
+                }}
+                onDragEnd={() => {
+                  setDraggingIndex(null);
+                  setDragOverIndex(null);
+                }}
+                className="shrink-0 flex items-center justify-center w-6 h-7 rounded transition-colors hover:bg-[var(--bg)]"
+                style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                aria-label="ドラッグして並び替え"
+                title="ドラッグして並び替え"
+              >
+                <GripIcon color="var(--ink-3)" />
+              </div>
+              <input
+                type="text"
+                value={area.emoji}
+                onChange={(e) => onChange(i, 'emoji', e.target.value)}
+                className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                style={emojiStyle}
+                placeholder="🏠"
+                aria-label="マーク"
+              />
+              <input
+                type="text"
+                value={area.name}
+                onChange={(e) => onChange(i, 'name', e.target.value)}
+                className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                style={nameStyle}
+                placeholder="エリア名"
+                aria-label="エリア名"
+              />
+              <input
+                type="time"
+                step={AREA_TIME_STEP_SECONDS}
+                value={area.time ?? ''}
+                onChange={(e) => onChange(i, 'time', e.target.value)}
+                className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                style={timeStyle}
+                aria-label="基準時間"
+              />
+              <button
+                onClick={() => onRemove(i)}
+                className="shrink-0 text-xs px-2 py-2 rounded-md transition-colors hover:bg-[var(--red-pale)]"
+                style={{ color: 'var(--red)' }}
+                aria-label={`${area.name || 'エリア'}を削除`}
+                title="削除"
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
       </div>
       <Button variant="secondary" onClick={onAdd}>+ エリア追加</Button>
     </div>

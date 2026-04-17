@@ -257,12 +257,27 @@ export default function StaffSettingsPage() {
           </div>
         )}
 
-        <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
-          <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
+        {/* デスクトップ・タブレット（md以上）: テーブル表示 */}
+        <div className="hidden md:block overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+          <table className="w-full border-collapse" style={{ fontSize: '0.85rem', tableLayout: 'auto' }}>
             <thead>
               <tr>
-                {['氏名', 'メール', 'ロール', '雇用', '勤務時間', '対応エリア', '資格'].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
+                {[
+                  { label: '氏名', minWidth: '140px' },
+                  { label: 'メール', minWidth: '180px' },
+                  { label: 'ロール', minWidth: '80px' },
+                  { label: '雇用', minWidth: '70px' },
+                  { label: '勤務時間', minWidth: '130px' },
+                  { label: '対応エリア', minWidth: '200px' },
+                  { label: '資格', minWidth: '180px' },
+                ].map((col) => (
+                  <th
+                    key={col.label}
+                    className="px-3 py-2 text-left font-semibold whitespace-nowrap"
+                    style={{ background: 'var(--ink)', color: '#fff', minWidth: col.minWidth }}
+                  >
+                    {col.label}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -276,7 +291,7 @@ export default function StaffSettingsPage() {
               )}
               {staffList.map((s) => (
                 <tr key={s.id} className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer" onClick={() => handleEdit(s)}>
-                  <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
+                  <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
                     {!s.user_id && (
                       <>
@@ -302,22 +317,27 @@ export default function StaffSettingsPage() {
                       </>
                     )}
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
                     {s.email}
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)' }}>
                     <Badge variant={s.role === 'admin' ? 'error' : s.role === 'editor' ? 'info' : 'neutral'}>
                       {ROLE_LABELS[s.role]}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {EMPLOYMENT_LABELS[s.employment_type]}
                   </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
+                  <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                    {s.transport_areas.join('  ')}
+                    <div className="flex flex-wrap gap-x-2 gap-y-1">
+                      {s.transport_areas.map((a, idx) => (
+                        <span key={`${idx}-${a}`} className="whitespace-nowrap text-xs">{a}</span>
+                      ))}
+                      {s.transport_areas.length === 0 && <span style={{ color: 'var(--ink-3)' }}>-</span>}
+                    </div>
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
                     {s.qualifications.length > 0 ? (
@@ -325,7 +345,7 @@ export default function StaffSettingsPage() {
                         {s.qualifications.map((q) => (
                           <span
                             key={q}
-                            className="px-1.5 py-0.5 rounded text-xs"
+                            className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
                             style={{
                               background: countable.includes(q) ? 'var(--green-pale)' : 'var(--bg)',
                               color: countable.includes(q) ? 'var(--green)' : 'var(--ink-3)',
@@ -344,6 +364,99 @@ export default function StaffSettingsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* モバイル（md 未満）: カード表示 */}
+        <div className="md:hidden flex flex-col gap-3">
+          {staffList.length === 0 && (
+            <div className="px-3 py-6 text-center rounded-lg" style={{ background: 'var(--bg)', color: 'var(--ink-3)' }}>
+              職員が登録されていません
+            </div>
+          )}
+          {staffList.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => handleEdit(s)}
+              className="p-3 rounded-lg cursor-pointer transition-colors hover:bg-[var(--accent-pale)]"
+              style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-base" style={{ color: 'var(--ink)' }}>
+                    {s.name}
+                  </div>
+                  <div className="text-xs mt-0.5 break-all" style={{ color: 'var(--ink-3)' }}>
+                    {s.email ?? '（メール未設定）'}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 items-end shrink-0">
+                  <Badge variant={s.role === 'admin' ? 'error' : s.role === 'editor' ? 'info' : 'neutral'}>
+                    {ROLE_LABELS[s.role]}
+                  </Badge>
+                  <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                    {EMPLOYMENT_LABELS[s.employment_type]}
+                  </span>
+                </div>
+              </div>
+
+              {!s.user_id && (
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleResendInvite(e, s)}
+                    disabled={resendingId === s.id}
+                    className="text-xs font-medium transition-colors"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
+                      opacity: resendingId === s.id ? 0.6 : 1,
+                    }}
+                  >
+                    {resendingId === s.id ? '送信中...' : '再送'}
+                  </button>
+                </div>
+              )}
+
+              <div className="text-xs mb-1" style={{ color: 'var(--ink-2)' }}>
+                <span className="font-medium">勤務: </span>
+                {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
+              </div>
+
+              {s.transport_areas.length > 0 && (
+                <div className="text-xs mb-1" style={{ color: 'var(--ink-2)' }}>
+                  <span className="font-medium">エリア: </span>
+                  <span className="inline-flex flex-wrap gap-x-2 gap-y-0.5">
+                    {s.transport_areas.map((a, idx) => (
+                      <span key={`${idx}-${a}`} className="whitespace-nowrap">{a}</span>
+                    ))}
+                  </span>
+                </div>
+              )}
+
+              {s.qualifications.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {s.qualifications.map((q) => (
+                    <span
+                      key={q}
+                      className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
+                      style={{
+                        background: countable.includes(q) ? 'var(--green-pale)' : 'var(--bg)',
+                        color: countable.includes(q) ? 'var(--green)' : 'var(--ink-3)',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      {q}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

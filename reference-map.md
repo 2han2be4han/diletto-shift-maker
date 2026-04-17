@@ -212,3 +212,4 @@
 | 2026-04-17 | GradeType 拡張：年少/年中/年長・中1-3・高1-3 追加、Migration 0014 で CHECK 制約更新、GRADE_LABELS を parseChildName.ts で一元管理 |
 | 2026-04-17 | Phase 13: TenantSettings.pickup_areas / dropoff_areas 追加。tenant 設定画面を 2 カラム横並び + max-w 撤廃。children モーダルで迎/送別リスト参照。staff モーダルは ユニオンで候補表示。旧 transport_areas は互換残置 |
 | 2026-04-17 | Phase 14: 送迎表で場所クリック→Google Maps 起動。googleMaps.ts 新設、TransportDayView に TimeWithMapLink 追加、children モーダルで住所メモ入力復活 (MemoInput)。テナントエリアの時間見切れ修正＆ UI 仕上げ |
+| 2026-04-17 | Phase 15: 児童 重複キー修正、「有効→在籍」、tenant 2カラム breakpoint を md に、エリア並び替えを 6点グリップ + HTML5 DnD、staff/page レスポンシブ（md 未満はカード） |

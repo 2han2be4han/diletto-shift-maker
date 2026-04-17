@@ -252,6 +252,24 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 15: UI 微調整バッチ（2026-04-17）</div>
+    <p>
+        Phase 13/14 のレビュー中に出た指摘を一括対応。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>15-1</td><td>児童モーダルのエリアセレクトで重複キーエラー修正（key にindex付与）</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>空エリアを複数追加したときのReact warning解消</td></tr>
+            <tr><td>15-2</td><td>児童の「有効/無効」ラベルを「在籍/退籍」に変更</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>モーダル・一覧バッジ・件数表示</td></tr>
+            <tr><td>15-3</td><td>テナント設定の 2 カラム breakpoint を lg → md に緩和</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>サイドバー幅を考慮</td></tr>
+            <tr><td>15-4</td><td>エリア並び替えをドラッグハンドル（6点グリップ）+ HTML5 DnD に変更</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ドラッグ中のオパシティ変化・ドロップライン表示</td></tr>
+            <tr><td>15-5</td><td>職員管理ページのレスポンシブ対応（md以上=テーブル横スクロール、md未満=カード表示）</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>縦書き化していた日本語列を whitespace:nowrap + 最小幅で防止</td></tr>
+            <tr><td>15-6</td><td>tsc 通過 → コミット → origin/main へ push → Vercel 自動デプロイ</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>本番 Supabase に migrations 0012/0013/0014 適用要</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>
