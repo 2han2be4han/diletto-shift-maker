@@ -334,8 +334,14 @@ export default function TransportPage() {
       const pickupIds = pending?.pickupStaffIds ?? existing?.pickup_staff_ids ?? [];
       const dropoffIds = pending?.dropoffStaffIds ?? existing?.dropoff_staff_ids ?? [];
 
-      pickupIds.forEach((sid) => addMark(pickupResult, sid, pickupEmoji));
-      dropoffIds.forEach((sid) => addMark(dropoffResult, sid, dropoffEmoji));
+      /* Phase 27 fix: 保護者送迎（method='self'）は担当不要。stale な staff_ids が
+         残っていても迎/送マークに反映しない（🧩 保護者の絵文字が他職員に付く問題対策） */
+      if (entry.pickup_method !== 'self') {
+        pickupIds.forEach((sid) => addMark(pickupResult, sid, pickupEmoji));
+      }
+      if (entry.dropoff_method !== 'self') {
+        dropoffIds.forEach((sid) => addMark(dropoffResult, sid, dropoffEmoji));
+      }
     }
     return { pickup: pickupResult, dropoff: dropoffResult };
   }, [scheduleEntries, selectedDate, patterns, pendingChanges, transportAssignments]);
