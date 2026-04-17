@@ -6,8 +6,9 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import LocationImage from '@/components/locations/LocationImage';
+import CommentThread from '@/components/comments/CommentThread';
 import { CHILD_LOCATION_IMAGES_BUCKET } from '@/types';
-import type { ChildDropoffLocationRow, ChildRow } from '@/types';
+import type { ChildDropoffLocationRow, ChildRow, AuthenticatedStaff } from '@/types';
 
 /**
  * 送り場所管理ページ
@@ -45,7 +46,9 @@ export default function LocationsPage() {
   const [editing, setEditing] = useState<Editable | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [canEdit, setCanEdit] = useState(false);
+  const [me, setMe] = useState<AuthenticatedStaff | null>(null);
+
+  const canEdit = me?.role === 'admin' || me?.role === 'editor';
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -53,7 +56,7 @@ export default function LocationsPage() {
       const [lRes, cRes, meRes] = await Promise.all([
         fetch('/api/locations'),
         fetch('/api/children'),
-        fetch('/api/tenant'),
+        fetch('/api/me'),
       ]);
       if (!lRes.ok) throw new Error('送り場所取得失敗');
       if (!cRes.ok) throw new Error('児童取得失敗');
@@ -63,18 +66,10 @@ export default function LocationsPage() {
       setLocations(locs ?? []);
       setChildren((ch as ChildRow[]) ?? []);
 
-      /* canEdit: tenants ロールを見る簡易判定 → /api/tenant から staff の role を取得できないので
-         /api/staff を叩いて自分が editor 以上か見る */
-      const sRes = await fetch('/api/staff');
-      if (sRes.ok && meRes.ok) {
-        const { staff } = await sRes.json();
-        const { tenant } = await meRes.json();
-        /* 自分の role を特定する簡易手段: staff テーブルから email または user_id 一致。
-           既存 API に /api/auth/me が無いため、admin/editor の人なら編集可能にしておく */
-        void staff; void tenant;
+      if (meRes.ok) {
+        const { staff } = await meRes.json();
+        setMe(staff ?? null);
       }
-      /* 最もシンプル: 「編集ボタンを押してエラーが返ったら気づく」方式で一旦 true に */
-      setCanEdit(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -365,7 +360,7 @@ export default function LocationsPage() {
 
             <div className="flex justify-between gap-2 mt-2">
               <div>
-                {editing.id && (
+                {editing.id && canEdit && (
                   <Button variant="secondary" onClick={handleDelete} disabled={saving}>
                     <span style={{ color: 'var(--red)' }}>削除</span>
                   </Button>
@@ -373,15 +368,29 @@ export default function LocationsPage() {
               </div>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setEditing(null)} disabled={saving}>キャンセル</Button>
-                <Button
-                  variant="primary"
-                  onClick={handleSave}
-                  disabled={!editing.child_id || !editing.label || saving}
-                >
-                  {saving ? '保存中...' : '保存'}
-                </Button>
+                {canEdit && (
+                  <Button
+                    variant="primary"
+                    onClick={handleSave}
+                    disabled={!editing.child_id || !editing.label || saving}
+                  >
+                    {saving ? '保存中...' : '保存'}
+                  </Button>
+                )}
               </div>
             </div>
+
+            {editing.id && me && (
+              <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--rule)' }}>
+                <CommentThread
+                  targetType="child_dropoff_location"
+                  targetId={editing.id}
+                  currentRole={me.role}
+                  currentStaffId={me.id}
+                  title="💬 この場所についてのコメント"
+                />
+              </div>
+            )}
           </div>
         )}
       </Modal>

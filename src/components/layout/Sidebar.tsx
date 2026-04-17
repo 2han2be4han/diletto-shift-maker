@@ -30,6 +30,7 @@ const NAV_ITEMS = [
 ];
 
 const NAV_SETTINGS = [
+  { href: '/comments', label: 'コメント承認', icon: '💬' },
   { href: '/settings/tenant', label: 'テナント設定', icon: '🏢' },
   { href: '/settings/staff', label: '職員管理', icon: '👤' },
   { href: '/settings/children', label: '児童管理', icon: '🧒' },
