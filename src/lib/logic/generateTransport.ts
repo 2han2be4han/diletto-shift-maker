@@ -73,7 +73,12 @@ export function generateTransportAssignments(
     if (entry.date !== date) continue;
 
     const pattern = entry.pattern_id ? patternMap.get(entry.pattern_id) : null;
-    const areaLabel = pattern?.area_label || null;
+    /* Phase 27: 迎は pickup_area_label、送は dropoff_area_label を優先し、
+       両者とも無い旧データは legacy area_label にフォールバック。
+       これにより職員の pickup_transport_areas / dropoff_transport_areas とのマッチが
+       実際の方向のエリアで行われる。 */
+    const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
+    const dropoffAreaLabel = pattern?.dropoff_area_label ?? pattern?.area_label ?? null;
     const pickupTime = entry.pickup_time;
     const dropoffTime = entry.dropoff_time;
 
@@ -89,7 +94,7 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: pickupTime,
-          areaLabel,
+          areaLabel: pickupAreaLabel,
           direction: 'pickup',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
@@ -103,7 +108,7 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: dropoffTime,
-          areaLabel,
+          areaLabel: dropoffAreaLabel,
           direction: 'dropoff',
           staffAssignCount,
           maxStaff: MAX_STAFF_PER_TRANSPORT,
