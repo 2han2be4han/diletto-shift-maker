@@ -62,6 +62,8 @@ export default function ShiftPage() {
   const [confirmed, setConfirmed] = useState(false);
 
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null);
+  /* Phase 26: 確定済シフトでも「編集モード」ON でセル編集可能にする */
+  const [editMode, setEditMode] = useState(false);
 
   /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント） */
   const childrenCountByDate = useMemo(() => {
@@ -159,21 +161,52 @@ export default function ShiftPage() {
   };
 
   const handleConfirm = async () => {
-    if (!confirm(`${year}年${month}月のシフトを確定しますか？（再編集するには個別に修正してください）`)) return;
+    if (!confirm(`${year}年${month}月のシフトを確定しますか？（確定後も「編集モード」で個別修正できます）`)) return;
     try {
       const res = await fetch('/api/shift-assignments/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, month }),
+        body: JSON.stringify({ year, month, confirmed: true }),
       });
       if (!res.ok) throw new Error('確定失敗');
+      setEditMode(false);
       await fetchAll();
     } catch (e) {
       alert(e instanceof Error ? e.message : '確定失敗');
     }
   };
 
+  /* Phase 26: 確定解除（確定済みシフトを未確定に戻す） */
+  const handleUnconfirm = async () => {
+    if (!confirm(`${year}年${month}月のシフトを未確定に戻しますか？`)) return;
+    try {
+      const res = await fetch('/api/shift-assignments/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month, confirmed: false }),
+      });
+      if (!res.ok) throw new Error('確定解除失敗');
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '確定解除失敗');
+    }
+  };
+
+  /* 再生成前ガード: 確定済みの場合は必ず確認 */
+  const handleGenerateWithGuard = async () => {
+    if (confirmed) {
+      alert('確定済みシフトは再生成できません。先に「確定解除」してから再生成してください。');
+      return;
+    }
+    if (cells.length > 0) {
+      if (!confirm(`${year}年${month}月のシフトを再生成しますか？（未確定のセルは上書きされます）`)) return;
+    }
+    await handleGenerate();
+  };
+
   const handleCellClick = (staffId: string, date: string) => {
+    /* Phase 26: 確定済みは editMode=true のときだけ編集可能 */
+    if (confirmed && !editMode) return;
     const cell = cells.find((c) => c.staff_id === staffId && c.date === date);
     const s = staff.find((x) => x.id === staffId);
     if (cell) {
@@ -235,25 +268,43 @@ export default function ShiftPage() {
     return { understaffedDays, noQualifiedDays, totalWarnings: warnings.length };
   }, [cells, warnings]);
 
+  /* Phase 26: ヘッダー右側のアクション（再生成 / シフト確定 / 編集モード切替） */
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      {cells.length > 0 && !confirmed && (
+        <Button variant="secondary" onClick={handleGenerateWithGuard}>再生成</Button>
+      )}
+      {cells.length > 0 && !confirmed && (
+        <Button variant="primary" onClick={handleConfirm}>シフト確定</Button>
+      )}
+      {confirmed && (
+        <>
+          <Button
+            variant={editMode ? 'primary' : 'secondary'}
+            onClick={() => setEditMode((v) => !v)}
+          >
+            {editMode ? '編集モード: ON' : '編集モード'}
+          </Button>
+          <Button variant="secondary" onClick={handleUnconfirm}>確定解除</Button>
+        </>
+      )}
+      {cells.length === 0 && (
+        <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
+          シフト生成
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="シフト表" showMonthSelector />
+      <Header title="シフト表" showMonthSelector actions={headerActions} />
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>{year}年{month}月</h2>
-            {confirmed && <Badge variant="success">確定済み</Badge>}
-            {cells.length > 0 && !confirmed && <Badge variant="warning">未確定</Badge>}
-          </div>
-          <div className="flex gap-2">
-            {cells.length > 0 && !confirmed && (
-              <Button variant="primary" onClick={handleConfirm}>シフト確定</Button>
-            )}
-            <Button variant={cells.length > 0 ? 'secondary' : 'app-card-cta'} onClick={handleGenerate} disabled={confirmed}>
-              {cells.length > 0 ? '再生成' : 'シフト生成'}
-            </Button>
-          </div>
+        <div className="flex items-center mb-4 flex-wrap gap-2">
+          {confirmed && !editMode && <Badge variant="success">確定済み</Badge>}
+          {confirmed && editMode && <Badge variant="warning">編集中（確定済みを変更しています）</Badge>}
+          {cells.length > 0 && !confirmed && <Badge variant="warning">未確定</Badge>}
         </div>
 
         {error && (

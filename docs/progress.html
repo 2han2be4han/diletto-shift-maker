@@ -405,6 +405,35 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 26: /shift・/transport 改修 + 招待フロー（2026-04-17 着手）</div>
+    <p style="margin-top: 8px; color: #555;">
+      参照: <code>docs/next-session-spec.md</code>。 5 タスク（/shift ヘッダー、出勤数カウント、/request 並び替え確認、/transport 4 項目、招待リンクフロー）を同一ブランチ <code>claude/implement-next-session-spec-lPDeo</code> にまとめて実装。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>26-0</td><td>進捗表にフェーズ 26 行を追加</td><td>docs/progress.html</td><td class="status-done">完了</td><td>100%</td><td>CLAUDE.md §3 遵守</td></tr>
+            <tr><td>26-1a</td><td>/shift ヘッダー整備（Header.actions に再生成・確定・編集モード）</td><td>src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>h2 年月削除、バッジのみ残す</td></tr>
+            <tr><td>26-1b</td><td>確定解除 API（confirm を confirmed 引数化）</td><td>src/app/api/shift-assignments/confirm/route.ts</td><td class="status-done">完了</td><td>100%</td><td>CLAUDE.md §6 破壊的変更禁止（引数追加のみ）</td></tr>
+            <tr><td>26-2</td><td>職員名セルに出勤数カウント表示</td><td>src/components/shift/ShiftGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>cells → staff_id ごとに assignment_type=normal 件数集計</td></tr>
+            <tr><td>26-3</td><td>/request 並び替え反映確認（動作検証のみ）</td><td>src/app/(app)/request/page.tsx, AdminRequestList.tsx</td><td class="status-done">完了</td><td>100%</td><td>既に display_order 順 select 済</td></tr>
+            <tr><td>26-4a</td><td>送迎担当候補フィルタ（出勤 かつ end_time &ge; 16:31）</td><td>transport/page.tsx, TransportDayView.tsx</td><td class="status-done">完了</td><td>100%</td><td>transport_min_end_time（デフォルト 16:31）</td></tr>
+            <tr><td>26-4b</td><td>送迎 1 日分まとめ保存（pending state + 確認ダイアログ）</td><td>transport/page.tsx, TransportDayView.tsx</td><td class="status-done">完了</td><td>100%</td><td>離脱時 confirm()</td></tr>
+            <tr><td>26-4c</td><td>保護者送迎の専用表記（method=self）</td><td>transport/page.tsx, TransportDayView.tsx, generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>isUnassigned 計算から除外</td></tr>
+            <tr><td>26-4d</td><td>送迎セルに場所 + エリア絵文字表示</td><td>TransportDayView.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存の展開ビューも維持</td></tr>
+            <tr><td>26-5a</td><td>招待 auth コールバック（hash 受け page）</td><td>src/app/auth/confirm/page.tsx (新規)</td><td class="status-done">完了</td><td>100%</td><td>access_token+refresh_token で setSession</td></tr>
+            <tr><td>26-5b</td><td>初回パスワード設定画面</td><td>src/app/auth/set-password/page.tsx (新規)</td><td class="status-done">完了</td><td>100%</td><td>2 回入力 + updateUser({ password })</td></tr>
+            <tr><td>26-5c</td><td>invite API の redirectTo 変更</td><td>src/app/api/staff/invite/route.ts</td><td class="status-done">完了</td><td>100%</td><td>/auth/confirm?next=/auth/set-password</td></tr>
+            <tr><td>26-5d</td><td>/settings/tenant に transport_min_end_time UI 追加</td><td>src/app/(app)/settings/tenant/page.tsx, types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>TenantSettings に transport_min_end_time?: string 追加</td></tr>
+            <tr><td>26-6</td><td>tsc --noEmit 通過 + ローカル動作確認</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>完了後に docs/reference-map.md 更新</td></tr>
+        </tbody>
+    </table>
+    <p style="margin-top: 8px; color: #555;">
+      <strong>未適用マイグレーション</strong>: <code>supabase/migrations/0022_shift_requests_submitted_by.sql</code> は本番 Supabase で手動適用必要。Phase 26 では新規マイグレーションなし（transport_min_end_time は tenants.settings JSONB へ格納）。
+    </p>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

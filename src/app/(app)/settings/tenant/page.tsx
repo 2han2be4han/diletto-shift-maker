@@ -5,6 +5,7 @@ import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
+import { DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
 
 /**
  * テナント設定ページ（admin専用）
@@ -46,6 +47,8 @@ export default function TenantSettingsPage() {
   const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
   const [requestDeadline, setRequestDeadline] = useState(20);
+  /* Phase 26: 送迎担当の最低退勤時刻（この時刻以降に退勤する職員のみ送迎候補） */
+  const [transportMinEndTime, setTransportMinEndTime] = useState<string>(DEFAULT_TRANSPORT_MIN_END_TIME);
 
   useEffect(() => {
     (async () => {
@@ -75,6 +78,7 @@ export default function TenantSettingsPage() {
         );
         setMinQualified(s.min_qualified_staff ?? 2);
         setRequestDeadline(s.request_deadline_day ?? 20);
+        setTransportMinEndTime(s.transport_min_end_time ?? DEFAULT_TRANSPORT_MIN_END_TIME);
       } catch (e) {
         setError(e instanceof Error ? e.message : '読み込みに失敗しました');
       } finally {
@@ -129,6 +133,7 @@ export default function TenantSettingsPage() {
             qualification_types: qualifications,
             min_qualified_staff: minQualified,
             request_deadline_day: requestDeadline,
+            transport_min_end_time: transportMinEndTime,
           } as TenantSettings,
         }),
       });
@@ -293,6 +298,20 @@ export default function TenantSettingsPage() {
               value={minQualified}
               onChange={(e) => setMinQualified(parseInt(e.target.value) || 1)}
               className="w-24 outline-none"
+              style={inputStyle}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 max-w-2xl">
+            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎担当の最低退勤時刻</label>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              この時刻以降に退勤する職員のみ、送迎表で割当候補に含めます（標準 16:31 = 送迎最早 16:30 の直後）。
+            </p>
+            <input
+              type="time"
+              value={transportMinEndTime}
+              onChange={(e) => setTransportMinEndTime(e.target.value || DEFAULT_TRANSPORT_MIN_END_TIME)}
+              className="w-32 outline-none"
               style={inputStyle}
             />
           </div>
