@@ -53,6 +53,10 @@ export type StaffRow = {
   is_qualified: boolean;
   /** Phase 24: 一覧・シフト表の表示順。NULL は name フォールバック */
   display_order: number | null;
+  /** Phase 25: 在職フラグ。false=退職。退職者はログイン不可 */
+  is_active: boolean;
+  /** Phase 25: 退職日時。is_active=false 時に設定 */
+  retired_at: string | null;
   created_at: string;
 };
 
@@ -134,7 +138,36 @@ export type ScheduleEntryRow = {
   dropoff_method: ScheduleEntryDropoffMethod;
   pattern_id: string | null;
   is_confirmed: boolean;
+  /** Phase 25: 出欠ステータス。planned=予定／present=出席／absent=欠席／late=遅刻／early_leave=早退 */
+  attendance_status: AttendanceStatus;
+  /** Phase 25: 出欠最終更新日時 */
+  attendance_updated_at: string | null;
+  /** Phase 25: 出欠最終更新者 staff.id */
+  attendance_updated_by: string | null;
   created_at: string;
+};
+
+// ----- Phase 25: 出欠 -----
+export type AttendanceStatus =
+  | 'planned'      /* 予定（未確認） */
+  | 'present'      /* 出席 */
+  | 'absent'       /* 欠席 */
+  | 'late'         /* 遅刻 */
+  | 'early_leave'; /* 早退 */
+
+export type AttendanceAuditLogRow = {
+  id: string;
+  tenant_id: string;
+  schedule_entry_id: string;
+  child_id: string;
+  entry_date: string;
+  /** 退職・削除で null。その場合は changed_by_name を参照 */
+  changed_by_staff_id: string | null;
+  /** 変更時点の職員名スナップショット（退職・改名後も参照可能） */
+  changed_by_name: string;
+  old_status: AttendanceStatus | null;
+  new_status: AttendanceStatus;
+  changed_at: string;
 };
 
 // ----- 休み希望 -----
@@ -164,6 +197,55 @@ export type ShiftAssignmentRow = {
   assignment_type: ShiftAssignmentType;
   is_confirmed: boolean;
   created_at: string;
+};
+
+// ----- Phase 25: シフト変更申請 -----
+export type ShiftChangeRequestType =
+  | 'time'         /* 出勤時刻の変更 */
+  | 'leave'        /* 休暇申請（assignment_type を paid_leave / public_holiday 等に） */
+  | 'type_change'; /* 勤務種別変更 */
+
+export type ShiftChangeRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled';
+
+/** change_type='time' の requested_payload */
+export type ShiftChangeTimePayload = {
+  start_time: string; /* "HH:MM" */
+  end_time: string;
+};
+
+/** change_type='leave' / 'type_change' の requested_payload */
+export type ShiftChangeTypePayload = {
+  assignment_type: ShiftAssignmentType;
+  /** 時刻変更も同時に行う場合 */
+  start_time?: string | null;
+  end_time?: string | null;
+};
+
+export type ShiftChangeRequestPayload =
+  | ShiftChangeTimePayload
+  | ShiftChangeTypePayload;
+
+export type ShiftChangeRequestRow = {
+  id: string;
+  tenant_id: string;
+  staff_id: string;
+  target_date: string;
+  change_type: ShiftChangeRequestType;
+  requested_payload: ShiftChangeRequestPayload;
+  /** 申請時点の shift_assignments スナップショット（差分表示用） */
+  snapshot_before: Partial<ShiftAssignmentRow> | null;
+  reason: string | null;
+  status: ShiftChangeRequestStatus;
+  reviewed_by_staff_id: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  admin_note: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 // ----- 送迎担当 -----

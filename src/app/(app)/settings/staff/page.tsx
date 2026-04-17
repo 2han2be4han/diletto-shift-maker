@@ -40,6 +40,8 @@ const emptyStaff = (): EditableStaff => ({
   qualifications: [],
   is_qualified: false,
   display_order: null,
+  is_active: true,
+  retired_at: null,
   isNew: true,
 });
 
@@ -137,6 +139,8 @@ export default function StaffSettingsPage() {
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
       display_order: s.display_order,
+      is_active: s.is_active,
+      retired_at: s.retired_at,
     });
   };
 
