@@ -5,7 +5,7 @@ import type {
   ChildTransportPatternRow,
   TransportAssignmentRow,
 } from '@/types';
-import { MAX_STAFF_PER_TRANSPORT, TRANSPORT_GROUP_TIME_WINDOW_MINUTES } from '@/types';
+import { MAX_STAFF_PER_TRANSPORT, TRANSPORT_GROUP_TIME_WINDOW_MINUTES, DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
 
 /**
  * 送迎担当仮割り当てロジック（ルールベース）
@@ -32,6 +32,8 @@ type GenerateTransportInput = {
   patterns: ChildTransportPatternRow[];
   staff: StaffRow[];
   shiftAssignments: ShiftAssignmentRow[];
+  /** Phase 26: この時刻以降に退勤する職員のみ候補。"HH:MM"。省略時 "16:31" */
+  minEndTime?: string;
 };
 
 type GenerateTransportResult = {
@@ -43,13 +45,16 @@ export function generateTransportAssignments(
   input: GenerateTransportInput
 ): GenerateTransportResult {
   const { tenantId, date, scheduleEntries, patterns, staff, shiftAssignments } = input;
+  const minEndTime = input.minEndTime ?? DEFAULT_TRANSPORT_MIN_END_TIME;
 
-  /* ① 出勤している職員のみ抽出 */
+  /* ① 出勤している職員のみ抽出（Phase 26: さらに退勤時刻 >= minEndTime で絞る） */
   const workingStaff = staff.filter((s) => {
     const shift = shiftAssignments.find(
       (sa) => sa.staff_id === s.id && sa.date === date && sa.assignment_type === 'normal'
     );
-    return !!shift;
+    if (!shift || !shift.end_time) return false;
+    /* 退勤時刻が 16:31 以降でなければ送迎候補から外す */
+    return compareTime(shift.end_time, minEndTime) >= 0;
   });
 
   /* 職員ごとの送迎担当回数（均等分散用） */
@@ -72,29 +77,41 @@ export function generateTransportAssignments(
     const pickupTime = entry.pickup_time;
     const dropoffTime = entry.dropoff_time;
 
-    /* 迎え担当を選定 */
-    const pickupStaff = selectStaff({
-      workingStaff,
-      shiftAssignments,
-      date,
-      time: pickupTime,
-      areaLabel,
-      staffAssignCount,
-      maxStaff: MAX_STAFF_PER_TRANSPORT,
-    });
+    /* Phase 26: 保護者送迎（method='self'）は担当不要。割り当てをスキップし、
+       is_unassigned=false で空配列を記録する（UI でエラー扱いしない） */
+    const pickupNeedsStaff = entry.pickup_method !== 'self';
+    const dropoffNeedsStaff = entry.dropoff_method !== 'self';
 
-    /* 送り担当を選定 */
-    const dropoffStaff = selectStaff({
-      workingStaff,
-      shiftAssignments,
-      date,
-      time: dropoffTime,
-      areaLabel,
-      staffAssignCount,
-      maxStaff: MAX_STAFF_PER_TRANSPORT,
-    });
+    /* 迎え担当を選定（保護者送迎なら空） */
+    const pickupStaff = pickupNeedsStaff
+      ? selectStaff({
+          workingStaff,
+          shiftAssignments,
+          date,
+          time: pickupTime,
+          areaLabel,
+          staffAssignCount,
+          maxStaff: MAX_STAFF_PER_TRANSPORT,
+        })
+      : [];
 
-    const isUnassigned = pickupStaff.length === 0 && dropoffStaff.length === 0;
+    /* 送り担当を選定（保護者送迎なら空） */
+    const dropoffStaff = dropoffNeedsStaff
+      ? selectStaff({
+          workingStaff,
+          shiftAssignments,
+          date,
+          time: dropoffTime,
+          areaLabel,
+          staffAssignCount,
+          maxStaff: MAX_STAFF_PER_TRANSPORT,
+        })
+      : [];
+
+    /* is_unassigned: 必要な側が空のときだけ true */
+    const pickupEmpty = pickupNeedsStaff && pickupStaff.length === 0;
+    const dropoffEmpty = dropoffNeedsStaff && dropoffStaff.length === 0;
+    const isUnassigned = pickupEmpty || dropoffEmpty;
     if (isUnassigned) unassignedCount++;
 
     assignments.push({
@@ -173,4 +190,13 @@ function isTimeInRange(time: string, start: string, end: string): boolean {
   };
   const t = toMinutes(time);
   return t >= toMinutes(start) && t <= toMinutes(end);
+}
+
+/* Phase 26: "HH:MM" または "HH:MM:SS" 形式の時刻を比較（a - b の符号） */
+function compareTime(a: string, b: string): number {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  return toMin(a) - toMin(b);
 }

@@ -7,10 +7,13 @@ import { openInGoogleMaps } from '@/lib/utils/googleMaps';
  * 日別送迎表ビュー
  * - 行: 児童名（利用予定のある児童）
  * - 列: 迎え時間 / 迎え担当 / 送り時間 / 送り担当
- * - 担当はドロップダウンで変更可能
+ * - 担当はドロップダウンで変更可能（Phase 26: 変更は pending state に蓄積され、親の「保存」で一括反映）
  * - 未割り当て（is_unassigned）は赤ハイライト
  * - Phase 17: 児童名クリックで詳細行を展開し、迎/送の場所をリスト表示
- *   各場所をクリックで Google Maps 起動
+ * - Phase 26:
+ *   - 担当候補を「出勤中 かつ end_time >= transportMinEndTime」で絞り込み
+ *   - pickup/dropoff method === 'self' のときは「👪 保護者送迎」表記で担当欄を非表示
+ *   - セル時間の下に「エリア絵文字 + 名称」と「住所」を明示表示
  */
 
 type TransportChild = {
@@ -26,16 +29,24 @@ type TransportChild = {
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
+  /** Phase 26: 'self' なら保護者送迎（担当不要） */
+  pickupMethod: 'pickup' | 'self';
+  dropoffMethod: 'dropoff' | 'self';
 };
 
 type TransportStaff = {
   id: string;
   name: string;
+  /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
+  endTime: string | null;
 };
 
 type TransportDayViewProps = {
   children: TransportChild[];
+  /** 全職員（セル内 select 用）。Phase 26: 当日出勤かつ endTime >= minEndTime のみ候補 */
   availableStaff: TransportStaff[];
+  /** Phase 26: "HH:MM" 形式の最低退勤時刻（この時刻以降に退勤する職員のみ候補） */
+  transportMinEndTime: string;
   onStaffChange: (
     scheduleEntryId: string,
     field: 'pickup' | 'dropoff',
@@ -45,9 +56,18 @@ type TransportDayViewProps = {
   disabled?: boolean;
 };
 
+/** "HH:MM" または "HH:MM:SS" 形式 → 分数 */
+function timeToMinutes(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
 export default function TransportDayView({
   children,
   availableStaff,
+  transportMinEndTime,
   onStaffChange,
   onAddPattern,
   disabled = false,
@@ -66,6 +86,14 @@ export default function TransportDayView({
 
   const colSpan = onAddPattern ? 6 : 5;
 
+  /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
+  const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
+  const eligibleStaff = availableStaff.filter((s) => {
+    if (!s.endTime) return false;
+    const em = timeToMinutes(s.endTime);
+    return em !== null && em >= minEndMin;
+  });
+
   return (
     <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
@@ -81,11 +109,11 @@ export default function TransportDayView({
               className="px-3 py-2 text-center font-semibold"
               style={{ background: 'var(--ink)', color: '#fff', minWidth: '70px' }}
             >
-              迎え時間
+              迎え
             </th>
             <th
               className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '180px' }}
+              style={{ background: 'var(--ink)', color: '#fff', minWidth: '200px' }}
             >
               迎え担当
             </th>
@@ -93,11 +121,11 @@ export default function TransportDayView({
               className="px-3 py-2 text-center font-semibold"
               style={{ background: 'var(--ink)', color: '#fff', minWidth: '70px' }}
             >
-              送り時間
+              送り
             </th>
             <th
               className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '180px' }}
+              style={{ background: 'var(--ink)', color: '#fff', minWidth: '200px' }}
             >
               送り担当
             </th>
@@ -117,6 +145,8 @@ export default function TransportDayView({
             const hasAnyLocation =
               !!(child.pickupLocation || child.dropoffLocation ||
                  child.pickupAreaLabel || child.dropoffAreaLabel);
+            const pickupSelf = child.pickupMethod === 'self';
+            const dropoffSelf = child.dropoffMethod === 'self';
             return (
               <React.Fragment key={child.scheduleEntryId}>
                 <tr
@@ -126,7 +156,7 @@ export default function TransportDayView({
                 >
                   {/* 児童名（クリックで詳細展開） */}
                   <td
-                    className="px-3 py-2 font-medium"
+                    className="px-3 py-2 font-medium align-top"
                     style={{
                       borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
                       color: child.isUnassigned ? 'var(--red)' : 'var(--ink)',
@@ -172,58 +202,62 @@ export default function TransportDayView({
                     )}
                   </td>
 
-                  {/* 迎え時間 */}
-                  <td
-                    className="px-3 py-2 text-center font-medium"
-                    style={{
-                      borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
-                      color: 'var(--accent)',
-                    }}
-                  >
-                    {child.pickupTime || '-'}
-                  </td>
+                  {/* 迎え（時刻 + エリア + 場所短縮） */}
+                  <TimeAreaCell
+                    time={child.pickupTime}
+                    areaLabel={child.pickupAreaLabel}
+                    location={child.pickupLocation}
+                    timeColor="var(--accent)"
+                    isExpanded={isExpanded}
+                  />
 
-                  {/* 迎え担当 */}
+                  {/* 迎え担当（method=self のときは保護者送迎バッジ） */}
                   <td
-                    className="px-2 py-1.5"
+                    className="px-2 py-1.5 align-top"
                     style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
                   >
-                    <StaffSelect
-                      staffIds={child.pickupStaffIds}
-                      availableStaff={availableStaff}
-                      onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
-                      disabled={disabled}
-                    />
+                    {pickupSelf ? (
+                      <SelfTransportBadge />
+                    ) : (
+                      <StaffSelect
+                        staffIds={child.pickupStaffIds}
+                        availableStaff={eligibleStaff}
+                        onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
+                        disabled={disabled}
+                      />
+                    )}
                   </td>
 
-                  {/* 送り時間 */}
-                  <td
-                    className="px-3 py-2 text-center font-medium"
-                    style={{
-                      borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
-                      color: 'var(--green)',
-                    }}
-                  >
-                    {child.dropoffTime || '-'}
-                  </td>
+                  {/* 送り */}
+                  <TimeAreaCell
+                    time={child.dropoffTime}
+                    areaLabel={child.dropoffAreaLabel}
+                    location={child.dropoffLocation}
+                    timeColor="var(--green)"
+                    isExpanded={isExpanded}
+                  />
 
                   {/* 送り担当 */}
                   <td
-                    className="px-2 py-1.5"
+                    className="px-2 py-1.5 align-top"
                     style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
                   >
-                    <StaffSelect
-                      staffIds={child.dropoffStaffIds}
-                      availableStaff={availableStaff}
-                      onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
-                      disabled={disabled}
-                    />
+                    {dropoffSelf ? (
+                      <SelfTransportBadge />
+                    ) : (
+                      <StaffSelect
+                        staffIds={child.dropoffStaffIds}
+                        availableStaff={eligibleStaff}
+                        onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
+                        disabled={disabled}
+                      />
+                    )}
                   </td>
 
                   {/* パターン登録ボタン */}
                   {onAddPattern && (
                     <td
-                      className="px-2 py-1.5 text-center"
+                      className="px-2 py-1.5 text-center align-top"
                       style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
                     >
                       <button
@@ -256,6 +290,81 @@ export default function TransportDayView({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * 時刻 + エリア絵文字/名称 + 住所短縮を縦に並べるセル（Phase 26 2-4-d）
+ */
+function TimeAreaCell({
+  time,
+  areaLabel,
+  location,
+  timeColor,
+  isExpanded,
+}: {
+  time: string | null;
+  areaLabel: string | null;
+  location: string | null;
+  timeColor: string;
+  isExpanded: boolean;
+}) {
+  return (
+    <td
+      className="px-2 py-2 align-top"
+      style={{
+        borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+        minWidth: '110px',
+      }}
+    >
+      <div className="flex flex-col gap-0.5 leading-tight">
+        <div
+          className="text-center font-semibold"
+          style={{ color: timeColor, fontSize: '0.85rem' }}
+        >
+          {time || '-'}
+        </div>
+        {areaLabel && (
+          <div
+            className="text-xs text-center truncate"
+            style={{ color: 'var(--ink-2)', fontSize: '0.7rem' }}
+            title={areaLabel}
+          >
+            {areaLabel}
+          </div>
+        )}
+        {location && (
+          <div
+            className="text-center truncate"
+            style={{ color: 'var(--ink-3)', fontSize: '0.62rem' }}
+            title={location}
+          >
+            📍{location}
+          </div>
+        )}
+      </div>
+    </td>
+  );
+}
+
+/**
+ * 保護者送迎バッジ（Phase 26 2-4-c）
+ * method = 'self' の場合に担当ドロップダウン代わりに表示。赤エラー扱いしない。
+ */
+function SelfTransportBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+      style={{
+        background: 'var(--bg)',
+        color: 'var(--ink-3)',
+        border: '1px dashed var(--rule)',
+      }}
+      title="保護者による送迎のため、担当職員の割り当ては不要です"
+    >
+      <span aria-hidden>👪</span>
+      <span>保護者送迎</span>
+    </span>
   );
 }
 
@@ -383,29 +492,37 @@ function StaffSelect({
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {staffIds.map((id, i) => (
-        <select
-          key={i}
-          value={id}
-          onChange={(e) => handleChange(i, e.target.value)}
-          disabled={disabled}
-          className="px-2 py-1 text-xs outline-none disabled:opacity-60"
-          style={{
-            border: '1px solid var(--rule)',
-            borderRadius: '4px',
-            color: id ? 'var(--ink)' : 'var(--red)',
-            background: id ? 'var(--white)' : 'var(--red-pale)',
-            minWidth: '80px',
-          }}
-        >
-          <option value="">未選択</option>
-          {availableStaff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      ))}
+      {staffIds.map((id, i) => {
+        /* Phase 26: 候補外（退勤時間 < 16:31 / 欠勤）でも既存選択は残す */
+        const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
+        return (
+          <select
+            key={i}
+            value={id}
+            onChange={(e) => handleChange(i, e.target.value)}
+            disabled={disabled}
+            className="px-2 py-1 text-xs outline-none disabled:opacity-60"
+            style={{
+              border: `1px solid ${isMissing ? 'var(--red)' : 'var(--rule)'}`,
+              borderRadius: '4px',
+              color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
+              background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
+              minWidth: '90px',
+            }}
+            title={isMissing ? 'この職員は当日の送迎候補外です（勤務時間を確認してください）' : undefined}
+          >
+            <option value="">未選択</option>
+            {isMissing && (
+              <option value={id}>（候補外）</option>
+            )}
+            {availableStaff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        );
+      })}
       {staffIds.length < 2 && !disabled && (
         <button
           onClick={handleAdd}
@@ -428,4 +545,3 @@ function StaffSelect({
     </div>
   );
 }
-

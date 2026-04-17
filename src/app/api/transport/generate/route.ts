@@ -16,12 +16,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { date, scheduleEntries, patterns, staff, shiftAssignments } = body as {
+    const { date, scheduleEntries, patterns, staff, shiftAssignments, minEndTime } = body as {
       date: string;
       scheduleEntries: ScheduleEntryRow[];
       patterns: ChildTransportPatternRow[];
       staff: StaffRow[];
       shiftAssignments: ShiftAssignmentRow[];
+      /** Phase 26: 送迎候補の最低退勤時間 "HH:MM" */
+      minEndTime?: string;
     };
 
     if (!date) {
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
       patterns: patterns || [],
       staff: staff || [],
       shiftAssignments: shiftAssignments || [],
+      minEndTime,
     });
 
     return NextResponse.json({

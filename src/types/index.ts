@@ -22,7 +22,12 @@ export type TenantSettings = {
   qualification_types?: QualificationType[];
   min_qualified_staff?: number;
   request_deadline_day?: number;
+  /** Phase 26: 送迎担当の最低退勤時間。これ以降に退勤する職員のみ送迎候補。"HH:MM" 形式。デフォルト "16:31" */
+  transport_min_end_time?: string;
 };
+
+/** Phase 26: transport_min_end_time のデフォルト値。送迎の最早時刻(16:30)直後。 */
+export const DEFAULT_TRANSPORT_MIN_END_TIME = '16:31';
 
 export type TenantRow = {
   id: string;

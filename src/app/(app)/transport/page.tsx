@@ -18,6 +18,7 @@ import type {
   AreaLabel,
   TenantSettings,
 } from '@/types';
+import { DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
 
 /**
  * 送迎表ページ（Supabase 接続）
@@ -46,6 +47,15 @@ type UiTransportEntry = {
   dropoffStaffIds: string[];
   isUnassigned: boolean;
   isConfirmed: boolean;
+  /** Phase 26: schedule_entries.pickup_method / dropoff_method ('self'=保護者送迎) */
+  pickupMethod: 'pickup' | 'self';
+  dropoffMethod: 'dropoff' | 'self';
+};
+
+/** Phase 26: ローカル編集用 pending state の単位 */
+type PendingAssignment = {
+  pickupStaffIds: string[];
+  dropoffStaffIds: string[];
 };
 
 export default function TransportPage() {
@@ -68,6 +78,12 @@ export default function TransportPage() {
   /* エリア設定を取得し、パターンの pickup_location/dropoff_location が未入力のときに住所をフォールバック */
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
+  /* Phase 26: 送迎担当の最低退勤時間（HH:MM）。テナント設定 or デフォルト */
+  const [transportMinEndTime, setTransportMinEndTime] = useState<string>(DEFAULT_TRANSPORT_MIN_END_TIME);
+
+  /* Phase 26: 日ごとの編集を一時保存する pending state（scheduleEntryId → { pickup, dropoff }） */
+  const [pendingChanges, setPendingChanges] = useState<Map<string, PendingAssignment>>(new Map());
+  const [saving, setSaving] = useState(false);
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
@@ -120,6 +136,9 @@ export default function TransportPage() {
       const settings: TenantSettings = tenantJson.tenant?.settings ?? {};
       setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
       setDropoffAreas(settings.dropoff_areas ?? []);
+      setTransportMinEndTime(settings.transport_min_end_time ?? DEFAULT_TRANSPORT_MIN_END_TIME);
+      /* 再取得時は pending は破棄（保存直後のクリーンアップも兼ねる） */
+      setPendingChanges(new Map());
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -128,6 +147,17 @@ export default function TransportPage() {
   }, [year, month, daysInMonth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  /* Phase 26: ブラウザ離脱時（タブ閉じ・リロード）に未保存警告 */
+  useEffect(() => {
+    if (pendingChanges.size === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [pendingChanges]);
 
   const childNameMap = useMemo(
     () => new Map(children.map((c) => [c.id, c.name])),
@@ -173,6 +203,19 @@ export default function TransportPage() {
         || (dropoffAreaLabel ? areaAddressMap.get(dropoffAreaLabel) ?? null : null)
         || childHomeAddressMap.get(e.child_id)
         || null;
+
+      /* Phase 26: pending の編集を表示に反映（未保存分を先に見せる） */
+      const pending = pendingChanges.get(sid);
+      const pickupStaffIds = pending?.pickupStaffIds ?? t?.pickup_staff_ids ?? [];
+      const dropoffStaffIds = pending?.dropoffStaffIds ?? t?.dropoff_staff_ids ?? [];
+
+      /* Phase 26: 保護者送迎（method=self）は未割当扱いしない */
+      const pickupNeedsStaff = e.pickup_method !== 'self';
+      const dropoffNeedsStaff = e.dropoff_method !== 'self';
+      const pickupEmpty = pickupNeedsStaff && pickupStaffIds.length === 0;
+      const dropoffEmpty = dropoffNeedsStaff && dropoffStaffIds.length === 0;
+      const isUnassigned = pickupEmpty || dropoffEmpty;
+
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
@@ -182,13 +225,15 @@ export default function TransportPage() {
         dropoffLocation,
         pickupAreaLabel,
         dropoffAreaLabel,
-        pickupStaffIds: t?.pickup_staff_ids ?? [],
-        dropoffStaffIds: t?.dropoff_staff_ids ?? [],
-        isUnassigned: t?.is_unassigned ?? true,
+        pickupStaffIds,
+        dropoffStaffIds,
+        isUnassigned,
         isConfirmed: t?.is_confirmed ?? false,
+        pickupMethod: e.pickup_method,
+        dropoffMethod: e.dropoff_method,
       };
     });
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, childHomeAddressMap, patterns, pickupAreas, dropoffAreas]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, childHomeAddressMap, patterns, pickupAreas, dropoffAreas, pendingChanges]);
 
   const unassignedTotal = useMemo(() => {
     return transportAssignments.filter((t) => t.is_unassigned).length;
@@ -196,6 +241,19 @@ export default function TransportPage() {
 
   const confirmed = currentDayEntries.length > 0 && currentDayEntries.every((e) => e.isConfirmed);
   const generated = transportAssignments.length > 0;
+
+  /* Phase 26: 当日に出勤している職員を endTime 付きで UI へ渡す */
+  const availableStaffForDay = useMemo(() => {
+    return staff.map((s) => {
+      const shift = shiftAssignments.find(
+        (sa) =>
+          sa.staff_id === s.id &&
+          sa.date === selectedDate &&
+          sa.assignment_type === 'normal'
+      );
+      return { id: s.id, name: s.name, endTime: shift?.end_time ?? null };
+    });
+  }, [staff, shiftAssignments, selectedDate]);
 
   const handleGenerate = async () => {
     try {
@@ -210,6 +268,7 @@ export default function TransportPage() {
             patterns,
             staff,
             shiftAssignments: shiftAssignments.filter((a) => a.date === date),
+            minEndTime: transportMinEndTime,
           }),
         });
         if (!genRes.ok) continue;
@@ -236,30 +295,114 @@ export default function TransportPage() {
     }
   };
 
-  const handleStaffChange = async (
+  /**
+   * Phase 26: セル編集は pending state のみ更新（DB 反映は「この日の送迎を保存」ボタンで一括）
+   */
+  const handleStaffChange = (
     scheduleEntryId: string,
     field: 'pickup' | 'dropoff',
     staffIds: string[]
   ) => {
-    const current = transportAssignments.find((t) => t.schedule_entry_id === scheduleEntryId);
-    const pickup = field === 'pickup' ? staffIds : current?.pickup_staff_ids ?? [];
-    const dropoff = field === 'dropoff' ? staffIds : current?.dropoff_staff_ids ?? [];
-    const isUnassigned = pickup.length === 0 && dropoff.length === 0;
-
-    await fetch('/api/transport-assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        assignments: [{
-          schedule_entry_id: scheduleEntryId,
-          pickup_staff_ids: pickup,
-          dropoff_staff_ids: dropoff,
-          is_unassigned: isUnassigned,
-          is_confirmed: current?.is_confirmed ?? false,
-        }],
-      }),
+    setPendingChanges((prev) => {
+      const next = new Map(prev);
+      const current = next.get(scheduleEntryId);
+      const existing = transportAssignments.find((t) => t.schedule_entry_id === scheduleEntryId);
+      const base: PendingAssignment = current ?? {
+        pickupStaffIds: existing?.pickup_staff_ids ?? [],
+        dropoffStaffIds: existing?.dropoff_staff_ids ?? [],
+      };
+      next.set(scheduleEntryId, {
+        pickupStaffIds: field === 'pickup' ? staffIds : base.pickupStaffIds,
+        dropoffStaffIds: field === 'dropoff' ? staffIds : base.dropoffStaffIds,
+      });
+      return next;
     });
-    await fetchAll();
+  };
+
+  /**
+   * Phase 26: 当日の pending 分を一括保存
+   * - selectedDate に属する pending のみ対象
+   * - 各 entry の method=self を考慮して is_unassigned を再計算
+   */
+  const handleSaveDay = async () => {
+    if (pendingChanges.size === 0) return;
+    setSaving(true);
+    try {
+      const dayEntryIds = new Set(
+        scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id)
+      );
+      const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
+      const payload: {
+        schedule_entry_id: string;
+        pickup_staff_ids: string[];
+        dropoff_staff_ids: string[];
+        is_unassigned: boolean;
+        is_confirmed: boolean;
+      }[] = [];
+
+      for (const [sid, change] of pendingChanges.entries()) {
+        if (!dayEntryIds.has(sid)) continue;
+        const entry = entryById.get(sid);
+        const existing = transportAssignments.find((t) => t.schedule_entry_id === sid);
+        const pickupNeedsStaff = entry?.pickup_method !== 'self';
+        const dropoffNeedsStaff = entry?.dropoff_method !== 'self';
+        const pickupEmpty = pickupNeedsStaff && change.pickupStaffIds.length === 0;
+        const dropoffEmpty = dropoffNeedsStaff && change.dropoffStaffIds.length === 0;
+        payload.push({
+          schedule_entry_id: sid,
+          pickup_staff_ids: change.pickupStaffIds,
+          dropoff_staff_ids: change.dropoffStaffIds,
+          is_unassigned: pickupEmpty || dropoffEmpty,
+          is_confirmed: existing?.is_confirmed ?? false,
+        });
+      }
+
+      if (payload.length === 0) {
+        setSaving(false);
+        return;
+      }
+
+      const res = await fetch('/api/transport-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments: payload }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
+      /* 保存成功したらこの日分の pending を消す（他日の pending は保持） */
+      setPendingChanges((prev) => {
+        const next = new Map(prev);
+        for (const sid of dayEntryIds) next.delete(sid);
+        return next;
+      });
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** 当日の pending 件数（ボタン表示・ガード判定用） */
+  const pendingCountForDay = useMemo(() => {
+    const ids = new Set(scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id));
+    let c = 0;
+    for (const sid of pendingChanges.keys()) if (ids.has(sid)) c++;
+    return c;
+  }, [pendingChanges, scheduleEntries, selectedDate]);
+
+  /** 日付切替時のガード */
+  const handleSelectDate = (date: string) => {
+    if (pendingCountForDay > 0) {
+      const ok = confirm(`この日に未保存の変更が ${pendingCountForDay} 件あります。破棄して切り替えますか？`);
+      if (!ok) return;
+      setPendingChanges((prev) => {
+        const next = new Map(prev);
+        const ids = new Set(scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id));
+        for (const sid of ids) next.delete(sid);
+        return next;
+      });
+    }
+    setSelectedDate(date);
   };
 
   const handleConfirm = async () => {
@@ -331,7 +474,7 @@ export default function TransportPage() {
                 return (
                   <button
                     key={date}
-                    onClick={() => setSelectedDate(date)}
+                    onClick={() => handleSelectDate(date)}
                     className="px-3 py-2 text-xs font-semibold whitespace-nowrap rounded-md transition-all shrink-0"
                     style={{
                       background: isSelected ? 'var(--accent)' : hasUnassigned ? 'var(--red-pale)' : 'var(--white)',
@@ -362,14 +505,37 @@ export default function TransportPage() {
                 pickupStaffIds: e.pickupStaffIds,
                 dropoffStaffIds: e.dropoffStaffIds,
                 isUnassigned: e.isUnassigned,
+                pickupMethod: e.pickupMethod,
+                dropoffMethod: e.dropoffMethod,
               }))}
-              availableStaff={staff.map((s) => ({ id: s.id, name: s.name }))}
+              availableStaff={availableStaffForDay}
+              transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
               onAddPattern={() => {
                 alert('児童管理ページで送迎パターンを編集できます');
               }}
               disabled={confirmed}
             />
+
+            {/* Phase 26: 日ごとの保存ボタン */}
+            <div className="flex items-center justify-end gap-3 mt-4">
+              {pendingCountForDay > 0 && (
+                <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                  未保存 {pendingCountForDay} 件
+                </span>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleSaveDay}
+                disabled={saving || pendingCountForDay === 0 || confirmed}
+              >
+                {saving
+                  ? '保存中...'
+                  : pendingCountForDay > 0
+                  ? `この日の送迎を保存（${pendingCountForDay}件）`
+                  : 'この日の送迎を保存'}
+              </Button>
+            </div>
           </>
         ) : (
           <div

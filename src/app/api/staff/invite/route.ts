@@ -83,9 +83,11 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   const tenantName = tenantRow?.name ?? '事業所';
 
-  /* 3. 招待リンクを生成（メール送信はしない）→ Resend で送信 */
+  /* 3. 招待リンクを生成（メール送信はしない）→ Resend で送信
+     Phase 26: Supabase invite は implicit flow（hash fragment）で返すため、
+     hash 処理用の /auth/confirm で受け、初回パスワード設定画面へ誘導 */
   const siteUrl = request.nextUrl.origin;
-  const redirectTo = `${siteUrl}/auth/callback?next=/dashboard`;
+  const redirectTo = `${siteUrl}/auth/confirm?next=/auth/set-password`;
 
   const linkResult = await generateInviteLink(admin, {
     email: normalizedEmail,

@@ -79,6 +79,17 @@ export default function ShiftGrid({
   const cellMap = new Map<string, ShiftCell>();
   cells.forEach((c) => cellMap.set(`${c.staff_id}_${c.date}`, c));
 
+  /* Phase 26: 職員ごとの出勤/公休/有給日数（職員名横の小さなカウント表示用） */
+  const countsByStaff = new Map<string, { work: number; ph: number; pl: number }>();
+  staff.forEach((s) => countsByStaff.set(s.id, { work: 0, ph: 0, pl: 0 }));
+  cells.forEach((c) => {
+    const rec = countsByStaff.get(c.staff_id);
+    if (!rec) return;
+    if (c.assignment_type === 'normal') rec.work++;
+    else if (c.assignment_type === 'public_holiday') rec.ph++;
+    else if (c.assignment_type === 'paid_leave') rec.pl++;
+  });
+
   /* 警告をマップ化 */
   const warningMap = new Map<string, ShiftWarning[]>();
   warnings.forEach((w) => {
@@ -190,16 +201,32 @@ export default function ShiftGrid({
                   boxShadow: '4px 0 6px rgba(0,0,0,0.02)',
                 }}
               >
-                <div className="flex items-center gap-1.5">
-                  <span className="group-hover:text-[var(--accent)] transition-colors">{s.name}</span>
-                  {s.is_qualified && (
-                    <span
-                      className="text-xs px-1 rounded"
-                      style={{ background: 'var(--green-pale)', color: 'var(--green)', fontSize: '0.6rem' }}
-                    >
-                      有資格
-                    </span>
-                  )}
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="group-hover:text-[var(--accent)] transition-colors">{s.name}</span>
+                    {s.is_qualified && (
+                      <span
+                        className="text-xs px-1 rounded"
+                        style={{ background: 'var(--green-pale)', color: 'var(--green)', fontSize: '0.6rem' }}
+                      >
+                        有資格
+                      </span>
+                    )}
+                  </div>
+                  {/* Phase 26: 月内の出勤/公休/有給カウント */}
+                  {(() => {
+                    const c = countsByStaff.get(s.id) ?? { work: 0, ph: 0, pl: 0 };
+                    return (
+                      <div
+                        className="flex items-center gap-1.5 leading-none"
+                        style={{ fontSize: '0.62rem', color: 'var(--ink-3)', fontWeight: 400 }}
+                      >
+                        <span>出勤{c.work}日</span>
+                        {c.ph > 0 && <span style={{ color: 'var(--accent)' }}>公休{c.ph}</span>}
+                        {c.pl > 0 && <span style={{ color: 'var(--green)' }}>有給{c.pl}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               </td>
               {dates.map((d) => {
