@@ -1,0 +1,149 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import type { ShiftRequestRow, StaffRow } from '@/types';
+
+/**
+ * 管理者向け: 全職員の休み希望提出状況
+ */
+type Props = {
+  staff: StaffRow[];
+  requests: ShiftRequestRow[];
+  targetMonth: string;
+};
+
+export default function AdminRequestList({ staff, requests, targetMonth }: Props) {
+  const [detail, setDetail] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
+
+  const byStaff = useMemo(() => {
+    const map = new Map<string, ShiftRequestRow[]>();
+    for (const r of requests) {
+      const arr = map.get(r.staff_id) ?? [];
+      arr.push(r);
+      map.set(r.staff_id, arr);
+    }
+    return map;
+  }, [requests]);
+
+  const submittedCount = staff.filter((s) => byStaff.has(s.id)).length;
+  const notSubmittedCount = staff.length - submittedCount;
+
+  const getCount = (reqs: ShiftRequestRow[] | undefined, type: string) =>
+    reqs?.find((r) => r.request_type === type)?.dates.length ?? 0;
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <Badge variant="success">提出 {submittedCount}名</Badge>
+        <Badge variant="error">未提出 {notSubmittedCount}名</Badge>
+        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>対象月 {targetMonth}</span>
+      </div>
+
+      <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+        <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
+          <thead>
+            <tr>
+              {['職員名', '雇用', 'ステータス', '公休', '有給', '出勤可', '特記', '提出日'].map((h) => (
+                <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap"
+                  style={{ background: 'var(--ink)', color: '#fff' }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {staff.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  職員が登録されていません
+                </td>
+              </tr>
+            )}
+            {staff.map((s) => {
+              const reqs = byStaff.get(s.id);
+              const isSubmitted = !!reqs && reqs.length > 0;
+              const phRow = reqs?.find((r) => r.request_type === 'public_holiday');
+
+              return (
+                <tr
+                  key={s.id}
+                  className="hover:bg-[var(--accent-pale)] transition-colors cursor-pointer"
+                  onClick={() => setDetail({ staff: s, reqs: reqs ?? [] })}
+                  style={{
+                    background: !isSubmitted ? 'var(--red-pale)' : 'transparent',
+                  }}
+                >
+                  <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
+                    {s.name}
+                  </td>
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
+                    {s.employment_type === 'full_time' ? '常勤' : 'パート'}
+                  </td>
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                    <Badge variant={isSubmitted ? 'success' : 'error'}>
+                      {isSubmitted ? '提出済み' : '未提出'}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 text-center" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--accent)' }}>
+                    {getCount(reqs, 'public_holiday') || '-'}
+                  </td>
+                  <td className="px-3 py-2 text-center" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--green)' }}>
+                    {getCount(reqs, 'paid_leave') || '-'}
+                  </td>
+                  <td className="px-3 py-2 text-center" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--gold)' }}>
+                    {getCount(reqs, 'available_day') || '-'}
+                  </td>
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)', maxWidth: '150px' }}>
+                    <span className="truncate block">{phRow?.notes ?? '-'}</span>
+                  </td>
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
+                    {phRow?.submitted_at ? new Date(phRow.submitted_at).toLocaleDateString('ja-JP') : '-'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={detail ? `${detail.staff.name} の休み希望` : ''}>
+        {detail && (
+          <div className="flex flex-col gap-4">
+            {detail.reqs.length === 0 ? (
+              <p style={{ color: 'var(--ink-3)' }}>提出されていません。</p>
+            ) : (
+              detail.reqs.map((r) => (
+                <div
+                  key={r.id}
+                  className="p-3"
+                  style={{ background: 'var(--bg)', borderRadius: '6px' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={r.request_type === 'public_holiday' ? 'info' : r.request_type === 'paid_leave' ? 'success' : 'warning'}>
+                      {r.request_type === 'public_holiday' ? '公休' : r.request_type === 'paid_leave' ? '有給' : '出勤可'}
+                    </Badge>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                      {r.dates.length} 日
+                    </span>
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--ink-2)' }}>
+                    {r.dates.sort().join(', ')}
+                  </p>
+                  {r.notes && (
+                    <p className="text-xs mt-2 p-2 rounded" style={{ background: 'var(--white)', color: 'var(--ink-2)' }}>
+                      メモ: {r.notes}
+                    </p>
+                  )}
+                </div>
+              ))
+            )}
+            <Button variant="secondary" onClick={() => setDetail(null)}>閉じる</Button>
+          </div>
+        )}
+      </Modal>
+    </>
+  );
+}

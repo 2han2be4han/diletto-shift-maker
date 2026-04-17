@@ -1,0 +1,68 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { requireRole } from '@/lib/auth/requireRole';
+
+/**
+ * GET /api/schedule-entries?from=YYYY-MM-DD&to=YYYY-MM-DD
+ *   同テナントの利用予定（日付レンジ）
+ * POST /api/schedule-entries  - upsert（bulk可）
+ * DELETE /api/schedule-entries?id=...
+ */
+
+export async function GET(request: NextRequest) {
+  const gate = await requireRole('viewer');
+  if (!gate.ok) return gate.response;
+
+  const from = request.nextUrl.searchParams.get('from');
+  const to = request.nextUrl.searchParams.get('to');
+
+  const supabase = await createClient();
+  let q = supabase.from('schedule_entries').select('*').order('date');
+  if (from) q = q.gte('date', from);
+  if (to) q = q.lte('date', to);
+
+  const { data, error } = await q;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ entries: data });
+}
+
+export async function POST(request: NextRequest) {
+  const gate = await requireRole('editor');
+  if (!gate.ok) return gate.response;
+
+  const body = await request.json().catch(() => null);
+  const entries: Array<Record<string, unknown>> = Array.isArray(body?.entries) ? body.entries : [];
+  if (entries.length === 0) return NextResponse.json({ error: 'entries が空です' }, { status: 400 });
+
+  const rows = entries.map((e) => ({
+    tenant_id: gate.staff.tenant_id,
+    child_id: String(e.child_id ?? ''),
+    date: String(e.date ?? ''),
+    pickup_time: (e.pickup_time as string) ?? null,
+    dropoff_time: (e.dropoff_time as string) ?? null,
+    pattern_id: (e.pattern_id as string) ?? null,
+    is_confirmed: Boolean(e.is_confirmed ?? false),
+  }));
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('schedule_entries')
+    .upsert(rows, { onConflict: 'tenant_id,child_id,date' })
+    .select();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ entries: data });
+}
+
+export async function DELETE(request: NextRequest) {
+  const gate = await requireRole('editor');
+  if (!gate.ok) return gate.response;
+
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id が必要です' }, { status: 400 });
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('schedule_entries').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}

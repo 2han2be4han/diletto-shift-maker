@@ -1,21 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
 
 /**
  * テナント設定ページ（admin専用）
- * - 事業所名
- * - 送迎エリア設定（絵文字ラベル + エリア名）
- * - 有資格者最低出勤人数
- * - 休み希望締切日
- *
- * TODO: Supabase連携後にDB読み書きに切り替え
+ * - 事業所名 + settings(JSONB) の CRUD
  */
-
-type AreaLabel = { emoji: string; name: string };
 
 const DEFAULT_AREAS: AreaLabel[] = [
   { emoji: '🍇', name: '藤江' },
@@ -24,16 +18,6 @@ const DEFAULT_AREAS: AreaLabel[] = [
   { emoji: '✈', name: '常滑' },
   { emoji: '🍶', name: '学童エリア' },
 ];
-
-/**
- * 資格種類の定義
- * - countable: 人員配置基準でカウントされる資格
- * - non_countable: 配置基準外（児発管・専門職員・加配加算）
- */
-type QualificationType = {
-  name: string;
-  countable: boolean; // true=有資格者カウント対象
-};
 
 const DEFAULT_QUALIFICATIONS: QualificationType[] = [
   { name: '保育士', countable: true },
@@ -46,29 +30,67 @@ const DEFAULT_QUALIFICATIONS: QualificationType[] = [
 ];
 
 export default function TenantSettingsPage() {
-  const [tenantName, setTenantName] = useState('Diletto 藤江');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const [tenantName, setTenantName] = useState('');
   const [areas, setAreas] = useState<AreaLabel[]>(DEFAULT_AREAS);
   const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
   const [requestDeadline, setRequestDeadline] = useState(20);
-  const [saved, setSaved] = useState(false);
 
-  const handleAddArea = () => {
-    setAreas([...areas, { emoji: '📍', name: '' }]);
-  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/tenant');
+        if (!res.ok) throw new Error(await res.text());
+        const { tenant } = await res.json();
+        const s: TenantSettings = tenant?.settings ?? {};
+        setTenantName(tenant?.name ?? '');
+        setAreas(s.transport_areas && s.transport_areas.length > 0 ? s.transport_areas : DEFAULT_AREAS);
+        setQualifications(s.qualification_types && s.qualification_types.length > 0 ? s.qualification_types : DEFAULT_QUALIFICATIONS);
+        setMinQualified(s.min_qualified_staff ?? 2);
+        setRequestDeadline(s.request_deadline_day ?? 20);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '読み込みに失敗しました');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const handleRemoveArea = (index: number) => {
-    setAreas(areas.filter((_, i) => i !== index));
-  };
+  const handleAddArea = () => setAreas([...areas, { emoji: '📍', name: '' }]);
+  const handleRemoveArea = (i: number) => setAreas(areas.filter((_, idx) => idx !== i));
+  const handleAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
+    setAreas(areas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
 
-  const handleAreaChange = (index: number, field: 'emoji' | 'name', value: string) => {
-    setAreas(areas.map((a, i) => (i === index ? { ...a, [field]: value } : a)));
-  };
-
-  const handleSave = () => {
-    // TODO: Supabase連携後にDB保存
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/tenant', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: tenantName,
+          settings: {
+            transport_areas: areas,
+            qualification_types: qualifications,
+            min_qualified_staff: minQualified,
+            request_deadline_day: requestDeadline,
+          } as TenantSettings,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -80,18 +102,32 @@ export default function TenantSettingsPage() {
     fontSize: '0.9rem',
   };
 
+  if (loading) {
+    return (
+      <>
+        <Header title="テナント設定" />
+        <div className="p-6" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
+      </>
+    );
+  }
+
   return (
     <>
       <Header title="テナント設定" />
 
-      <div className="p-6 max-w-2xl">
+      <div className="p-6 max-w-2xl overflow-y-auto">
         <div className="flex items-center gap-3 mb-6">
           <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>事業所設定</h2>
           <Badge variant="info">admin専用</Badge>
         </div>
 
+        {error && (
+          <div className="mb-4 px-4 py-3 rounded" style={{ background: 'var(--red-pale)', color: 'var(--red)' }}>
+            {error}
+          </div>
+        )}
+
         <div className="flex flex-col gap-6">
-          {/* 事業所名 */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>事業所名</label>
             <input
@@ -103,7 +139,6 @@ export default function TenantSettingsPage() {
             />
           </div>
 
-          {/* 送迎エリア */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎エリア</label>
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
@@ -137,18 +172,14 @@ export default function TenantSettingsPage() {
                   </button>
                 </div>
               ))}
-              <Button variant="secondary" onClick={handleAddArea}>
-                + エリア追加
-              </Button>
+              <Button variant="secondary" onClick={handleAddArea}>+ エリア追加</Button>
             </div>
           </div>
 
-          {/* 資格種類管理 */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>資格種類</label>
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
               「カウント対象」がONの資格を持つ職員が、シフト生成時の有資格者カウントに含まれます。
-              <br />児発管・専門職員・加配加算などはOFFにしてください。
             </p>
             <div className="flex flex-col gap-1.5">
               {qualifications.map((q, i) => (
@@ -204,12 +235,8 @@ export default function TenantSettingsPage() {
             </div>
           </div>
 
-          {/* 有資格者最低出勤人数 */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>有資格者の最低出勤人数</label>
-            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              上記で「カウント対象」ONの資格を持つ職員がこの人数以上出勤するようにシフトを生成します。
-            </p>
             <input
               type="number"
               min={1}
@@ -221,7 +248,6 @@ export default function TenantSettingsPage() {
             />
           </div>
 
-          {/* 休み希望締切日 */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>休み希望の締切日</label>
             <div className="flex items-center gap-2">
@@ -239,9 +265,10 @@ export default function TenantSettingsPage() {
             </div>
           </div>
 
-          {/* 保存ボタン */}
           <div className="flex items-center gap-3 mt-2">
-            <Button variant="primary" onClick={handleSave}>保存</Button>
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
             {saved && <Badge variant="success">保存しました</Badge>}
           </div>
         </div>

@@ -1,68 +1,56 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { format, getDaysInMonth } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
 import ShiftGrid from '@/components/shift/ShiftGrid';
-import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
 import { generateShiftAssignments } from '@/lib/logic/generateShift';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import type { StaffRow, ShiftAssignmentType } from '@/types';
+import type {
+  ShiftAssignmentType,
+  StaffRow,
+  ShiftAssignmentRow,
+  ShiftRequestRow,
+  ScheduleEntryRow,
+} from '@/types';
 
 /**
- * シフト表ページ
- * - シフト生成ボタン → ロジック実行 → グリッド表示
- * - セルクリック → 出勤種別を切り替え
- * - 警告表示（赤: 人員不足、黄: 有資格者不足）
- * - 確定ボタン
- *
- * TODO: Supabase連携後にDB読み書きに切り替え
+ * シフト表ページ（Supabase 接続）
+ * - staff, schedule_entries, shift_requests を DB から取得
+ * - 生成 → DB に upsert
+ * - セル編集 → DB 更新
+ * - 確定 → is_confirmed: true
  */
 
-/* 仮データ */
-const MOCK_STAFF: StaffRow[] = [
-  { id: 's1', tenant_id: 't1', user_id: null, name: '金田', email: null, role: 'admin', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🌳'], is_qualified: true, created_at: '' },
-  { id: 's2', tenant_id: 't1', user_id: null, name: '加藤', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🏭'], is_qualified: true, created_at: '' },
-  { id: 's3', tenant_id: 't1', user_id: null, name: '鈴木', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🌳', '✈'], is_qualified: false, created_at: '' },
-  { id: 's4', tenant_id: 't1', user_id: null, name: '田中', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:30', default_end_time: '17:30', transport_areas: ['🍇'], is_qualified: false, created_at: '' },
-  { id: 's5', tenant_id: 't1', user_id: null, name: '佐藤', email: null, role: 'viewer', employment_type: 'part_time', default_start_time: '10:00', default_end_time: '16:00', transport_areas: ['🌳'], is_qualified: false, created_at: '' },
-  { id: 's6', tenant_id: 't1', user_id: null, name: '山本', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🏭', '✈'], is_qualified: true, created_at: '' },
-];
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1;
 
-/* 利用予定の仮データ（4月平日に5〜8名） */
-function generateMockSchedule() {
-  const entries = [];
-  for (let d = 1; d <= 30; d++) {
-    const dow = new Date(2026, 3, d).getDay();
-    if (dow === 0 || dow === 6) continue;
-    const count = 5 + Math.floor(Math.random() * 4);
-    for (let c = 0; c < count; c++) {
-      entries.push({
-        id: `se-${d}-${c}`,
-        tenant_id: 't1',
-        child_id: `c${c}`,
-        date: `2026-04-${String(d).padStart(2, '0')}`,
-        pickup_time: '13:00',
-        dropoff_time: '16:00',
-        pattern_id: null,
-        is_confirmed: false,
-        created_at: '',
-      });
-    }
-  }
-  return entries;
-}
+type ShiftCell = {
+  staff_id: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  assignment_type: ShiftAssignmentType;
+};
+
+type Warning = { date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string };
 
 export default function ShiftPage() {
-  const [generated, setGenerated] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [year, setYear] = useState(currentYear);
+  const [month, setMonth] = useState(currentMonth);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const [shiftCells, setShiftCells] = useState<
-    { staff_id: string; date: string; start_time: string | null; end_time: string | null; assignment_type: ShiftAssignmentType }[]
-  >([]);
-  const [warnings, setWarnings] = useState<{ date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string }[]>([]);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntryRow[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequestRow[]>([]);
+  const [cells, setCells] = useState<ShiftCell[]>([]);
+  const [warnings, setWarnings] = useState<Warning[]>([]);
+  const [confirmed, setConfirmed] = useState(false);
 
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null);
   const [editType, setEditType] = useState<ShiftAssignmentType>('normal');
@@ -71,161 +59,240 @@ export default function ShiftPage() {
   const [endH, setEndH] = useState('17');
   const [endM, setEndM] = useState('00');
 
-  /* シフト生成 */
-  const handleGenerate = () => {
-    const result = generateShiftAssignments({
-      tenantId: 't1',
-      year: 2026,
-      month: 4,
-      staff: MOCK_STAFF,
-      shiftRequests: [], // 仮データでは休み希望なし
-      scheduleEntries: generateMockSchedule(),
-    });
+  const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
-    setShiftCells(
-      result.assignments.map((a) => ({
-        staff_id: a.staff_id,
-        date: a.date,
-        start_time: a.start_time,
-        end_time: a.end_time,
-        assignment_type: a.assignment_type,
-      }))
-    );
-    setWarnings(result.warnings);
-    setGenerated(true);
-    setConfirmed(false);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const from = `${monthStr}-01`;
+      const lastDay = getDaysInMonth(new Date(year, month - 1));
+      const to = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+      const [sRes, eRes, rRes, aRes] = await Promise.all([
+        fetch('/api/staff'),
+        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+        fetch(`/api/shift-requests?month=${monthStr}`),
+        fetch(`/api/shift-assignments?from=${from}&to=${to}`),
+      ]);
+
+      if (!sRes.ok) throw new Error('職員取得失敗');
+      if (!eRes.ok) throw new Error('利用予定取得失敗');
+
+      const { staff: sArr } = await sRes.json();
+      const { entries } = await eRes.json();
+      const rJson = rRes.ok ? await rRes.json() : { requests: [] };
+      const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
+
+      setStaff(sArr ?? []);
+      setScheduleEntries(entries ?? []);
+      setShiftRequests(rJson.requests ?? []);
+      const assigns: ShiftAssignmentRow[] = aJson.assignments ?? [];
+      setCells(
+        assigns.map<ShiftCell>((a) => ({
+          staff_id: a.staff_id,
+          date: a.date,
+          start_time: a.start_time,
+          end_time: a.end_time,
+          assignment_type: a.assignment_type,
+        }))
+      );
+      setConfirmed(assigns.some((a) => a.is_confirmed));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '読み込み失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month, monthStr]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleGenerate = async () => {
+    const result = generateShiftAssignments({
+      tenantId: staff[0]?.tenant_id ?? '',
+      year,
+      month,
+      staff,
+      shiftRequests,
+      scheduleEntries,
+    });
+    /* DB に upsert */
+    try {
+      const res = await fetch('/api/shift-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: result.assignments.map((a) => ({
+            staff_id: a.staff_id,
+            date: a.date,
+            start_time: a.start_time,
+            end_time: a.end_time,
+            assignment_type: a.assignment_type,
+            is_confirmed: false,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
+      setWarnings(result.warnings);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '生成失敗');
+    }
   };
 
-  /* セルクリック → 編集モーダル */
-  const handleCellClick = (staffId: string, date: string) => {
-    if (confirmed) return;
-    const cell = shiftCells.find((c) => c.staff_id === staffId && c.date === date);
-    const staff = MOCK_STAFF.find((s) => s.id === staffId);
+  const handleConfirm = async () => {
+    if (!confirm(`${year}年${month}月のシフトを確定しますか？（再編集するには個別に修正してください）`)) return;
+    try {
+      const res = await fetch('/api/shift-assignments/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month }),
+      });
+      if (!res.ok) throw new Error('確定失敗');
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '確定失敗');
+    }
+  };
 
+  const handleCellClick = (staffId: string, date: string) => {
+    const cell = cells.find((c) => c.staff_id === staffId && c.date === date);
+    const s = staff.find((x) => x.id === staffId);
     if (cell) {
       setEditType(cell.assignment_type);
       if (cell.start_time) {
         const [h, m] = cell.start_time.split(':');
-        setStartH(h);
-        setStartM(m);
+        setStartH(h); setStartM(m);
       } else {
-        setStartH(staff?.default_start_time?.split(':')[0] || '09');
-        setStartM(staff?.default_start_time?.split(':')[1] || '00');
+        setStartH(s?.default_start_time?.split(':')[0] ?? '09');
+        setStartM(s?.default_start_time?.split(':')[1] ?? '00');
       }
       if (cell.end_time) {
         const [h, m] = cell.end_time.split(':');
-        setEndH(h);
-        setEndM(m);
+        setEndH(h); setEndM(m);
       } else {
-        setEndH(staff?.default_end_time?.split(':')[0] || '17');
-        setEndM(staff?.default_end_time?.split(':')[1] || '00');
+        setEndH(s?.default_end_time?.split(':')[0] ?? '17');
+        setEndM(s?.default_end_time?.split(':')[1] ?? '00');
       }
+    } else {
+      setEditType('normal');
     }
     setEditingCell({ staffId, date });
   };
 
-  /* 保存実行 */
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingCell) return;
-    setShiftCells((prev) =>
-      prev.map((c) =>
-        c.staff_id === editingCell.staffId && c.date === editingCell.date
-          ? {
-              ...c,
-              assignment_type: editType,
-              start_time: editType === 'normal' ? `${startH}:${startM}` : null,
-              end_time: editType === 'normal' ? `${endH}:${endM}` : null,
-            }
-          : c
-      )
-    );
-    setEditingCell(null);
+    try {
+      const res = await fetch('/api/shift-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: [{
+            staff_id: editingCell.staffId,
+            date: editingCell.date,
+            assignment_type: editType,
+            start_time: editType === 'normal' ? `${startH}:${startM}` : null,
+            end_time: editType === 'normal' ? `${endH}:${endM}` : null,
+            is_confirmed: confirmed,
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
+      setEditingCell(null);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失敗');
+    }
   };
 
-  const editingStaff = editingCell ? MOCK_STAFF.find((s) => s.id === editingCell.staffId) : null;
+  const editingStaff = editingCell ? staff.find((s) => s.id === editingCell.staffId) : null;
   const editingCellData = editingCell
-    ? shiftCells.find((c) => c.staff_id === editingCell.staffId && c.date === editingCell.date)
+    ? cells.find((c) => c.staff_id === editingCell.staffId && c.date === editingCell.date)
     : null;
 
-  /* 集計 */
   const summary = useMemo(() => {
-    if (!generated) return null;
+    if (cells.length === 0) return null;
     const understaffedDays = warnings.filter((w) => w.type === 'understaffed').length;
     const noQualifiedDays = warnings.filter((w) => w.type === 'no_qualified').length;
     return { understaffedDays, noQualifiedDays, totalWarnings: warnings.length };
-  }, [generated, warnings]);
+  }, [cells, warnings]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="シフト表" />
+      <Header
+        title="シフト表"
+        actions={
+          <select
+            value={`${year}-${month}`}
+            onChange={(e) => {
+              const [y, m] = e.target.value.split('-').map(Number);
+              setYear(y); setMonth(m);
+            }}
+            className="px-2 py-1 rounded text-sm"
+            style={{ border: '1px solid var(--rule)' }}
+          >
+            {Array.from({ length: 12 }, (_, i) => {
+              const d = new Date(currentYear, currentMonth - 1 - 3 + i, 1);
+              return (
+                <option key={`${d.getFullYear()}-${d.getMonth() + 1}`} value={`${d.getFullYear()}-${d.getMonth() + 1}`}>
+                  {d.getFullYear()}年{d.getMonth() + 1}月
+                </option>
+              );
+            })}
+          </select>
+        }
+      />
 
       <div className="flex-1 overflow-auto p-6">
-        {/* ヘッダー */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
-              2026年4月
-            </h2>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>{year}年{month}月</h2>
             {confirmed && <Badge variant="success">確定済み</Badge>}
-            {generated && !confirmed && <Badge variant="warning">未確定</Badge>}
+            {cells.length > 0 && !confirmed && <Badge variant="warning">未確定</Badge>}
           </div>
           <div className="flex gap-2">
-            {generated && !confirmed && (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  // TODO: Supabase連携後にDB更新（is_confirmed: true）
-                  setConfirmed(true);
-                }}
-              >
-                シフト確定
-              </Button>
+            {cells.length > 0 && !confirmed && (
+              <Button variant="primary" onClick={handleConfirm}>シフト確定</Button>
             )}
-            <Button
-              variant={generated ? 'secondary' : 'app-card-cta'}
-              onClick={handleGenerate}
-              disabled={confirmed}
-            >
-              {generated ? '再生成' : 'シフト生成'}
+            <Button variant={cells.length > 0 ? 'secondary' : 'app-card-cta'} onClick={handleGenerate} disabled={confirmed}>
+              {cells.length > 0 ? '再生成' : 'シフト生成'}
             </Button>
           </div>
         </div>
 
-        {/* 警告サマリー */}
-        {summary && summary.totalWarnings > 0 && (
-          <div
-            className="flex gap-3 mb-4 px-4 py-3 flex-wrap"
-            style={{
-              background: 'var(--red-pale)',
-              borderRadius: '8px',
-              border: '1px solid rgba(155,51,51,0.15)',
-            }}
-          >
-            {summary.understaffedDays > 0 && (
-              <Badge variant="error">人員不足 {summary.understaffedDays}日</Badge>
-            )}
-            {summary.noQualifiedDays > 0 && (
-              <Badge variant="warning">有資格者不足 {summary.noQualifiedDays}日</Badge>
-            )}
-            <span className="text-xs" style={{ color: 'var(--red)' }}>
-              セルをクリックして調整してください
-            </span>
+        {error && (
+          <div className="mb-2 px-4 py-2 rounded" style={{ background: 'var(--red-pale)', color: 'var(--red)', fontSize: '0.85rem' }}>
+            {error}
           </div>
         )}
 
-        {/* グリッド */}
-        {generated ? (
+        {summary && summary.totalWarnings > 0 && (
+          <div
+            className="flex gap-3 mb-4 px-4 py-3 flex-wrap"
+            style={{ background: 'var(--red-pale)', borderRadius: '8px', border: '1px solid rgba(155,51,51,0.15)' }}
+          >
+            {summary.understaffedDays > 0 && <Badge variant="error">人員不足 {summary.understaffedDays}日</Badge>}
+            {summary.noQualifiedDays > 0 && <Badge variant="warning">有資格者不足 {summary.noQualifiedDays}日</Badge>}
+            <span className="text-xs" style={{ color: 'var(--red)' }}>セルをクリックして調整してください</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
+            読み込み中...
+          </div>
+        ) : cells.length > 0 ? (
           <div className="flex flex-col h-full min-h-[500px]">
             <ShiftGrid
-              year={2026}
-              month={4}
-              staff={MOCK_STAFF.map((s) => ({
+              year={year}
+              month={month}
+              staff={staff.map((s) => ({
                 id: s.id,
                 name: s.name,
                 employment_type: s.employment_type,
                 is_qualified: s.is_qualified,
               }))}
-              cells={shiftCells}
+              cells={cells}
               warnings={warnings}
               onCellClick={handleCellClick}
             />
@@ -233,26 +300,24 @@ export default function ShiftPage() {
         ) : (
           <div
             className="flex flex-col items-center justify-center py-20"
-            style={{
-              background: 'var(--white)',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-            }}
+            style={{ background: 'var(--white)', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
           >
-            <p className="text-base font-medium mb-2" style={{ color: 'var(--ink-2)' }}>
-              シフトが未生成です
-            </p>
+            <p className="text-base font-medium mb-2" style={{ color: 'var(--ink-2)' }}>シフトが未生成です</p>
             <p className="text-sm mb-6" style={{ color: 'var(--ink-3)' }}>
               利用予定と休み希望を元にシフトを自動生成します
             </p>
-            <Button variant="app-card-cta" onClick={handleGenerate}>
+            <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
               シフト生成
             </Button>
+            {(staff.length === 0 || scheduleEntries.length === 0) && (
+              <p className="text-xs mt-3" style={{ color: 'var(--red)' }}>
+                ※ 職員と利用予定が登録されている必要があります
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      {/* セル編集モーダル */}
       <Modal
         isOpen={!!editingCell}
         onClose={() => setEditingCell(null)}
@@ -264,38 +329,20 @@ export default function ShiftPage() {
       >
         {editingCell && editingStaff && (
           <div className="flex flex-col gap-4">
-            <div
-              className="px-3 py-2"
-              style={{ background: 'var(--bg)', borderRadius: '6px' }}
-            >
-              <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                {editingStaff.name}
-              </span>
-              {editingStaff.is_qualified && (
-                <Badge variant="success" >有資格</Badge>
-              )}
+            <div className="px-3 py-2 flex items-center gap-2" style={{ background: 'var(--bg)', borderRadius: '6px' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{editingStaff.name}</span>
+              {editingStaff.is_qualified && <Badge variant="success">有資格</Badge>}
             </div>
 
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              現在: {editingCellData ? ({'normal': '出勤', 'public_holiday': '公休', 'paid_leave': '有給', 'off': '休み'} as Record<string, string>)[editingCellData.assignment_type] : '-'}
+              現在: {editingCellData ? ({ normal: '出勤', public_holiday: '公休', paid_leave: '有給', off: '休み' } as Record<string, string>)[editingCellData.assignment_type] : '-'}
             </p>
 
             <div className="grid grid-cols-2 gap-2">
               {(['normal', 'public_holiday', 'paid_leave', 'off'] as const).map((type) => {
-                const labels: Record<ShiftAssignmentType, string> = {
-                  normal: '出勤',
-                  public_holiday: '公休',
-                  paid_leave: '有給',
-                  off: '休み',
-                };
-                const colors: Record<ShiftAssignmentType, string> = {
-                  normal: 'var(--ink)',
-                  public_holiday: 'var(--accent)',
-                  paid_leave: 'var(--green)',
-                  off: 'var(--ink-3)',
-                };
+                const labels: Record<ShiftAssignmentType, string> = { normal: '出勤', public_holiday: '公休', paid_leave: '有給', off: '休み' };
+                const colors: Record<ShiftAssignmentType, string> = { normal: 'var(--ink)', public_holiday: 'var(--accent)', paid_leave: 'var(--green)', off: 'var(--ink-3)' };
                 const isActive = editType === type;
-
                 return (
                   <button
                     key={type}
@@ -318,45 +365,21 @@ export default function ShiftPage() {
                 <div>
                   <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>勤務時間</label>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={startH}
-                      onChange={(e) => setStartH(e.target.value.slice(0,2))}
-                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
-                    />
+                    <input type="text" value={startH} onChange={(e) => setStartH(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                     <span className="font-bold">:</span>
-                    <input
-                      type="text"
-                      value={startM}
-                      onChange={(e) => setStartM(e.target.value.slice(0,2))}
-                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
-                    />
+                    <input type="text" value={startM} onChange={(e) => setStartM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                     <span className="mx-2 text-gray-400">〜</span>
-                    <input
-                      type="text"
-                      value={endH}
-                      onChange={(e) => setEndH(e.target.value.slice(0,2))}
-                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
-                    />
+                    <input type="text" value={endH} onChange={(e) => setEndH(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                     <span className="font-bold">:</span>
-                    <input
-                      type="text"
-                      value={endM}
-                      onChange={(e) => setEndM(e.target.value.slice(0,2))}
-                      className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none"
-                    />
+                    <input type="text" value={endM} onChange={(e) => setEndM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                   </div>
                 </div>
               </div>
             )}
 
             <div className="flex gap-2 mt-4">
-              <Button variant="secondary" className="flex-1" onClick={() => setEditingCell(null)}>
-                キャンセル
-              </Button>
-              <Button variant="primary" className="flex-1" onClick={handleSave}>
-                保存する
-              </Button>
+              <Button variant="secondary" className="flex-1" onClick={() => setEditingCell(null)}>キャンセル</Button>
+              <Button variant="primary" className="flex-1" onClick={handleSave}>保存する</Button>
             </div>
           </div>
         )}

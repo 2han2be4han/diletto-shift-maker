@@ -1,45 +1,45 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import type { GradeType } from '@/types';
+import type {
+  GradeType,
+  ChildRow,
+  ChildTransportPatternRow,
+  PickupMethod,
+  DropoffMethod,
+  TenantSettings,
+} from '@/types';
 import { getDefaultPickupTimeByGrade } from '@/lib/utils/parseChildName';
 
 /**
  * 児童管理ページ（admin・editor）
- *
- * デイロボのExcelを参考に、児童ごとに複数の送迎パターンを登録可能。
- * パターン例: 保育園 / 自宅 / 学校(通常) / 学校(短縮) / おけいこ / 休み
- *
- * 各パターンに:
- * - 区分名（保育園/自宅/学校 etc）
- * - 迎え: 場所 + 時間 + 方法(お迎え/自分で来る)
- * - 送り: 場所 + 時間 + 方法(送り/自分で帰る/保護者)
- * - エリアラベル
- *
- * TODO: Supabase連携後にDB読み書きに切り替え
+ * Supabase 連携 + エリア種類はテナント設定から取得
  */
 
 type PatternItem = {
-  name: string;
+  id?: string;
+  pattern_name: string;
   pickup_location: string;
   pickup_time: string;
-  pickup_method: 'pickup' | 'self' | 'parent';
+  pickup_method: PickupMethod;
   dropoff_location: string;
   dropoff_time: string;
-  dropoff_method: 'dropoff' | 'self' | 'parent';
+  dropoff_method: DropoffMethod;
   area_label: string;
 };
 
-type ChildItem = {
+type EditableChild = {
   id: string;
   name: string;
   grade_type: GradeType;
   is_active: boolean;
+  parent_contact: string | null;
   patterns: PatternItem[];
+  isNew?: boolean;
 };
 
 const GRADE_LABELS: Record<GradeType, string> = {
@@ -50,99 +50,155 @@ const GRADE_LABELS: Record<GradeType, string> = {
 const PATTERN_PRESETS = ['保育園', '自宅', '学校（通常）', '学校（短縮）', 'おけいこ', '休み'];
 const METHOD_LABELS = { pickup: 'お迎え', self: '自分で', parent: '保護者' };
 const METHOD_LABELS_DROP = { dropoff: '送り', self: '自分で帰る', parent: '保護者' };
-const MOCK_AREAS = ['🍇 藤江', '🌳 豊明', '🏭 大府', '✈ 常滑', '🍶 学童'];
 
 const emptyPattern = (): PatternItem => ({
-  name: '', pickup_location: '', pickup_time: '14:00', pickup_method: 'pickup',
-  dropoff_location: '', dropoff_time: '16:00', dropoff_method: 'dropoff', area_label: '',
+  pattern_name: '',
+  pickup_location: '',
+  pickup_time: '14:00',
+  pickup_method: 'pickup',
+  dropoff_location: '',
+  dropoff_time: '16:00',
+  dropoff_method: 'dropoff',
+  area_label: '',
 });
 
-/* 送迎パターンのテンプレートセット */
-const PRESET_BUNDLES: { id: string; name: string; description: string; patterns: PatternItem[] }[] = [
-  {
-    id: 'school',
-    name: '学校プラン',
-    description: '学校お迎え・自宅送り',
-    patterns: [
-      { name: '通常', pickup_location: '学校', pickup_time: '14:00', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '短縮', pickup_location: '学校', pickup_time: '11:45', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '休み', pickup_location: '自宅', pickup_time: '14:00', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-    ],
-  },
-  {
-    id: 'holiday',
-    name: '休暇プラン',
-    description: '自宅お迎え・自宅送り',
-    patterns: [
-      { name: '終日利用', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🌳 豊明' },
-      { name: '休み', pickup_location: '保護者', pickup_time: '10:00', pickup_method: 'parent', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '' },
-    ],
-  },
-];
-
-/* デイロボExcelを参考にした仮データ */
-const INITIAL_CHILDREN: ChildItem[] = [
-  {
-    id: 'c1', name: '川島舞桜', grade_type: 'preschool', is_active: true,
-    patterns: [
-      { name: '保育園', pickup_location: '学校', pickup_time: '13:45', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '自宅', pickup_location: 'おけいこ', pickup_time: '14:25', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '学校（短縮）', pickup_location: '短縮', pickup_time: '11:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '自宅', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '休み', pickup_location: '保護者', pickup_time: '10:15', pickup_method: 'parent', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '' },
-    ],
-  },
-  {
-    id: 'c2', name: '川島颯斗', grade_type: 'elementary_4', is_active: true,
-    patterns: [
-      { name: '学校（通常）', pickup_location: '学校', pickup_time: '13:45', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: 'おけいこ', pickup_location: 'おけいこ', pickup_time: '14:25', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '学校（短縮）', pickup_location: '短縮', pickup_time: '11:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '自宅', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '休み', pickup_location: '自宅', pickup_time: '11:20', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:10', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-    ],
-  },
-  {
-    id: 'c4', name: '清水隼音', grade_type: 'elementary_4', is_active: true,
-    patterns: [
-      { name: '学校（通常）', pickup_location: '学校', pickup_time: '13:45', pickup_method: 'pickup', dropoff_location: '大府緑公', dropoff_time: '16:40', dropoff_method: 'dropoff', area_label: '🏭 大府' },
-      { name: '自宅', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '大府緑公', dropoff_time: '16:40', dropoff_method: 'dropoff', area_label: '🏭 大府' },
-      { name: '休み', pickup_location: '学校', pickup_time: '12:20', pickup_method: 'pickup', dropoff_location: '大府緑公', dropoff_time: '16:40', dropoff_method: 'dropoff', area_label: '🏭 大府' },
-    ],
-  },
-  {
-    id: 'c5', name: '滝川希', grade_type: 'preschool', is_active: true,
-    patterns: [
-      { name: '保育園', pickup_location: '藤江保', pickup_time: '13:25', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:00', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '自宅', pickup_location: '自宅', pickup_time: '10:30', pickup_method: 'pickup', dropoff_location: '自宅', dropoff_time: '17:00', dropoff_method: 'dropoff', area_label: '🍇 藤江' },
-      { name: '休み', pickup_location: '保護者', pickup_time: '10:15', pickup_method: 'parent', dropoff_location: '自宅', dropoff_time: '17:00', dropoff_method: 'dropoff', area_label: '' },
-    ],
-  },
-];
-
 export default function ChildrenSettingsPage() {
-  const [children, setChildren] = useState<ChildItem[]>(INITIAL_CHILDREN);
-  const [editing, setEditing] = useState<ChildItem | null>(null);
-  const [isNew, setIsNew] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [children, setChildren] = useState<ChildRow[]>([]);
+  const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
+  const [areaLabels, setAreaLabels] = useState<string[]>([]);
+  const [editing, setEditing] = useState<EditableChild | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cRes, tRes] = await Promise.all([
+        fetch('/api/children'),
+        fetch('/api/tenant'),
+      ]);
+      if (!cRes.ok) throw new Error('児童の取得に失敗しました');
+      const cJson = await cRes.json();
+      setChildren(cJson.children ?? []);
+      setPatterns(cJson.patterns ?? []);
+      if (tRes.ok) {
+        const { tenant } = await tRes.json();
+        const s: TenantSettings = tenant?.settings ?? {};
+        setAreaLabels((s.transport_areas ?? []).map((a) => `${a.emoji} ${a.name}`));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '読み込みに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const handleAdd = () => {
-    setEditing({ id: `c${Date.now()}`, name: '', grade_type: 'elementary_1', is_active: true, patterns: [emptyPattern()] });
-    setIsNew(true);
+    setEditing({
+      id: `new-${Date.now()}`,
+      name: '',
+      grade_type: 'elementary_1',
+      is_active: true,
+      parent_contact: null,
+      patterns: [emptyPattern()],
+      isNew: true,
+    });
   };
 
-  const handleEdit = (child: ChildItem) => {
-    setEditing({ ...child, patterns: child.patterns.map((p) => ({ ...p })) });
-    setIsNew(false);
+  const handleEdit = (child: ChildRow) => {
+    const childPatterns = patterns
+      .filter((p) => p.child_id === child.id)
+      .map<PatternItem>((p) => ({
+        id: p.id,
+        pattern_name: p.pattern_name,
+        pickup_location: p.pickup_location ?? '',
+        pickup_time: p.pickup_time ?? '14:00',
+        pickup_method: p.pickup_method,
+        dropoff_location: p.dropoff_location ?? '',
+        dropoff_time: p.dropoff_time ?? '16:00',
+        dropoff_method: p.dropoff_method,
+        area_label: p.area_label ?? '',
+      }));
+    setEditing({
+      id: child.id,
+      name: child.name,
+      grade_type: child.grade_type,
+      is_active: child.is_active,
+      parent_contact: child.parent_contact,
+      patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern()],
+    });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !editing.name) return;
-    if (isNew) {
-      setChildren([...children, editing]);
-    } else {
-      setChildren(children.map((c) => (c.id === editing.id ? editing : c)));
+    setSaving(true);
+    setError('');
+    try {
+      let childId = editing.id;
+      if (editing.isNew) {
+        const res = await fetch('/api/children', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: editing.name,
+            grade_type: editing.grade_type,
+            is_active: editing.is_active,
+            parent_contact: editing.parent_contact,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
+        const { child } = await res.json();
+        childId = child.id;
+      } else {
+        const res = await fetch(`/api/children/${editing.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: editing.name,
+            grade_type: editing.grade_type,
+            is_active: editing.is_active,
+            parent_contact: editing.parent_contact,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
+      }
+
+      /* パターン一括置換 */
+      const pRes = await fetch(`/api/children/${childId}/patterns`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patterns: editing.patterns }),
+      });
+      if (!pRes.ok) throw new Error((await pRes.json()).error ?? 'パターン保存失敗');
+
+      setEditing(null);
+      await fetchAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存に失敗しました');
+    } finally {
+      setSaving(false);
     }
-    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!editing || editing.isNew) return;
+    if (!confirm(`${editing.name} を削除しますか？`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/children/${editing.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('削除失敗');
+      setEditing(null);
+      await fetchAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '削除失敗');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updatePattern = (index: number, field: keyof PatternItem, value: string) => {
@@ -158,86 +214,80 @@ export default function ChildrenSettingsPage() {
     padding: '8px 12px', fontSize: '0.85rem',
   };
 
-  const smallInput: React.CSSProperties = {
-    ...inputStyle, padding: '6px 8px', fontSize: '0.8rem',
-  };
+  const smallInput: React.CSSProperties = { ...inputStyle, padding: '6px 8px', fontSize: '0.8rem' };
+
+  if (loading) {
+    return (
+      <>
+        <Header title="児童管理" />
+        <div className="p-6" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
+      </>
+    );
+  }
+
+  const activeCount = children.filter((c) => c.is_active).length;
 
   return (
     <>
       <Header title="児童管理" />
 
-      <div className="p-6">
+      <div className="p-6 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>児童一覧</h2>
-            <Badge variant="info">{children.filter((c) => c.is_active).length}名（有効）</Badge>
+            <Badge variant="info">{activeCount}名（有効）</Badge>
           </div>
           <Button variant="primary" onClick={handleAdd}>+ 児童追加</Button>
         </div>
 
-        {/* 児童一覧テーブル */}
+        {error && (
+          <div className="mb-3 px-4 py-2 rounded" style={{ background: 'var(--red-pale)', color: 'var(--red)', fontSize: '0.85rem' }}>
+            {error}
+          </div>
+        )}
+
         <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
             <thead>
               <tr>
-                {['氏名', '学年', 'パターン数', 'エリア', 'ステータス'].map((h) => (
+                {['氏名', '学年', 'パターン数', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                // エリアごとにグループ化
-                const groups: Record<string, ChildItem[]> = {};
-                children.forEach((c) => {
-                  const primaryArea = c.patterns[0]?.area_label || '未設定';
-                  const emoji = primaryArea.split(' ')[0] || '❓';
-                  if (!groups[emoji]) groups[emoji] = [];
-                  groups[emoji].push(c);
-                });
-
-                return Object.entries(groups).map(([emoji, items]) => (
-                  <React.Fragment key={emoji}>
-                    {/* グループヘッダー */}
-                    <tr style={{ background: 'var(--bg-2)' }}>
-                      <td colSpan={5} className="px-3 py-1.5 font-bold text-xs" style={{ color: 'var(--ink-2)', borderBottom: '1px solid var(--rule)' }}>
-                        {emoji} グループ ({items.length}名)
-                      </td>
-                    </tr>
-                    {items.map((c) => (
-                      <tr key={c.id} className="hover:bg-[var(--accent-pale)] cursor-pointer" onClick={() => handleEdit(c)}>
-                        <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>{c.name}</td>
-                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                          <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
-                        </td>
-                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                          {c.patterns.length}パターン
-                        </td>
-                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                          <div className="flex flex-wrap gap-1">
-                            {[...new Set(c.patterns.map((p) => p.area_label).filter(Boolean))].map((area) => (
-                              <span key={area} title={area} className="text-sm">{area.split(' ')[0]}</span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
-                          <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ));
-              })()}
+              {children.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                    児童が登録されていません
+                  </td>
+                </tr>
+              )}
+              {children.map((c) => {
+                const count = patterns.filter((p) => p.child_id === c.id).length;
+                return (
+                  <tr key={c.id} className="hover:bg-[var(--accent-pale)] cursor-pointer" onClick={() => handleEdit(c)}>
+                    <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>{c.name}</td>
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                      <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
+                    </td>
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
+                      {count}パターン
+                    </td>
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                      <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '有効' : '無効'}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 編集モーダル */}
-      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={isNew ? '児童追加' : `${editing?.name} の設定`} size="lg">
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={editing?.isNew ? '児童追加' : `${editing?.name} の設定`} size="lg">
         {editing && (
           <div className="flex flex-col gap-5">
-            {/* 基本情報 */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>氏名</label>
@@ -250,7 +300,6 @@ export default function ChildrenSettingsPage() {
                   onChange={(e) => {
                     const newGrade = e.target.value as GradeType;
                     const defaultTime = getDefaultPickupTimeByGrade(newGrade);
-                    /* 学年変更時、空のパターンの迎え時間にデフォルト値を入れる */
                     const updatedPatterns = editing.patterns.map((p) =>
                       p.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type) || !p.pickup_time
                         ? { ...p, pickup_time: defaultTime }
@@ -270,31 +319,18 @@ export default function ChildrenSettingsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 p-3" style={{ background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--rule)' }}>
-              <label className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>テンプレート一括適用</label>
-              <div className="flex gap-2">
-                {PRESET_BUNDLES.map((bundle) => (
-                  <button
-                    key={bundle.id}
-                    onClick={() => {
-                      if (window.confirm(`${bundle.name}のテンプレートを適用しますか？現在のパターンは上書きされます。`)) {
-                        setEditing({
-                          ...editing,
-                          patterns: bundle.patterns.map((p) => ({ ...p })),
-                        });
-                      }
-                    }}
-                    className="flex-1 text-left p-2 rounded transition-all hover:bg-white border border-transparent hover:border-[var(--rule)]"
-                    style={{ background: 'rgba(0,0,0,0.03)' }}
-                  >
-                    <div className="text-xs font-bold" style={{ color: 'var(--ink)' }}>{bundle.name}</div>
-                    <div className="text-[10px]" style={{ color: 'var(--ink-3)' }}>{bundle.description}</div>
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>保護者連絡先（任意）</label>
+              <input
+                type="text"
+                value={editing.parent_contact ?? ''}
+                onChange={(e) => setEditing({ ...editing, parent_contact: e.target.value })}
+                className="outline-none"
+                style={inputStyle}
+                placeholder="090-xxxx-xxxx"
+              />
             </div>
 
-            {/* 送迎パターン（デイロボExcel準拠） */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
@@ -309,11 +345,10 @@ export default function ChildrenSettingsPage() {
                   className="p-3"
                   style={{ background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--rule)' }}
                 >
-                  {/* 上段: 区分 + エリア + 削除 */}
                   <div className="flex items-center gap-2 mb-2">
                     <select
-                      value={p.name}
-                      onChange={(e) => updatePattern(i, 'name', e.target.value)}
+                      value={p.pattern_name}
+                      onChange={(e) => updatePattern(i, 'pattern_name', e.target.value)}
                       className="outline-none flex-1"
                       style={smallInput}
                     >
@@ -327,7 +362,7 @@ export default function ChildrenSettingsPage() {
                       style={smallInput}
                     >
                       <option value="">エリア</option>
-                      {MOCK_AREAS.map((a) => (<option key={a} value={a}>{a}</option>))}
+                      {areaLabels.map((a) => (<option key={a} value={a}>{a}</option>))}
                     </select>
                     <button
                       onClick={() => setEditing({ ...editing, patterns: editing.patterns.filter((_, j) => j !== i) })}
@@ -338,9 +373,7 @@ export default function ChildrenSettingsPage() {
                     </button>
                   </div>
 
-                  {/* 下段: 迎え｜送り（大画面横並び・小画面縦積み） */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {/* 迎え側 */}
                     <div
                       className="flex items-center gap-1.5 px-2 py-1.5 rounded flex-wrap"
                       style={{ background: 'var(--accent-pale)', border: '1px solid rgba(26,62,184,0.1)' }}
@@ -355,7 +388,6 @@ export default function ChildrenSettingsPage() {
                       </select>
                     </div>
 
-                    {/* 送り側 */}
                     <div
                       className="flex items-center gap-1.5 px-2 py-1.5 rounded flex-wrap"
                       style={{ background: 'var(--green-pale)', border: '1px solid rgba(42,122,82,0.1)' }}
@@ -383,10 +415,20 @@ export default function ChildrenSettingsPage() {
               )}
             </div>
 
-            {/* 保存 */}
-            <div className="flex gap-2 mt-2">
-              <Button variant="secondary" onClick={() => setEditing(null)}>キャンセル</Button>
-              <Button variant="primary" onClick={handleSave} disabled={!editing.name}>保存</Button>
+            <div className="flex justify-between gap-2 mt-2">
+              <div>
+                {!editing.isNew && (
+                  <Button variant="secondary" onClick={handleDelete} disabled={saving}>
+                    <span style={{ color: 'var(--red)' }}>削除</span>
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setEditing(null)} disabled={saving}>キャンセル</Button>
+                <Button variant="primary" onClick={handleSave} disabled={!editing.name || saving}>
+                  {saving ? '保存中...' : '保存'}
+                </Button>
+              </div>
             </div>
           </div>
         )}

@@ -58,7 +58,7 @@ function getMockResult(): ParsedScheduleEntry[] {
 
 export async function parsePdfToSchedule(
   pdfBase64: string,
-  mediaType: string = 'application/pdf'
+  mediaType: 'application/pdf' = 'application/pdf'
 ): Promise<{ entries: ParsedScheduleEntry[]; isMock: boolean }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 

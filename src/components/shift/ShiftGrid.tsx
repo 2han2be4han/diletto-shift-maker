@@ -236,7 +236,7 @@ export default function ShiftGrid({
               出勤数
             </td>
             {dates.map((d) => {
-              const count = dailyCounts.get(d.dateStr) || 0;
+              const count = dailyWorkingCount.get(d.dateStr) || 0;
               return (
                 <td
                   key={d.dateStr}

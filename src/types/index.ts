@@ -5,12 +5,23 @@
  * ============================================= */
 
 // ----- テナント -----
+export type AreaLabel = { emoji: string; name: string };
+export type QualificationType = { name: string; countable: boolean };
+
+export type TenantSettings = {
+  transport_areas?: AreaLabel[];
+  qualification_types?: QualificationType[];
+  min_qualified_staff?: number;
+  request_deadline_day?: number;
+};
+
 export type TenantRow = {
   id: string;
   name: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   status: 'active' | 'inactive' | 'suspended';
+  settings: TenantSettings;
   created_at: string;
 };
 
@@ -29,6 +40,7 @@ export type StaffRow = {
   default_start_time: string | null;
   default_end_time: string | null;
   transport_areas: string[];
+  qualifications: string[];
   is_qualified: boolean;
   created_at: string;
 };
@@ -50,10 +62,14 @@ export type ChildRow = {
   name: string;
   grade_type: GradeType;
   is_active: boolean;
+  parent_contact: string | null;
   created_at: string;
 };
 
 // ----- 児童の送迎パターン -----
+export type PickupMethod = 'pickup' | 'self' | 'parent';
+export type DropoffMethod = 'dropoff' | 'self' | 'parent';
+
 export type ChildTransportPatternRow = {
   id: string;
   child_id: string;
@@ -61,8 +77,10 @@ export type ChildTransportPatternRow = {
   pattern_name: string;
   pickup_location: string | null;
   pickup_time: string | null;
+  pickup_method: PickupMethod;
   dropoff_location: string | null;
   dropoff_time: string | null;
+  dropoff_method: DropoffMethod;
   area_label: string | null;
   created_at: string;
 };
@@ -130,7 +148,77 @@ export type ParsedScheduleEntry = {
   area_label: string | null;
 };
 
+// ----- コメント（4機能にポリモーフィック） -----
+export type CommentTargetType =
+  | 'shift_request'
+  | 'shift_assignment'
+  | 'transport_assignment'
+  | 'child_dropoff_location';
+
+export type CommentStatus = 'pending' | 'approved' | 'rejected';
+
+export type CommentRow = {
+  id: string;
+  tenant_id: string;
+  author_staff_id: string;
+  target_type: CommentTargetType;
+  target_id: string;
+  body: string;
+  status: CommentStatus;
+  approved_by_staff_id: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type CommentImageRow = {
+  id: string;
+  comment_id: string;
+  storage_path: string;
+  created_at: string;
+};
+
+// ----- 通知 -----
+export type NotificationType =
+  | 'comment_pending'
+  | 'comment_approved'
+  | 'comment_rejected'
+  | 'generic';
+
+export type NotificationRow = {
+  id: string;
+  tenant_id: string;
+  recipient_staff_id: string;
+  type: NotificationType;
+  target_type: string | null;
+  target_id: string | null;
+  body: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+// ----- 児童の送り場所 -----
+export type ChildDropoffLocationRow = {
+  id: string;
+  tenant_id: string;
+  child_id: string;
+  label: string;
+  address: string | null;
+  map_url: string | null;
+  notes: string | null;
+  image_storage_path: string | null;
+  created_at: string;
+};
+
+// ----- 認証セッションから得た staff 情報（サーバー共通） -----
+export type AuthenticatedStaff = Pick<
+  StaffRow,
+  'id' | 'tenant_id' | 'name' | 'email' | 'role'
+>;
+
 // ----- 定数 -----
 export const MAX_STAFF_PER_TRANSPORT = 2;
 export const DEFAULT_MIN_QUALIFIED_STAFF = 2;
 export const TRANSPORT_GROUP_TIME_WINDOW_MINUTES = 30;
+
+export const COMMENT_IMAGES_BUCKET = 'comment-images';
+export const CHILD_LOCATION_IMAGES_BUCKET = 'child-location-images';

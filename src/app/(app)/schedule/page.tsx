@@ -1,39 +1,27 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from '@/components/layout/Header';
 import ScheduleGrid from '@/components/schedule/ScheduleGrid';
 import PdfImportModal from '@/components/schedule/PdfImportModal';
 import ExcelPasteModal from '@/components/schedule/ExcelPasteModal';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
-import { format } from 'date-fns';
+import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import type { ParsedScheduleEntry } from '@/types';
+import type { ParsedScheduleEntry, ChildRow, ScheduleEntryRow, GradeType } from '@/types';
 
 /**
- * 利用予定ページ
- * - デイロボ風グリッド表（児童×日付）
- * - セルクリック → デイロボ風編集モーダル（出欠種類・時間・迎え/送りトグル）
- * - PDFインポートモーダル
- *
- * TODO: Supabase連携後にDBからデータ取得に切り替え
+ * 利用予定ページ（Supabase接続版）
+ * - children と schedule_entries を DB から取得
+ * - セル編集でリアルタイム upsert
+ * - PDF / Excel インポートで bulk upsert
  */
 
-const MOCK_CHILDREN = [
-  { id: 'c1', name: '川島舞桜', grade_label: '未就学' },
-  { id: 'c2', name: '川島颯斗', grade_label: '小4' },
-  { id: 'c3', name: '黒川蒼斗', grade_label: '小3' },
-  { id: 'c4', name: '清水隼音', grade_label: '小4' },
-  { id: 'c5', name: '滝川希', grade_label: '未就学' },
-  { id: 'c6', name: '竹内碧子', grade_label: '小3' },
-  { id: 'c7', name: '中村日菜美', grade_label: '未就学' },
-  { id: 'c8', name: '中山結稀', grade_label: '小4' },
-  { id: 'c9', name: '松本翔樹', grade_label: '小4' },
-  { id: 'c10', name: '板倉千夏', grade_label: '小2' },
-  { id: 'c11', name: '木下琉十', grade_label: '小5' },
-];
+const GRADE_LABELS: Record<GradeType, string> = {
+  preschool: '未就学', elementary_1: '小1', elementary_2: '小2', elementary_3: '小3',
+  elementary_4: '小4', elementary_5: '小5', elementary_6: '小6', junior_high: '中学',
+};
 
 type CellData = {
   child_id: string;
@@ -45,46 +33,6 @@ type CellData = {
   note: string | null;
 };
 
-function generateMockCells(): CellData[] {
-  const cells: CellData[] = [];
-  const year = 2026;
-  const month = 4;
-  const pickupTimes = ['10:30', '11:00', '11:20', '11:30', '12:00', '12:30', '13:00', '13:50', '14:20'];
-  const dropoffTimes = ['16:00', '16:30'];
-
-  MOCK_CHILDREN.forEach((child) => {
-    for (let d = 1; d <= 30; d++) {
-      const dow = new Date(year, month - 1, d).getDay();
-      if (dow === 0 || dow === 6) continue;
-      if (Math.random() > 0.7) continue;
-      if (Math.random() < 0.05) {
-        cells.push({
-          child_id: child.id,
-          date: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-          pickup_time: null, dropoff_time: null,
-          pickup_method: 'pickup', dropoff_method: 'dropoff',
-          note: '追・休',
-        });
-        continue;
-      }
-      /* 10%の確率で「自分で来る」にする */
-      const isSelfPickup = Math.random() < 0.1;
-      const isSelfDropoff = Math.random() < 0.1;
-      cells.push({
-        child_id: child.id,
-        date: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-        pickup_time: pickupTimes[Math.floor(Math.random() * pickupTimes.length)],
-        dropoff_time: dropoffTimes[Math.floor(Math.random() * dropoffTimes.length)],
-        pickup_method: isSelfPickup ? 'self' : 'pickup',
-        dropoff_method: isSelfDropoff ? 'self' : 'dropoff',
-        note: null,
-      });
-    }
-  });
-  return cells;
-}
-
-/* デイロボ風トグルボタン */
 function ToggleGroup({
   options,
   value,
@@ -118,19 +66,22 @@ function ToggleGroup({
   );
 }
 
-export default function SchedulePage() {
-  const [cells, setCells] = useState<CellData[]>([]);
-  const [isClient, setIsClient] = useState(false);
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1;
 
-  useEffect(() => {
-    setCells(generateMockCells());
-    setIsClient(true);
-  }, []);
+export default function SchedulePage() {
+  const [year, setYear] = useState(currentYear);
+  const [month, setMonth] = useState(currentMonth);
+  const [children, setChildren] = useState<ChildRow[]>([]);
+  const [cells, setCells] = useState<CellData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const [selectedCell, setSelectedCell] = useState<{ childId: string; date: string } | null>(null);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
 
-  /* 編集モーダルのstate */
   const [attendance, setAttendance] = useState<'attend' | 'absent' | 'off'>('attend');
   const [pickupHour, setPickupHour] = useState('13');
   const [pickupMin, setPickupMin] = useState('20');
@@ -139,25 +90,69 @@ export default function SchedulePage() {
   const [dropoffMin, setDropoffMin] = useState('00');
   const [dropoffMethod, setDropoffMethod] = useState<'self' | 'dropoff'>('dropoff');
 
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = getDaysInMonth(new Date(year, month - 1));
+      const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+      const [cRes, eRes] = await Promise.all([
+        fetch('/api/children'),
+        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+      ]);
+
+      if (!cRes.ok) throw new Error('児童の取得に失敗しました');
+      if (!eRes.ok) throw new Error('利用予定の取得に失敗しました');
+
+      const { children: ch } = await cRes.json();
+      const { entries } = await eRes.json();
+
+      setChildren((ch as ChildRow[]).filter((c) => c.is_active));
+      setCells(
+        (entries as ScheduleEntryRow[]).map<CellData>((e) => ({
+          child_id: e.child_id,
+          date: e.date,
+          pickup_time: e.pickup_time,
+          dropoff_time: e.dropoff_time,
+          pickup_method: e.pickup_time ? 'pickup' : 'self',
+          dropoff_method: e.dropoff_time ? 'dropoff' : 'self',
+          note: null,
+        }))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '読み込み失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const childrenForGrid = children.map((c) => ({
+    id: c.id,
+    name: c.name,
+    grade_label: GRADE_LABELS[c.grade_type],
+  }));
+
   const handleCellClick = (childId: string, date: string) => {
     const cellData = cells.find((c) => c.child_id === childId && c.date === date);
     if (cellData?.pickup_time) {
       const [h, m] = cellData.pickup_time.split(':');
-      setPickupHour(h);
-      setPickupMin(m);
+      setPickupHour(h); setPickupMin(m);
     } else {
-      setPickupHour('13');
-      setPickupMin('00');
+      setPickupHour('13'); setPickupMin('00');
     }
     if (cellData?.dropoff_time) {
       const [h, m] = cellData.dropoff_time.split(':');
-      setDropoffHour(h);
-      setDropoffMin(m);
+      setDropoffHour(h); setDropoffMin(m);
     } else {
-      setDropoffHour('16');
-      setDropoffMin('00');
+      setDropoffHour('16'); setDropoffMin('00');
     }
-    if (cellData?.note === '追・休' || cellData?.note === '定・休') {
+    if (cellData && !cellData.pickup_time && !cellData.dropoff_time) {
       setAttendance('off');
     } else if (cellData?.pickup_time) {
       setAttendance('attend');
@@ -169,97 +164,153 @@ export default function SchedulePage() {
     setSelectedCell({ childId, date });
   };
 
-  const selectedChild = selectedCell
-    ? MOCK_CHILDREN.find((c) => c.id === selectedCell.childId)
-    : null;
+  const handleSave = async () => {
+    if (!selectedCell) return;
+    const pickup =
+      attendance === 'attend' && pickupMethod === 'pickup'
+        ? `${pickupHour.padStart(2, '0')}:${pickupMin.padStart(2, '0')}`
+        : null;
+    const dropoff =
+      attendance === 'attend' && dropoffMethod === 'dropoff'
+        ? `${dropoffHour.padStart(2, '0')}:${dropoffMin.padStart(2, '0')}`
+        : null;
 
-  const formatDateLabel = (dateStr: string) =>
-    format(new Date(dateStr), 'M月d日（E）', { locale: ja });
-
-  const handlePdfConfirm = (entries: ParsedScheduleEntry[]) => {
-    // TODO: Supabase連携後にDB保存
-    alert(`${entries.length}件の利用予定を登録しました（モック）`);
+    try {
+      const res = await fetch('/api/schedule-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entries: [{
+            child_id: selectedCell.childId,
+            date: selectedCell.date,
+            pickup_time: pickup,
+            dropoff_time: dropoff,
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
+      setSelectedCell(null);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失敗');
+    }
   };
 
-  /* 時間入力のスタイル */
+  const handleBulkImport = async (entries: ParsedScheduleEntry[]) => {
+    /* 名前 → child_id 解決 */
+    const nameToId = new Map(children.map((c) => [c.name, c.id]));
+    const rows = entries
+      .filter((e) => nameToId.has(e.child_name))
+      .map((e) => ({
+        child_id: nameToId.get(e.child_name)!,
+        date: e.date,
+        pickup_time: e.pickup_time,
+        dropoff_time: e.dropoff_time,
+      }));
+    if (rows.length === 0) {
+      alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
+      return;
+    }
+    const res = await fetch('/api/schedule-entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: rows }),
+    });
+    if (!res.ok) {
+      alert('インポートに失敗しました: ' + ((await res.json()).error ?? ''));
+      return;
+    }
+    alert(`${rows.length}件の利用予定を登録しました`);
+    await fetchAll();
+  };
+
+  const selectedChild = selectedCell ? children.find((c) => c.id === selectedCell.childId) : null;
+  const formatDateLabel = (dateStr: string) => format(new Date(dateStr), 'M月d日（E）', { locale: ja });
+
   const timeInputStyle: React.CSSProperties = {
-    width: '60px',
-    padding: '8px 4px',
-    fontSize: '1.1rem',
-    fontWeight: 600,
-    textAlign: 'center',
-    color: 'var(--ink)',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid var(--accent)',
-    outline: 'none',
+    width: '60px', padding: '8px 4px', fontSize: '1.1rem', fontWeight: 600,
+    textAlign: 'center', color: 'var(--ink)', background: 'transparent',
+    border: 'none', borderBottom: '2px solid var(--accent)', outline: 'none',
   };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header
-        title="2026年4月利用予定"
+        title={`${year}年${month}月利用予定`}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>
-              Excelから貼り付け
-            </Button>
-            <Button variant="primary" onClick={() => setPdfModalOpen(true)}>
-              PDFインポート
-            </Button>
+            <select
+              value={`${year}-${month}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-').map(Number);
+                setYear(y); setMonth(m);
+              }}
+              className="px-2 py-1 rounded text-sm"
+              style={{ border: '1px solid var(--rule)' }}
+            >
+              {Array.from({ length: 12 }, (_, i) => {
+                const d = new Date(currentYear, currentMonth - 1 - 3 + i, 1);
+                return (
+                  <option key={`${d.getFullYear()}-${d.getMonth() + 1}`} value={`${d.getFullYear()}-${d.getMonth() + 1}`}>
+                    {d.getFullYear()}年{d.getMonth() + 1}月
+                  </option>
+                );
+              })}
+            </select>
+            <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
+            <Button variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
           </>
         }
       />
 
       <div className="px-6 flex-1 overflow-hidden flex flex-col mt-2">
-        {isClient ? (
+        {error && (
+          <div className="mb-2 px-4 py-2 rounded" style={{ background: 'var(--red-pale)', color: 'var(--red)', fontSize: '0.85rem' }}>
+            {error}
+          </div>
+        )}
+        {loading ? (
+          <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
+            読み込み中...
+          </div>
+        ) : children.length === 0 ? (
+          <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
+            児童が登録されていません。児童管理から追加してください。
+          </div>
+        ) : (
           <ScheduleGrid
-            year={2026}
-            month={4}
-            children={MOCK_CHILDREN}
+            year={year}
+            month={month}
+            children={childrenForGrid}
             cells={cells}
             onCellClick={handleCellClick}
           />
-        ) : (
-          <div className="h-96 flex items-center justify-center text-sm text-gray-400">
-            読み込み中...
-          </div>
         )}
       </div>
 
-      {/* Excelコピペモーダル */}
       <ExcelPasteModal
         isOpen={excelModalOpen}
         onClose={() => setExcelModalOpen(false)}
-        onConfirm={handlePdfConfirm}
-        year={2026}
-        month={4}
+        onConfirm={handleBulkImport}
+        year={year}
+        month={month}
       />
 
-      {/* PDFインポートモーダル */}
       <PdfImportModal
         isOpen={pdfModalOpen}
         onClose={() => setPdfModalOpen(false)}
-        onConfirm={handlePdfConfirm}
+        onConfirm={handleBulkImport}
       />
 
-      {/* セル編集モーダル（デイロボ風） */}
       <Modal
         isOpen={!!selectedCell}
         onClose={() => setSelectedCell(null)}
-        title={
-          selectedCell && selectedChild
-            ? `${selectedChild.name} — ${formatDateLabel(selectedCell.date)}`
-            : ''
-        }
+        title={selectedCell && selectedChild ? `${selectedChild.name} — ${formatDateLabel(selectedCell.date)}` : ''}
       >
         {selectedCell && selectedChild && (
           <div className="flex flex-col gap-5">
-            {/* 出欠種類 */}
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
-                出欠種類
-              </label>
+              <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>出欠種類</label>
               <ToggleGroup
                 options={[
                   { label: '出席', value: 'attend' },
@@ -274,7 +325,6 @@ export default function SchedulePage() {
 
             {attendance === 'attend' && (
               <>
-                {/* 来所予定時間 */}
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
                     来所予定時間
@@ -283,37 +333,18 @@ export default function SchedulePage() {
                     )}
                   </label>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={pickupHour}
-                      onChange={(e) => setPickupHour(e.target.value)}
-                      style={timeInputStyle}
-                    />
+                    <input type="number" min={0} max={23} value={pickupHour} onChange={(e) => setPickupHour(e.target.value)} style={timeInputStyle} />
                     <span className="text-lg font-bold" style={{ color: 'var(--ink-3)' }}>:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={5}
-                      value={pickupMin}
-                      onChange={(e) => setPickupMin(e.target.value)}
-                      style={timeInputStyle}
-                    />
+                    <input type="number" min={0} max={59} step={5} value={pickupMin} onChange={(e) => setPickupMin(e.target.value)} style={timeInputStyle} />
                   </div>
                   <ToggleGroup
-                    options={[
-                      { label: '自分で来る', value: 'self' },
-                      { label: 'お迎え', value: 'pickup' },
-                    ]}
+                    options={[{ label: '自分で来る', value: 'self' }, { label: 'お迎え', value: 'pickup' }]}
                     value={pickupMethod}
                     onChange={(v) => setPickupMethod(v as 'self' | 'pickup')}
                     accentColor="#4dbfbf"
                   />
                 </div>
 
-                {/* 退所予定時間 */}
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
                     退所予定時間
@@ -322,30 +353,12 @@ export default function SchedulePage() {
                     )}
                   </label>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={dropoffHour}
-                      onChange={(e) => setDropoffHour(e.target.value)}
-                      style={timeInputStyle}
-                    />
+                    <input type="number" min={0} max={23} value={dropoffHour} onChange={(e) => setDropoffHour(e.target.value)} style={timeInputStyle} />
                     <span className="text-lg font-bold" style={{ color: 'var(--ink-3)' }}>:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={5}
-                      value={dropoffMin}
-                      onChange={(e) => setDropoffMin(e.target.value)}
-                      style={timeInputStyle}
-                    />
+                    <input type="number" min={0} max={59} step={5} value={dropoffMin} onChange={(e) => setDropoffMin(e.target.value)} style={timeInputStyle} />
                   </div>
                   <ToggleGroup
-                    options={[
-                      { label: '自分で帰る', value: 'self' },
-                      { label: '送り', value: 'dropoff' },
-                    ]}
+                    options={[{ label: '自分で帰る', value: 'self' }, { label: '送り', value: 'dropoff' }]}
                     value={dropoffMethod}
                     onChange={(v) => setDropoffMethod(v as 'self' | 'dropoff')}
                     accentColor="#4dbfbf"
@@ -354,20 +367,9 @@ export default function SchedulePage() {
               </>
             )}
 
-            {/* ボタン */}
             <div className="flex gap-2 mt-2">
-              <Button variant="secondary" onClick={() => setSelectedCell(null)}>
-                キャンセル
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  // TODO: Supabase連携後にDB更新
-                  setSelectedCell(null);
-                }}
-              >
-                保存
-              </Button>
+              <Button variant="secondary" onClick={() => setSelectedCell(null)}>キャンセル</Button>
+              <Button variant="primary" onClick={handleSave}>保存</Button>
             </div>
           </div>
         )}

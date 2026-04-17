@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type { StaffRole } from '@/types';
 
 /**
  * サイドバーナビゲーション
  * - デスクトップ: 幅はドラッグで調整可能（180px〜360px、デフォルト240px）
  * - タブレット以下（<1024px）: オーバーレイ表示、トグルボタンで開閉
+ * - role により表示項目を制御
  */
 
 type SidebarProps = {
@@ -15,6 +17,7 @@ type SidebarProps = {
   onClose: () => void;
   width: number;
   onWidthChange: (w: number) => void;
+  role: StaffRole | null;
 };
 
 const NAV_ITEMS = [
@@ -23,9 +26,11 @@ const NAV_ITEMS = [
   { href: '/shift', label: 'シフト表', icon: '📋' },
   { href: '/transport', label: '送迎表', icon: '🚗' },
   { href: '/request', label: '休み希望', icon: '✋' },
+  { href: '/locations', label: '送り場所', icon: '📍' },
 ];
 
 const NAV_SETTINGS = [
+  { href: '/comments', label: 'コメント承認', icon: '💬' },
   { href: '/settings/tenant', label: 'テナント設定', icon: '🏢' },
   { href: '/settings/staff', label: '職員管理', icon: '👤' },
   { href: '/settings/children', label: '児童管理', icon: '🧒' },
@@ -40,9 +45,11 @@ const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 360;
 
-export default function Sidebar({ isOpen, onClose, width, onWidthChange }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }: SidebarProps) {
   const pathname = usePathname();
   const isResizing = useRef(false);
+  const isAdmin = role === 'admin';
+  const canSeeBilling = isAdmin;
 
   /* デスクトップでの表示幅 */
   const desktopWidth = isOpen ? width : MINI_WIDTH;
@@ -109,7 +116,8 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
           ))}
         </ul>
 
-        {/* 設定セクション */}
+        {/* 設定セクション（admin のみ） */}
+        {isAdmin && (
         <div className="mt-4 pt-4 mb-2" style={{ borderTop: '1px solid var(--rule)' }}>
           {isOpen && (
             <p className="px-3 mb-2 text-[10px] font-bold tracking-wider uppercase opacity-50" style={{ color: 'var(--ink-3)' }}>
@@ -140,9 +148,11 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
             ))}
           </ul>
         </div>
+        )}
       </nav>
 
-      {/* 下部ナビ */}
+      {/* 下部ナビ（admin のみ） */}
+      {canSeeBilling && (
       <div className="px-2.5 pb-4 mt-auto border-t pt-4" style={{ borderColor: 'var(--rule)' }}>
         <ul className="flex flex-col gap-1">
           {NAV_BOTTOM.map((item) => (
@@ -167,6 +177,26 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
             </li>
           ))}
         </ul>
+      </div>
+      )}
+
+      {/* サインアウト（常時表示） */}
+      <div className={`px-2.5 pb-4 ${canSeeBilling ? '' : 'mt-auto border-t pt-4'}`} style={{ borderColor: 'var(--rule)' }}>
+        <form action="/auth/signout" method="POST">
+          <button
+            type="submit"
+            className="w-full flex items-center h-10 px-2.5 rounded-md transition-all hover:bg-[var(--red-pale)]"
+            title={!isOpen ? 'サインアウト' : undefined}
+            style={{ color: 'var(--ink-3)' }}
+          >
+            <span className="text-xl w-7 flex items-center justify-center shrink-0">🚪</span>
+            <span
+              className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+            >
+              サインアウト
+            </span>
+          </button>
+        </form>
       </div>
     </div>
   );
