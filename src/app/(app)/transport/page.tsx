@@ -34,6 +34,8 @@ type UiTransportEntry = {
   dropoffTime: string | null;
   pickupLocation: string | null;
   dropoffLocation: string | null;
+  pickupAreaLabel: string | null;
+  dropoffAreaLabel: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -131,6 +133,8 @@ export default function TransportPage() {
         dropoffTime: e.dropoff_time,
         pickupLocation: pattern?.pickup_location ?? null,
         dropoffLocation: pattern?.dropoff_location ?? null,
+        pickupAreaLabel: pattern?.pickup_area_label ?? pattern?.area_label ?? null,
+        dropoffAreaLabel: pattern?.dropoff_area_label ?? null,
         pickupStaffIds: t?.pickup_staff_ids ?? [],
         dropoffStaffIds: t?.dropoff_staff_ids ?? [],
         isUnassigned: t?.is_unassigned ?? true,
@@ -328,6 +332,8 @@ export default function TransportPage() {
                 dropoffTime: e.dropoffTime,
                 pickupLocation: e.pickupLocation,
                 dropoffLocation: e.dropoffLocation,
+                pickupAreaLabel: e.pickupAreaLabel,
+                dropoffAreaLabel: e.dropoffAreaLabel,
                 pickupStaffIds: e.pickupStaffIds,
                 dropoffStaffIds: e.dropoffStaffIds,
                 isUnassigned: e.isUnassigned,

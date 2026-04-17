@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import { openInGoogleMaps } from '@/lib/utils/googleMaps';
 
 /**
@@ -8,7 +9,8 @@ import { openInGoogleMaps } from '@/lib/utils/googleMaps';
  * - 列: 迎え時間 / 迎え担当 / 送り時間 / 送り担当
  * - 担当はドロップダウンで変更可能
  * - 未割り当て（is_unassigned）は赤ハイライト
- * - 時間の下に場所メモ（児童パターン由来）を表示し、クリックで Google Maps 起動
+ * - Phase 17: 児童名クリックで詳細行を展開し、迎/送の場所をリスト表示
+ *   各場所をクリックで Google Maps 起動
  */
 
 type TransportChild = {
@@ -19,6 +21,8 @@ type TransportChild = {
   dropoffTime: string | null;
   pickupLocation: string | null;
   dropoffLocation: string | null;
+  pickupAreaLabel: string | null;
+  dropoffAreaLabel: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -48,6 +52,8 @@ export default function TransportDayView({
   onAddPattern,
   disabled = false,
 }: TransportDayViewProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   if (children.length === 0) {
     return (
       <div className="py-10 text-center">
@@ -58,6 +64,8 @@ export default function TransportDayView({
     );
   }
 
+  const colSpan = onAddPattern ? 6 : 5;
+
   return (
     <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
@@ -65,7 +73,7 @@ export default function TransportDayView({
           <tr>
             <th
               className="px-3 py-2 text-left font-semibold"
-              style={{ background: 'var(--ink)', color: '#fff', minWidth: '120px' }}
+              style={{ background: 'var(--ink)', color: '#fff', minWidth: '140px' }}
             >
               児童名
             </th>
@@ -104,102 +112,147 @@ export default function TransportDayView({
           </tr>
         </thead>
         <tbody>
-          {children.map((child) => (
-            <tr
-              key={child.scheduleEntryId}
-              style={{
-                background: child.isUnassigned ? 'var(--red-pale)' : 'transparent',
-              }}
-            >
-              {/* 児童名 */}
-              <td
-                className="px-3 py-2 font-medium"
-                style={{
-                  borderBottom: '1px solid var(--rule)',
-                  color: child.isUnassigned ? 'var(--red)' : 'var(--ink)',
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  {child.name}
-                  {child.isUnassigned && (
-                    <span
-                      className="text-xs px-1.5 py-0.5 font-bold rounded"
-                      style={{ background: 'var(--red)', color: '#fff', fontSize: '0.65rem' }}
-                    >
-                      未割当
-                    </span>
-                  )}
-                </div>
-              </td>
-
-              {/* 迎え時間 + 場所リンク */}
-              <td
-                className="px-3 py-2 text-center"
-                style={{ borderBottom: '1px solid var(--rule)' }}
-              >
-                <TimeWithMapLink
-                  time={child.pickupTime}
-                  location={child.pickupLocation}
-                  color="var(--accent)"
-                />
-              </td>
-
-              {/* 迎え担当 */}
-              <td
-                className="px-2 py-1.5"
-                style={{ borderBottom: '1px solid var(--rule)' }}
-              >
-                <StaffSelect
-                  staffIds={child.pickupStaffIds}
-                  availableStaff={availableStaff}
-                  onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
-                  disabled={disabled}
-                />
-              </td>
-
-              {/* 送り時間 + 場所リンク */}
-              <td
-                className="px-3 py-2 text-center"
-                style={{ borderBottom: '1px solid var(--rule)' }}
-              >
-                <TimeWithMapLink
-                  time={child.dropoffTime}
-                  location={child.dropoffLocation}
-                  color="var(--green)"
-                />
-              </td>
-
-              {/* 送り担当 */}
-              <td
-                className="px-2 py-1.5"
-                style={{ borderBottom: '1px solid var(--rule)' }}
-              >
-                <StaffSelect
-                  staffIds={child.dropoffStaffIds}
-                  availableStaff={availableStaff}
-                  onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
-                  disabled={disabled}
-                />
-              </td>
-
-              {/* パターン登録ボタン */}
-              {onAddPattern && (
-                <td
-                  className="px-2 py-1.5 text-center"
-                  style={{ borderBottom: '1px solid var(--rule)' }}
+          {children.map((child) => {
+            const isExpanded = expandedId === child.scheduleEntryId;
+            const hasAnyLocation =
+              !!(child.pickupLocation || child.dropoffLocation ||
+                 child.pickupAreaLabel || child.dropoffAreaLabel);
+            return (
+              <React.Fragment key={child.scheduleEntryId}>
+                <tr
+                  style={{
+                    background: child.isUnassigned ? 'var(--red-pale)' : 'transparent',
+                  }}
                 >
-                  <button
-                    onClick={() => onAddPattern(child.name, child.pickupTime, child.dropoffTime)}
-                    className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
-                    style={{ color: 'var(--accent)' }}
-                    title={`${child.name}の送迎パターンに登録`}
+                  {/* 児童名（クリックで詳細展開） */}
+                  <td
+                    className="px-3 py-2 font-medium"
+                    style={{
+                      borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+                      color: child.isUnassigned ? 'var(--red)' : 'var(--ink)',
+                    }}
                   >
-                    + 登録
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : child.scheduleEntryId)}
+                      className="inline-flex items-center gap-1.5 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
+                      style={{ color: 'inherit', fontWeight: 'inherit' }}
+                      aria-expanded={isExpanded}
+                      title={hasAnyLocation ? '場所を確認（地図が開けます）' : '場所の詳細を開く'}
+                    >
+                      <span
+                        className="inline-block transition-transform text-xs"
+                        style={{
+                          transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                          color: 'var(--ink-3)',
+                        }}
+                        aria-hidden
+                      >
+                        ▶
+                      </span>
+                      <span>{child.name}</span>
+                      {hasAnyLocation && (
+                        <span
+                          aria-hidden
+                          className="text-xs"
+                          style={{ color: 'var(--ink-3)' }}
+                          title="場所情報あり"
+                        >
+                          🗺
+                        </span>
+                      )}
+                    </button>
+                    {child.isUnassigned && (
+                      <span
+                        className="ml-2 text-xs px-1.5 py-0.5 font-bold rounded"
+                        style={{ background: 'var(--red)', color: '#fff', fontSize: '0.65rem' }}
+                      >
+                        未割当
+                      </span>
+                    )}
+                  </td>
+
+                  {/* 迎え時間 */}
+                  <td
+                    className="px-3 py-2 text-center font-medium"
+                    style={{
+                      borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    {child.pickupTime || '-'}
+                  </td>
+
+                  {/* 迎え担当 */}
+                  <td
+                    className="px-2 py-1.5"
+                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
+                  >
+                    <StaffSelect
+                      staffIds={child.pickupStaffIds}
+                      availableStaff={availableStaff}
+                      onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
+                      disabled={disabled}
+                    />
+                  </td>
+
+                  {/* 送り時間 */}
+                  <td
+                    className="px-3 py-2 text-center font-medium"
+                    style={{
+                      borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+                      color: 'var(--green)',
+                    }}
+                  >
+                    {child.dropoffTime || '-'}
+                  </td>
+
+                  {/* 送り担当 */}
+                  <td
+                    className="px-2 py-1.5"
+                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
+                  >
+                    <StaffSelect
+                      staffIds={child.dropoffStaffIds}
+                      availableStaff={availableStaff}
+                      onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
+                      disabled={disabled}
+                    />
+                  </td>
+
+                  {/* パターン登録ボタン */}
+                  {onAddPattern && (
+                    <td
+                      className="px-2 py-1.5 text-center"
+                      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
+                    >
+                      <button
+                        onClick={() => onAddPattern(child.name, child.pickupTime, child.dropoffTime)}
+                        className="text-xs font-semibold px-2 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
+                        style={{ color: 'var(--accent)' }}
+                        title={`${child.name}の送迎パターンに登録`}
+                      >
+                        + 登録
+                      </button>
+                    </td>
+                  )}
+                </tr>
+
+                {/* 展開: 送迎場所リスト */}
+                {isExpanded && (
+                  <tr style={{ background: 'var(--bg)' }}>
+                    <td
+                      colSpan={colSpan}
+                      className="px-4 py-3"
+                      style={{ borderBottom: '1px solid var(--rule)' }}
+                    >
+                      <LocationDetails child={child} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -207,33 +260,95 @@ export default function TransportDayView({
 }
 
 /**
- * 時間 + 場所メモ表示（Phase 14）
- * - 時間を色付きで表示
- * - 場所メモが設定されていれば 🗺 アイコン付きで下に表示し、クリックで Google Maps 起動
+ * 児童の迎/送場所を並べて表示するパネル（Phase 17）
+ * 各場所カードをクリック → Google Maps で開く
  */
-function TimeWithMapLink({
-  time, location, color,
-}: { time: string | null; location: string | null; color: string }) {
-  const hasLocation = !!location && location.trim().length > 0;
+function LocationDetails({ child }: { child: TransportChild }) {
+  const pickupEmpty = !child.pickupLocation && !child.pickupAreaLabel;
+  const dropoffEmpty = !child.dropoffLocation && !child.dropoffAreaLabel;
+  if (pickupEmpty && dropoffEmpty) {
+    return (
+      <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+        場所が登録されていません。児童管理から送迎パターンを設定してください。
+      </p>
+    );
+  }
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className="font-medium" style={{ color }}>{time || '-'}</span>
-      {hasLocation && (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <LocationCard
+        label="迎"
+        time={child.pickupTime}
+        area={child.pickupAreaLabel}
+        address={child.pickupLocation}
+        color="var(--accent)"
+        bg="var(--accent-pale)"
+      />
+      <LocationCard
+        label="送"
+        time={child.dropoffTime}
+        area={child.dropoffAreaLabel}
+        address={child.dropoffLocation}
+        color="var(--green)"
+        bg="var(--green-pale)"
+      />
+    </div>
+  );
+}
+
+/**
+ * 1つの送迎場所カード。area と address のどちらもあれば両方表示し、
+ * address があれば Maps ボタン、なければ area 名で検索。
+ */
+function LocationCard({
+  label, time, area, address, color, bg,
+}: {
+  label: string;
+  time: string | null;
+  area: string | null;
+  address: string | null;
+  color: string;
+  bg: string;
+}) {
+  const hasAny = !!(area || address);
+  /* Maps 検索クエリ: address 優先、なければ area ラベル文字列部分 */
+  const mapQuery = address ?? area ?? '';
+  return (
+    <div
+      className="p-3 rounded-lg flex flex-col gap-1.5"
+      style={{ background: bg, border: `1px solid ${color}33` }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold" style={{ color }}>{label} 🚗</span>
+        <span className="text-sm font-medium" style={{ color }}>
+          {time || '-'}
+        </span>
+        {area && (
+          <span className="text-xs" style={{ color: 'var(--ink-2)' }}>
+            {area}
+          </span>
+        )}
+      </div>
+      {address && (
+        <div className="text-xs" style={{ color: 'var(--ink-2)' }}>
+          📍 {address}
+        </div>
+      )}
+      {hasAny && (
         <button
           type="button"
-          onClick={() => openInGoogleMaps(location)}
-          className="text-xs inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+          onClick={() => openInGoogleMaps(mapQuery)}
+          className="mt-1 self-start inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md transition-colors hover:opacity-85"
           style={{
-            color,
-            background: 'transparent',
-            border: `1px dashed ${color}`,
-            maxWidth: '140px',
+            color: '#fff',
+            background: color,
           }}
-          title={`Google Maps で開く: ${location}`}
+          aria-label={`${label}の場所を Google Maps で開く`}
         >
-          <span aria-hidden>🗺</span>
-          <span className="truncate" style={{ fontSize: '0.7rem' }}>{location}</span>
+          🗺 地図で開く
         </button>
+      )}
+      {!hasAny && (
+        <div className="text-xs" style={{ color: 'var(--ink-3)' }}>場所未登録</div>
       )}
     </div>
   );
@@ -313,3 +428,4 @@ function StaffSelect({
     </div>
   );
 }
+
