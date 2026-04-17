@@ -28,7 +28,7 @@ const emptyStaff = (): EditableStaff => ({
   id: `new-${Date.now()}`,
   name: '',
   email: '',
-  role: 'viewer',
+  role: 'admin',
   employment_type: 'part_time',
   default_start_time: '09:00',
   default_end_time: '17:00',

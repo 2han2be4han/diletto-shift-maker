@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       tenant_id: gate.staff.tenant_id,
       name: body.name,
       email: body.email ?? null,
-      role: body.role ?? 'viewer',
+      role: body.role ?? 'admin',
       employment_type: body.employment_type ?? 'part_time',
       default_start_time: body.default_start_time ?? null,
       default_end_time: body.default_end_time ?? null,
