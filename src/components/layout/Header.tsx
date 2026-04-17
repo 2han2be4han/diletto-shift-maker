@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useSidebarToggle } from '@/app/(app)/layout';
+import { useSidebarToggle } from '@/components/layout/AppShell';
 
 type HeaderProps = {
   title: string;

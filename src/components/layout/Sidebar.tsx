@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type { StaffRole } from '@/types';
 
 /**
  * サイドバーナビゲーション
  * - デスクトップ: 幅はドラッグで調整可能（180px〜360px、デフォルト240px）
  * - タブレット以下（<1024px）: オーバーレイ表示、トグルボタンで開閉
+ * - role により表示項目を制御
  */
 
 type SidebarProps = {
@@ -15,6 +17,7 @@ type SidebarProps = {
   onClose: () => void;
   width: number;
   onWidthChange: (w: number) => void;
+  role: StaffRole | null;
 };
 
 const NAV_ITEMS = [
@@ -23,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/shift', label: 'シフト表', icon: '📋' },
   { href: '/transport', label: '送迎表', icon: '🚗' },
   { href: '/request', label: '休み希望', icon: '✋' },
+  { href: '/locations', label: '送り場所', icon: '📍' },
 ];
 
 const NAV_SETTINGS = [
@@ -40,9 +44,11 @@ const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 360;
 
-export default function Sidebar({ isOpen, onClose, width, onWidthChange }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }: SidebarProps) {
   const pathname = usePathname();
   const isResizing = useRef(false);
+  const isAdmin = role === 'admin';
+  const canSeeBilling = isAdmin;
 
   /* デスクトップでの表示幅 */
   const desktopWidth = isOpen ? width : MINI_WIDTH;
@@ -109,7 +115,8 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
           ))}
         </ul>
 
-        {/* 設定セクション */}
+        {/* 設定セクション（admin のみ） */}
+        {isAdmin && (
         <div className="mt-4 pt-4 mb-2" style={{ borderTop: '1px solid var(--rule)' }}>
           {isOpen && (
             <p className="px-3 mb-2 text-[10px] font-bold tracking-wider uppercase opacity-50" style={{ color: 'var(--ink-3)' }}>
@@ -140,9 +147,11 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
             ))}
           </ul>
         </div>
+        )}
       </nav>
 
-      {/* 下部ナビ */}
+      {/* 下部ナビ（admin のみ） */}
+      {canSeeBilling && (
       <div className="px-2.5 pb-4 mt-auto border-t pt-4" style={{ borderColor: 'var(--rule)' }}>
         <ul className="flex flex-col gap-1">
           {NAV_BOTTOM.map((item) => (
@@ -168,6 +177,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange }: Sideb
           ))}
         </ul>
       </div>
+      )}
     </div>
   );
 
