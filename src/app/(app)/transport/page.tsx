@@ -139,8 +139,6 @@ export default function TransportPage() {
   const confirmed = currentDayEntries.length > 0 && currentDayEntries.every((e) => e.isConfirmed);
   const generated = transportAssignments.length > 0;
 
-  const tenantId = staff[0]?.tenant_id ?? '';
-
   const handleGenerate = async () => {
     try {
       /* 各日付ごとに /api/transport/generate → 結果を /api/transport-assignments に upsert */
@@ -149,7 +147,6 @@ export default function TransportPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tenantId,
             date,
             scheduleEntries: scheduleEntries.filter((e) => e.date === date),
             patterns,

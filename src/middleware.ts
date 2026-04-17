@@ -17,7 +17,7 @@ const SUPABASE_CONFIGURED =
   !!SUPABASE_ANON_KEY &&
   !SUPABASE_URL.includes('placeholder');
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/signout', '/request/submit'];
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/signout'];
 
 export async function middleware(request: NextRequest) {
   /* Supabase 未接続 or 明示スキップ時 = 開発用バイパス */
