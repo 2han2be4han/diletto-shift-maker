@@ -2,6 +2,7 @@
 
 import { getDaysInMonth, getDay } from 'date-fns';
 import type { ShiftAssignmentType } from '@/types';
+import { calculateCoverage } from '@/lib/logic/qualifiedCoverage';
 
 /**
  * シフトグリッド（職員×日付）
@@ -40,6 +41,8 @@ type ShiftGridProps = {
   cells: ShiftCell[];
   warnings: ShiftWarning[];
   onCellClick: (staffId: string, date: string) => void;
+  /** 日付(YYYY-MM-DD) → 児童数（カバレッジ判定・10人超閾値用）。省略可 */
+  childrenCountByDate?: Map<string, number>;
 };
 
 const TYPE_CONFIG: Record<ShiftAssignmentType, { label: string; color: string; bg: string }> = {
@@ -58,6 +61,7 @@ export default function ShiftGrid({
   cells,
   warnings,
   onCellClick,
+  childrenCountByDate,
 }: ShiftGridProps) {
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
   const dates: { day: number; dow: number; dateStr: string }[] = [];
@@ -92,6 +96,22 @@ export default function ShiftGrid({
       if (cell && cell.assignment_type === 'normal') count++;
     });
     dailyWorkingCount.set(d.dateStr, count);
+  });
+
+  /* カバレッジ計算（Phase 19）: 有資格者/提供時間/余力 */
+  const staffQualifiedMap = new Map(staff.map((s) => [s.id, s.is_qualified]));
+  const coverageByDate = new Map<string, ReturnType<typeof calculateCoverage>>();
+  dates.forEach((d) => {
+    const scheduleCount = childrenCountByDate?.get(d.dateStr) ?? 0;
+    coverageByDate.set(
+      d.dateStr,
+      calculateCoverage({
+        date: d.dateStr,
+        shifts: cells,
+        staffQualifiedMap,
+        scheduleCount,
+      })
+    );
   });
 
   const getDowColor = (dow: number) => {
@@ -240,13 +260,12 @@ export default function ShiftGrid({
               return (
                 <td
                   key={d.dateStr}
-                  className="sticky bottom-0 z-40 px-1 py-2 text-center font-bold"
+                  className="px-1 py-2 text-center font-bold"
                   style={{
                     borderTop: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
                     color: count > 3 ? 'var(--green)' : count > 0 ? 'var(--gold)' : 'var(--ink-3)',
                     background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
-                    boxShadow: '0 -4px 4px rgba(0,0,0,0.02)',
                   }}
                 >
                   {count > 0 ? count : ''}
@@ -254,8 +273,116 @@ export default function ShiftGrid({
               );
             })}
           </tr>
+
+          {/* Phase 19: 有資格者 / 提供時間 / 余力 */}
+          <CoverageRow
+            label="有資格者"
+            title="コアタイム(10:30〜16:30)に重なる有資格者数"
+            dates={dates}
+            getCellBg={getCellBg}
+            render={(d) => {
+              const cov = coverageByDate.get(d.dateStr);
+              if (!cov || cov.qualifiedCount === 0) return { value: '', color: 'var(--ink-3)' };
+              return {
+                value: String(cov.qualifiedCount),
+                color: cov.qualifiedCount >= 2 ? 'var(--green)' : 'var(--gold)',
+              };
+            }}
+          />
+          <CoverageRow
+            label="提供時間"
+            title="コアタイムを常時2名以上で満たしているか"
+            dates={dates}
+            getCellBg={getCellBg}
+            render={(d) => {
+              const cov = coverageByDate.get(d.dateStr);
+              if (!cov) return { value: '', color: 'var(--ink-3)' };
+              if (cov.minCoverage === '不足') {
+                return { value: '不足', color: 'var(--red)', bg: 'var(--red-pale)' };
+              }
+              return { value: String(cov.minCoverage), color: 'var(--green)' };
+            }}
+          />
+          <CoverageRow
+            label="余力"
+            title={'3名重複時間が確保できているか（児童11人以上は自動判定せず「要確認」）'}
+            dates={dates}
+            getCellBg={getCellBg}
+            isLast
+            render={(d) => {
+              const cov = coverageByDate.get(d.dateStr);
+              if (!cov || cov.childrenCount === 0) return { value: '', color: 'var(--ink-3)' };
+              if (cov.additional === 'OK') return { value: 'OK', color: 'var(--green)' };
+              if (cov.additional === '不足') {
+                return { value: '不足', color: 'var(--red)', bg: 'var(--red-pale)' };
+              }
+              /* 要確認（児童 > 10） */
+              return {
+                value: `要確認(${cov.childrenCount})`,
+                color: 'var(--gold)',
+                bg: 'var(--gold-pale, #fdf6e3)',
+                fontSize: '0.62rem',
+              };
+            }}
+          />
         </tbody>
       </table>
     </div>
+  );
+}
+
+/* ---------- カバレッジ行（Phase 19） ---------- */
+type CoverageRowProps = {
+  label: string;
+  title: string;
+  dates: { dateStr: string; dow: number; day: number }[];
+  getCellBg: (dow: number) => string;
+  render: (d: { dateStr: string; dow: number }) => {
+    value: string;
+    color: string;
+    bg?: string;
+    fontSize?: string;
+  };
+  isLast?: boolean;
+};
+
+function CoverageRow({ label, title, dates, getCellBg, render, isLast }: CoverageRowProps) {
+  return (
+    <tr>
+      <td
+        className="sticky left-0 bottom-0 z-50 px-4 py-2 font-semibold text-xs"
+        style={{
+          background: 'var(--bg)',
+          borderTop: '1px solid var(--rule)',
+          borderBottom: isLast ? 'none' : '1px solid var(--rule)',
+          borderRight: '2px solid var(--rule-strong)',
+          color: 'var(--ink-2)',
+          boxShadow: isLast ? '4px -4px 6px rgba(0,0,0,0.02)' : undefined,
+        }}
+        title={title}
+      >
+        {label}
+      </td>
+      {dates.map((d) => {
+        const { value, color, bg, fontSize } = render(d);
+        return (
+          <td
+            key={d.dateStr}
+            className={`${isLast ? 'sticky bottom-0 z-40 ' : ''}px-1 py-1.5 text-center font-medium`}
+            style={{
+              borderTop: '1px solid var(--rule)',
+              borderBottom: isLast ? undefined : '1px solid var(--rule)',
+              borderRight: '1px solid var(--rule)',
+              color,
+              background: bg ?? (getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)'),
+              fontSize: fontSize ?? '0.72rem',
+              boxShadow: isLast ? '0 -4px 4px rgba(0,0,0,0.02)' : undefined,
+            }}
+          >
+            {value}
+          </td>
+        );
+      })}
+    </tr>
   );
 }

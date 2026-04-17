@@ -53,6 +53,15 @@ export default function ShiftPage() {
   const [confirmed, setConfirmed] = useState(false);
 
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null);
+
+  /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント） */
+  const childrenCountByDate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of scheduleEntries) {
+      m.set(e.date, (m.get(e.date) ?? 0) + 1);
+    }
+    return m;
+  }, [scheduleEntries]);
   const [editType, setEditType] = useState<ShiftAssignmentType>('normal');
   const [startH, setStartH] = useState('09');
   const [startM, setStartM] = useState('00');
@@ -295,6 +304,7 @@ export default function ShiftPage() {
               cells={cells}
               warnings={warnings}
               onCellClick={handleCellClick}
+              childrenCountByDate={childrenCountByDate}
             />
           </div>
         ) : (
