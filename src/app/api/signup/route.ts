@@ -33,10 +33,31 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  /* 0. 既存事業所からの招待が保留中なら signup は拒否
+        (案1: 招待メール経由で登録してもらう) */
+  const { data: pendingInvite } = await admin
+    .from('staff')
+    .select('id, tenant_id')
+    .eq('email', normalizedEmail)
+    .is('user_id', null)
+    .limit(1)
+    .maybeSingle();
+
+  if (pendingInvite) {
+    return NextResponse.json(
+      {
+        error:
+          'このメールアドレスは既に別の事業所から招待されています。届いている招待メールのリンクから登録してください。',
+      },
+      { status: 409 }
+    );
+  }
 
   /* 1. Auth user 作成 */
   const { data: userData, error: userError } = await admin.auth.admin.createUser({
-    email,
+    email: normalizedEmail,
     password,
     email_confirm: true,
     user_metadata: { name: userName },
@@ -77,7 +98,7 @@ export async function POST(request: NextRequest) {
     tenant_id: tenant.id,
     user_id: authUserId,
     name: userName,
-    email,
+    email: normalizedEmail,
     role: 'admin',
     employment_type: 'full_time',
     is_qualified: true,
