@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -39,7 +38,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,14 +53,14 @@ export default function LoginPage() {
 
       if (error) {
         setError('メールアドレスまたはパスワードが正しくありません');
+        setLoading(false);
         return;
       }
 
-      router.push('/dashboard');
-      router.refresh();
+      /* セッション Cookie を確実に次のリクエストに載せるため hard navigation */
+      window.location.href = '/dashboard';
     } catch {
       setError('ログイン中にエラーが発生しました');
-    } finally {
       setLoading(false);
     }
   };
