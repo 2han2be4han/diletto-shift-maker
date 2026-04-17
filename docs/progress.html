@@ -214,6 +214,43 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 13: 迎/送エリア分離（2026-04-17）</div>
+    <p>
+        <strong>背景</strong>: 一覧画面が画面半分しか使っていないこと + エリアに「時間1つ」だと迎/送で同じ場所を登録しづらい問題。
+        エリア自体を迎用・送用に分けて2カラム横並びで表示することで両方解決。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>13-1</td><td>TenantSettings に pickup_areas / dropoff_areas 追加（transport_areas は互換残置）</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>JSONB内なのでマイグレーション不要</td></tr>
+            <tr><td>13-2</td><td>テナント設定ページ: 2カラム UI + max-w 撤廃 + 初回自動移行</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>AreaListSection コンポーネントで共通化</td></tr>
+            <tr><td>13-3</td><td>児童モーダル: 迎セレクト→pickup_areas / 送セレクト→dropoff_areas</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>時間自動入力も分離、旧 transport_areas は pickup にフォールバック</td></tr>
+            <tr><td>13-4</td><td>職員モーダル: 対応エリア候補は pickup ∪ dropoff のユニーク</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>保存先は staff.transport_areas のまま</td></tr>
+            <tr><td>13-5</td><td>reference-map.md + progress.html 更新</td><td>reference-map.md, docs/progress.html</td><td class="status-done">完了</td><td>100%</td><td>依存マップ維持</td></tr>
+            <tr><td>13-6</td><td>tsc 通過 → コミット</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>ユーザー確認はPhase 14完了後にまとめて</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 14: 送迎場所→Google Maps 連携（2026-04-17）</div>
+    <p>
+        <strong>背景</strong>: ドライバーが送迎中に Google Maps で場所をすぐ開きたい。
+        児童パターンの pickup_location / dropoff_location メモ（Phase 12 で一度UIから削除）を復活させ、送迎表でクリック可能なマップリンクに。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>14-1</td><td>Google Maps URL ビルダーユーティリティ新規</td><td>src/lib/utils/googleMaps.ts</td><td class="status-todo">未着手</td><td>0%</td><td>search/?api=1&query= で iOS/Android アプリ自動起動</td></tr>
+            <tr><td>14-2</td><td>児童モーダル: 住所メモ欄を迎/送各カードの2行目に復活</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>プレースホルダ「住所・目印（Mapsで開く）」</td></tr>
+            <tr><td>14-3</td><td>送迎表: 場所テキストを Maps リンク化</td><td>src/components/transport/TransportDayView.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>クリックで新タブ or アプリ起動</td></tr>
+            <tr><td>14-4</td><td>reference-map.md + progress.html 更新</td><td>reference-map.md, docs/progress.html</td><td class="status-todo">未着手</td><td>0%</td><td>依存マップ維持</td></tr>
+            <tr><td>14-5</td><td>tsc + dev server 動作確認 → コミット</td><td>（全体）</td><td class="status-todo">未着手</td><td>0%</td><td>Phase 15 で /locations 連携に拡張予定</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

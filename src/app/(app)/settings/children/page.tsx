@@ -86,7 +86,8 @@ export default function ChildrenSettingsPage() {
   const [error, setError] = useState('');
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
-  const [areas, setAreas] = useState<AreaLabel[]>([]);
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
+  const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -103,7 +104,10 @@ export default function ChildrenSettingsPage() {
       if (tRes.ok) {
         const { tenant } = await tRes.json();
         const s: TenantSettings = tenant?.settings ?? {};
-        setAreas(s.transport_areas ?? []);
+        /* 迎エリア: pickup_areas 優先、旧 transport_areas にフォールバック */
+        setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
+        /* 送エリア: dropoff_areas のみ（旧 transport_areas は迎扱いのため送には使わない） */
+        setDropoffAreas(s.dropoff_areas ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
@@ -116,8 +120,6 @@ export default function ChildrenSettingsPage() {
     fetchAll();
   }, [fetchAll]);
 
-  const findAreaByLabel = (label: string): AreaLabel | undefined =>
-    areas.find((a) => formatAreaLabel(a) === label);
 
   const handleAdd = () => {
     setEditing({
@@ -245,7 +247,7 @@ export default function ChildrenSettingsPage() {
    */
   const handlePickupAreaChange = (index: number, newLabel: string) => {
     if (!editing) return;
-    const area = areas.find((a) => formatAreaLabel(a) === newLabel);
+    const area = pickupAreas.find((a) => formatAreaLabel(a) === newLabel);
     const current = editing.patterns[index];
     const ps = [...editing.patterns];
     const shouldAutofillTime =
@@ -263,7 +265,7 @@ export default function ChildrenSettingsPage() {
 
   const handleDropoffAreaChange = (index: number, newLabel: string) => {
     if (!editing) return;
-    const area = areas.find((a) => formatAreaLabel(a) === newLabel);
+    const area = dropoffAreas.find((a) => formatAreaLabel(a) === newLabel);
     const current = editing.patterns[index];
     const ps = [...editing.patterns];
     const shouldAutofillTime =
@@ -292,8 +294,9 @@ export default function ChildrenSettingsPage() {
   }
 
   const activeCount = children.filter((c) => c.is_active).length;
-  const areaOptions = areas.map(formatAreaLabel);
-  void findAreaByLabel; /* 現状未使用（将来の時間再同期用に保持） */
+  const pickupAreaOptions = pickupAreas.map(formatAreaLabel);
+  const dropoffAreaOptions = dropoffAreas.map(formatAreaLabel);
+  const hasAnyArea = pickupAreas.length > 0 || dropoffAreas.length > 0;
 
   return (
     <>
@@ -441,9 +444,9 @@ export default function ChildrenSettingsPage() {
                 </label>
                 <span className="text-xs" style={{ color: 'var(--ink-3)' }}>最大5パターン</span>
               </div>
-              {areas.length === 0 && (
+              {!hasAnyArea && (
                 <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
-                  エリアが未設定です。テナント設定でマーク・エリア名・時間を登録してから利用してください。
+                  迎/送エリアが未設定です。テナント設定でマーク・エリア名・時間を登録してから利用してください。
                 </p>
               )}
 
@@ -472,7 +475,7 @@ export default function ChildrenSettingsPage() {
                   {/* 迎 行 */}
                   <PickupRow
                     pattern={p}
-                    areaOptions={areaOptions}
+                    areaOptions={pickupAreaOptions}
                     onMethodChange={(v) => updatePattern(i, 'pickup_method', v)}
                     onAreaChange={(v) => handlePickupAreaChange(i, v)}
                     onTimeChange={(v) => updatePattern(i, 'pickup_time', v)}
@@ -480,7 +483,7 @@ export default function ChildrenSettingsPage() {
                   {/* 送 行 */}
                   <DropoffRow
                     pattern={p}
-                    areaOptions={areaOptions}
+                    areaOptions={dropoffAreaOptions}
                     onMethodChange={(v) => updatePattern(i, 'dropoff_method', v)}
                     onAreaChange={(v) => handleDropoffAreaChange(i, v)}
                     onTimeChange={(v) => updatePattern(i, 'dropoff_time', v)}

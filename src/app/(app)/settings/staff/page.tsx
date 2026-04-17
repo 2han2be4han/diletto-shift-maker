@@ -66,7 +66,20 @@ export default function StaffSettingsPage() {
       const { tenant } = await tRes.json();
       setStaffList(staff ?? []);
       const s: TenantSettings = tenant?.settings ?? {};
-      setAreas(s.transport_areas ?? []);
+      /* Phase 13: 対応エリア候補は 迎(pickup_areas) ∪ 送(dropoff_areas) のユニーク合成。
+         旧 transport_areas のみのテナントは自動的にそれを使う */
+      const pickup = s.pickup_areas ?? s.transport_areas ?? [];
+      const dropoff = s.dropoff_areas ?? [];
+      const seen = new Set<string>();
+      const union: AreaLabel[] = [];
+      for (const a of [...pickup, ...dropoff]) {
+        const key = `${a.emoji}|${a.name}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          union.push(a);
+        }
+      }
+      setAreas(union);
       setQualificationTypes(s.qualification_types ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');

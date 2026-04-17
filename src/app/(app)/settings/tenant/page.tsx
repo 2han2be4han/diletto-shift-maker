@@ -9,15 +9,18 @@ import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
 /**
  * テナント設定ページ（admin専用）
  * - 事業所名 + settings(JSONB) の CRUD
+ * - エリアは迎用 (pickup_areas) と 送用 (dropoff_areas) を別管理（Phase 13）
+ * - 旧 transport_areas は後方互換のため読み取り時のみ pickup_areas にフォールバック
  */
 
-const DEFAULT_AREAS: AreaLabel[] = [
+const DEFAULT_PICKUP_AREAS: AreaLabel[] = [
   { emoji: '🍇', name: '藤江', time: '' },
   { emoji: '🌳', name: '豊明', time: '' },
   { emoji: '🏭', name: '大府', time: '' },
   { emoji: '✈', name: '常滑', time: '' },
   { emoji: '🍶', name: '学童エリア', time: '' },
 ];
+const DEFAULT_DROPOFF_AREAS: AreaLabel[] = [];
 
 const AREA_TIME_STEP_SECONDS = 600; /* 10分ステップ */
 
@@ -38,7 +41,8 @@ export default function TenantSettingsPage() {
   const [saved, setSaved] = useState(false);
 
   const [tenantName, setTenantName] = useState('');
-  const [areas, setAreas] = useState<AreaLabel[]>(DEFAULT_AREAS);
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>(DEFAULT_PICKUP_AREAS);
+  const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>(DEFAULT_DROPOFF_AREAS);
   const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
   const [requestDeadline, setRequestDeadline] = useState(20);
@@ -51,8 +55,24 @@ export default function TenantSettingsPage() {
         const { tenant } = await res.json();
         const s: TenantSettings = tenant?.settings ?? {};
         setTenantName(tenant?.name ?? '');
-        setAreas(s.transport_areas && s.transport_areas.length > 0 ? s.transport_areas : DEFAULT_AREAS);
-        setQualifications(s.qualification_types && s.qualification_types.length > 0 ? s.qualification_types : DEFAULT_QUALIFICATIONS);
+
+        /* 迎エリア: pickup_areas 優先、なければ旧 transport_areas を流用（初回自動移行） */
+        const pickup =
+          (s.pickup_areas && s.pickup_areas.length > 0)
+            ? s.pickup_areas
+            : (s.transport_areas && s.transport_areas.length > 0)
+              ? s.transport_areas
+              : DEFAULT_PICKUP_AREAS;
+        setPickupAreas(pickup);
+
+        /* 送エリア: dropoff_areas 優先、なければ空（ユーザーが追加） */
+        setDropoffAreas(s.dropoff_areas ?? DEFAULT_DROPOFF_AREAS);
+
+        setQualifications(
+          s.qualification_types && s.qualification_types.length > 0
+            ? s.qualification_types
+            : DEFAULT_QUALIFICATIONS
+        );
         setMinQualified(s.min_qualified_staff ?? 2);
         setRequestDeadline(s.request_deadline_day ?? 20);
       } catch (e) {
@@ -63,10 +83,21 @@ export default function TenantSettingsPage() {
     })();
   }, []);
 
-  const handleAddArea = () => setAreas([...areas, { emoji: '📍', name: '', time: '' }]);
-  const handleRemoveArea = (i: number) => setAreas(areas.filter((_, idx) => idx !== i));
-  const handleAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
-    setAreas(areas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
+  /* --- 迎エリア操作 --- */
+  const handleAddPickupArea = () =>
+    setPickupAreas([...pickupAreas, { emoji: '📍', name: '', time: '' }]);
+  const handleRemovePickupArea = (i: number) =>
+    setPickupAreas(pickupAreas.filter((_, idx) => idx !== i));
+  const handlePickupAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
+    setPickupAreas(pickupAreas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
+
+  /* --- 送エリア操作 --- */
+  const handleAddDropoffArea = () =>
+    setDropoffAreas([...dropoffAreas, { emoji: '🏠', name: '', time: '' }]);
+  const handleRemoveDropoffArea = (i: number) =>
+    setDropoffAreas(dropoffAreas.filter((_, idx) => idx !== i));
+  const handleDropoffAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
+    setDropoffAreas(dropoffAreas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
 
   const handleSave = async () => {
     setSaving(true);
@@ -78,7 +109,10 @@ export default function TenantSettingsPage() {
         body: JSON.stringify({
           name: tenantName,
           settings: {
-            transport_areas: areas,
+            /* 旧 transport_areas は pickup_areas と同じ値を書いて互換維持 */
+            transport_areas: pickupAreas,
+            pickup_areas: pickupAreas,
+            dropoff_areas: dropoffAreas,
             qualification_types: qualifications,
             min_qualified_staff: minQualified,
             request_deadline_day: requestDeadline,
@@ -117,7 +151,7 @@ export default function TenantSettingsPage() {
     <>
       <Header title="テナント設定" />
 
-      <div className="p-6 max-w-2xl overflow-y-auto">
+      <div className="p-6 overflow-y-auto">
         <div className="flex items-center gap-3 mb-6">
           <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>事業所設定</h2>
           <Badge variant="info">admin専用</Badge>
@@ -130,7 +164,7 @@ export default function TenantSettingsPage() {
         )}
 
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-w-2xl">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>事業所名</label>
             <input
               type="text"
@@ -141,55 +175,42 @@ export default function TenantSettingsPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎エリア</label>
-            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              マーク・エリア名・時間はセットで扱います。児童の送迎パターンでエリアを選ぶと、時間が自動入力されます（編集可能）。
-            </p>
-            <div className="flex flex-col gap-2">
-              {areas.map((area, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={area.emoji}
-                    onChange={(e) => handleAreaChange(i, 'emoji', e.target.value)}
-                    className="w-14 text-center outline-none"
-                    style={inputStyle}
-                    placeholder="🏠"
-                    aria-label="マーク"
-                  />
-                  <input
-                    type="text"
-                    value={area.name}
-                    onChange={(e) => handleAreaChange(i, 'name', e.target.value)}
-                    className="flex-1 outline-none"
-                    style={inputStyle}
-                    placeholder="エリア名"
-                    aria-label="エリア名"
-                  />
-                  <input
-                    type="time"
-                    step={AREA_TIME_STEP_SECONDS}
-                    value={area.time ?? ''}
-                    onChange={(e) => handleAreaChange(i, 'time', e.target.value)}
-                    className="w-28 outline-none"
-                    style={inputStyle}
-                    aria-label="基準時間"
-                  />
-                  <button
-                    onClick={() => handleRemoveArea(i)}
-                    className="text-xs px-2 py-2 rounded transition-colors hover:bg-[var(--red-pale)]"
-                    style={{ color: 'var(--red)' }}
-                  >
-                    削除
-                  </button>
-                </div>
-              ))}
-              <Button variant="secondary" onClick={handleAddArea}>+ エリア追加</Button>
+          {/* 送迎エリア: 迎 / 送 を2カラムで並べる */}
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎エリア</label>
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>
+                マーク・エリア名・時間はセットで扱います。児童の送迎パターンでエリアを選ぶと時間が自動入力されます（編集可能）。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 迎エリア */}
+              <AreaListSection
+                title="迎のエリア"
+                titleColor="var(--accent)"
+                areas={pickupAreas}
+                onChange={handlePickupAreaChange}
+                onRemove={handleRemovePickupArea}
+                onAdd={handleAddPickupArea}
+                inputStyle={inputStyle}
+                emptyMessage="迎のエリアを追加してください"
+              />
+              {/* 送エリア */}
+              <AreaListSection
+                title="送のエリア"
+                titleColor="var(--green)"
+                areas={dropoffAreas}
+                onChange={handleDropoffAreaChange}
+                onRemove={handleRemoveDropoffArea}
+                onAdd={handleAddDropoffArea}
+                inputStyle={inputStyle}
+                emptyMessage="送のエリアを追加してください"
+              />
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-w-2xl">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>資格種類</label>
             <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
               「カウント対象」がONの資格を持つ職員が、シフト生成時の有資格者カウントに含まれます。
@@ -248,7 +269,7 @@ export default function TenantSettingsPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-w-2xl">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>有資格者の最低出勤人数</label>
             <input
               type="number"
@@ -261,7 +282,7 @@ export default function TenantSettingsPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-w-2xl">
             <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>休み希望の締切日</label>
             <div className="flex items-center gap-2">
               <span className="text-sm" style={{ color: 'var(--ink-2)' }}>前月</span>
@@ -287,5 +308,81 @@ export default function TenantSettingsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/* ---------- エリアリスト（迎/送共通の子コンポーネント） ---------- */
+type AreaListSectionProps = {
+  title: string;
+  titleColor: string;
+  areas: AreaLabel[];
+  onChange: (i: number, field: keyof AreaLabel, value: string) => void;
+  onRemove: (i: number) => void;
+  onAdd: () => void;
+  inputStyle: React.CSSProperties;
+  emptyMessage: string;
+};
+
+function AreaListSection({
+  title,
+  titleColor,
+  areas,
+  onChange,
+  onRemove,
+  onAdd,
+  inputStyle,
+  emptyMessage,
+}: AreaListSectionProps) {
+  return (
+    <div
+      className="flex flex-col gap-2 p-3"
+      style={{ border: '1px solid var(--rule)', borderRadius: '10px', background: 'var(--surface)' }}
+    >
+      <h3 className="text-sm font-bold" style={{ color: titleColor }}>{title}</h3>
+      {areas.length === 0 && (
+        <p className="text-xs py-2" style={{ color: 'var(--ink-3)' }}>{emptyMessage}</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {areas.map((area, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={area.emoji}
+              onChange={(e) => onChange(i, 'emoji', e.target.value)}
+              className="w-12 text-center outline-none"
+              style={inputStyle}
+              placeholder="🏠"
+              aria-label="マーク"
+            />
+            <input
+              type="text"
+              value={area.name}
+              onChange={(e) => onChange(i, 'name', e.target.value)}
+              className="flex-1 min-w-0 outline-none"
+              style={inputStyle}
+              placeholder="エリア名"
+              aria-label="エリア名"
+            />
+            <input
+              type="time"
+              step={AREA_TIME_STEP_SECONDS}
+              value={area.time ?? ''}
+              onChange={(e) => onChange(i, 'time', e.target.value)}
+              className="w-24 outline-none"
+              style={inputStyle}
+              aria-label="基準時間"
+            />
+            <button
+              onClick={() => onRemove(i)}
+              className="text-xs px-2 py-2 rounded transition-colors hover:bg-[var(--red-pale)]"
+              style={{ color: 'var(--red)' }}
+            >
+              削除
+            </button>
+          </div>
+        ))}
+      </div>
+      <Button variant="secondary" onClick={onAdd}>+ エリア追加</Button>
+    </div>
   );
 }

@@ -13,7 +13,12 @@ export type AreaLabel = { emoji: string; name: string; time?: string };
 export type QualificationType = { name: string; countable: boolean };
 
 export type TenantSettings = {
+  /** 旧: 迎/送 共通エリア。互換のため残置。新規テナントでは使用せず pickup_areas / dropoff_areas を使用 */
   transport_areas?: AreaLabel[];
+  /** 迎用エリア（time はそのエリアに迎に行く標準時刻） */
+  pickup_areas?: AreaLabel[];
+  /** 送用エリア（time はそのエリアに送る標準時刻） */
+  dropoff_areas?: AreaLabel[];
   qualification_types?: QualificationType[];
   min_qualified_staff?: number;
   request_deadline_day?: number;

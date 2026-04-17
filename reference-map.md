@@ -210,3 +210,4 @@
 | 2026-04-17 | Phase 12: 職員登録UX改善（qualifications bug fix / 全選択 / 10分ステップ / 09:30-18:30デフォルト）、AreaLabel.time 追加、ChildTransportPatternRow.pickup_area_label / dropoff_area_label 追加、児童モーダル刷新 |
 | 2026-04-17 | 児童モーダル微調整：区分/場所メモ削除、迎/送を1行化、視覚的整列（ラベル・方法セレクト固定幅） |
 | 2026-04-17 | GradeType 拡張：年少/年中/年長・中1-3・高1-3 追加、Migration 0014 で CHECK 制約更新、GRADE_LABELS を parseChildName.ts で一元管理 |
+| 2026-04-17 | Phase 13: TenantSettings.pickup_areas / dropoff_areas 追加。tenant 設定画面を 2 カラム横並び + max-w 撤廃。children モーダルで迎/送別リスト参照。staff モーダルは ユニオンで候補表示。旧 transport_areas は互換残置 |
