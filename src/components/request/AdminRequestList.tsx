@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
+import MyRequestCalendar from '@/components/request/MyRequestCalendar';
 import type { ShiftRequestRow, StaffRow } from '@/types';
 
 /**
@@ -17,6 +18,8 @@ type Props = {
 
 export default function AdminRequestList({ staff, requests, targetMonth }: Props) {
   const [detail, setDetail] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
+  /* Phase 25: 管理者が代理で休み希望を入力するモーダル */
+  const [proxyTarget, setProxyTarget] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
 
   const byStaff = useMemo(() => {
     const map = new Map<string, ShiftRequestRow[]>();
@@ -46,7 +49,7 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
         <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
           <thead>
             <tr>
-              {['職員名', '雇用', 'ステータス', '公休', '有給', '出勤可', '特記', '提出日'].map((h) => (
+              {['職員名', '雇用', 'ステータス', '公休', '有給', '出勤可', '特記', '提出日', '代理入力'].map((h) => (
                 <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap"
                   style={{ background: 'var(--ink)', color: '#fff' }}>
                   {h}
@@ -57,7 +60,7 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
           <tbody>
             {staff.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                <td colSpan={9} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                   職員が登録されていません
                 </td>
               </tr>
@@ -102,6 +105,28 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
                     {phRow?.submitted_at ? new Date(phRow.submitted_at).toLocaleDateString('ja-JP') : '-'}
                   </td>
+                  <td
+                    className="px-3 py-2 text-center"
+                    style={{ borderBottom: '1px solid var(--rule)' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setProxyTarget({ staff: s, reqs: reqs ?? [] })}
+                      className="text-xs font-medium transition-colors"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--accent)',
+                        border: '1px solid var(--accent)',
+                        borderRadius: '4px',
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                      }}
+                      title="この職員の代理で希望を入力"
+                    >
+                      代理入力
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -141,6 +166,25 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
               ))
             )}
             <Button variant="secondary" onClick={() => setDetail(null)}>閉じる</Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!proxyTarget}
+        onClose={() => setProxyTarget(null)}
+        title={proxyTarget ? `${proxyTarget.staff.name} の休み希望（代理入力）` : ''}
+        size="lg"
+      >
+        {proxyTarget && (
+          <div className="flex flex-col gap-3">
+            <MyRequestCalendar
+              myStaffId={proxyTarget.staff.id}
+              myStaffName={proxyTarget.staff.name}
+              targetMonth={targetMonth}
+              initialRequests={proxyTarget.reqs}
+            />
+            <Button variant="secondary" onClick={() => setProxyTarget(null)}>閉じる</Button>
           </div>
         )}
       </Modal>

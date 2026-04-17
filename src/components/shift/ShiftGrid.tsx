@@ -365,6 +365,14 @@ function CoverageRow({ label, title, dates, getCellBg, render, isLast }: Coverag
       </td>
       {dates.map((d) => {
         const { value, color, bg, fontSize } = render(d);
+        /* sticky bottom 行は透ける rgba を直接指定すると下のシフト行が裏抜けするため、
+           solid な --bg をベースに linear-gradient でオーバーレイする */
+        const tint = bg ?? (getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : null);
+        const bgStyle = isLast
+          ? tint
+            ? `linear-gradient(${tint}, ${tint}), var(--bg)`
+            : 'var(--bg)'
+          : tint ?? 'var(--bg)';
         return (
           <td
             key={d.dateStr}
@@ -374,7 +382,7 @@ function CoverageRow({ label, title, dates, getCellBg, render, isLast }: Coverag
               borderBottom: isLast ? undefined : '1px solid var(--rule)',
               borderRight: '1px solid var(--rule)',
               color,
-              background: bg ?? (getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)'),
+              background: bgStyle,
               fontSize: fontSize ?? '0.72rem',
               boxShadow: isLast ? '0 -4px 4px rgba(0,0,0,0.02)' : undefined,
             }}
