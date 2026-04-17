@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
   const admin = createAdminClient();
 
   /* 1. staff 行を insert（user_id は null） */
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     .insert({
       tenant_id: inviter.tenant_id,
       name,
-      email,
+      email: normalizedEmail,
       role,
       employment_type: body.employment_type ?? 'part_time',
       is_qualified: body.is_qualified ?? false,
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   /* 2. 招待メール送信 */
   const origin = request.nextUrl.origin;
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
     redirectTo: `${origin}/auth/callback?next=/dashboard`,
     data: {
       tenant_id: inviter.tenant_id,
