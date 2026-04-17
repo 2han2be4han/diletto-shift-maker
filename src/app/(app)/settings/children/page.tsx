@@ -255,10 +255,15 @@ export default function ChildrenSettingsPage() {
       (!current.pickup_time ||
         current.pickup_time === '14:00' ||
         current.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type));
+    /* 住所: 手入力済み(空でない)は尊重、空のときだけエリアの住所で埋める */
+    const shouldAutofillAddress = !!area?.address && !current.pickup_location;
     ps[index] = {
       ...current,
       pickup_area_label: newLabel,
       pickup_time: shouldAutofillTime ? (area?.time ?? current.pickup_time) : current.pickup_time,
+      pickup_location: shouldAutofillAddress
+        ? (area?.address ?? current.pickup_location)
+        : current.pickup_location,
     };
     setEditing({ ...editing, patterns: ps });
   };
@@ -270,10 +275,14 @@ export default function ChildrenSettingsPage() {
     const ps = [...editing.patterns];
     const shouldAutofillTime =
       !!area?.time && (!current.dropoff_time || current.dropoff_time === '16:00');
+    const shouldAutofillAddress = !!area?.address && !current.dropoff_location;
     ps[index] = {
       ...current,
       dropoff_area_label: newLabel,
       dropoff_time: shouldAutofillTime ? (area?.time ?? current.dropoff_time) : current.dropoff_time,
+      dropoff_location: shouldAutofillAddress
+        ? (area?.address ?? current.dropoff_location)
+        : current.dropoff_location,
     };
     setEditing({ ...editing, patterns: ps });
   };
@@ -303,12 +312,22 @@ export default function ChildrenSettingsPage() {
       <Header title="児童管理" />
 
       <div className="p-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>児童一覧</h2>
             <Badge variant="info">{activeCount}名（在籍）</Badge>
           </div>
-          <Button variant="primary" onClick={handleAdd}>+ 児童追加</Button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/settings/tenant"
+              className="text-xs font-medium transition-colors inline-flex items-center gap-1 px-3 py-2 rounded-md hover:bg-[var(--accent-pale)]"
+              style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
+              title="送迎エリアの追加・並び替え・時間・住所を設定"
+            >
+              送迎エリアを設定 →
+            </a>
+            <Button variant="primary" onClick={handleAdd}>+ 児童追加</Button>
+          </div>
         </div>
 
         {error && (

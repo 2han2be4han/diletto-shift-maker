@@ -270,6 +270,24 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 16: エリア住所連動 + 画面間ナビ（2026-04-17）</div>
+    <p>
+        エリアに住所を持たせて、児童モーダルでエリアを選んだら住所も自動入力される仕組みに。
+        /settings/children → /settings/tenant のショートカットも追加。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>16-1</td><td>AreaLabel に address?: string 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>任意フィールドで後方互換</td></tr>
+            <tr><td>16-2</td><td>テナント設定: エリア行の 2 行目に 📍 住所入力</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ドラッグ対象は 1 行目のみ</td></tr>
+            <tr><td>16-3</td><td>児童モーダル: エリア選択で pickup/dropoff_location が空なら住所自動入力</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>手入力は尊重（空のときのみ埋める）</td></tr>
+            <tr><td>16-4</td><td>児童画面ヘッダーに「送迎エリアを設定 →」ナビリンク</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>/settings/tenant へ遷移</td></tr>
+            <tr><td>16-5</td><td>tsc 通過 → コミット → push</td><td>（全体）</td><td class="status-done">完了</td><td>100%</td><td>Vercel 自動デプロイ</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

@@ -94,7 +94,7 @@ export default function TenantSettingsPage() {
 
   /* --- 迎エリア操作 --- */
   const handleAddPickupArea = () =>
-    setPickupAreas([...pickupAreas, { emoji: '📍', name: '', time: '' }]);
+    setPickupAreas([...pickupAreas, { emoji: '📍', name: '', time: '', address: '' }]);
   const handleRemovePickupArea = (i: number) =>
     setPickupAreas(pickupAreas.filter((_, idx) => idx !== i));
   const handlePickupAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
@@ -104,7 +104,7 @@ export default function TenantSettingsPage() {
 
   /* --- 送エリア操作 --- */
   const handleAddDropoffArea = () =>
-    setDropoffAreas([...dropoffAreas, { emoji: '🏠', name: '', time: '' }]);
+    setDropoffAreas([...dropoffAreas, { emoji: '🏠', name: '', time: '', address: '' }]);
   const handleRemoveDropoffArea = (i: number) =>
     setDropoffAreas(dropoffAreas.filter((_, idx) => idx !== i));
   const handleDropoffAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
@@ -422,7 +422,7 @@ function AreaListSection({
                 setDraggingIndex(null);
                 setDragOverIndex(null);
               }}
-              className="flex items-center gap-2 p-1.5 rounded-lg transition-all hover:bg-[var(--accent-pale)]"
+              className="flex flex-col gap-1.5 p-1.5 rounded-lg transition-all hover:bg-[var(--accent-pale)]"
               style={{
                 background: isDropTarget ? 'var(--accent-pale)' : undefined,
                 borderTop: isDropTarget && draggingIndex !== null && draggingIndex > i
@@ -434,61 +434,81 @@ function AreaListSection({
                 opacity: isDragging ? 0.4 : 1,
               }}
             >
-              {/* ドラッグハンドル（6点グリップ） */}
-              <div
-                draggable
-                onDragStart={(e) => {
-                  setDraggingIndex(i);
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', String(i));
-                }}
-                onDragEnd={() => {
-                  setDraggingIndex(null);
-                  setDragOverIndex(null);
-                }}
-                className="shrink-0 flex items-center justify-center w-6 h-7 rounded transition-colors hover:bg-[var(--bg)]"
-                style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
-                aria-label="ドラッグして並び替え"
-                title="ドラッグして並び替え"
-              >
-                <GripIcon color="var(--ink-3)" />
+              {/* 1行目: グリップ・マーク・エリア名・時間・削除 */}
+              <div className="flex items-center gap-2">
+                {/* ドラッグハンドル（6点グリップ） */}
+                <div
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggingIndex(i);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(i));
+                  }}
+                  onDragEnd={() => {
+                    setDraggingIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  className="shrink-0 flex items-center justify-center w-6 h-7 rounded transition-colors hover:bg-[var(--bg)]"
+                  style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                  aria-label="ドラッグして並び替え"
+                  title="ドラッグして並び替え"
+                >
+                  <GripIcon color="var(--ink-3)" />
+                </div>
+                <input
+                  type="text"
+                  value={area.emoji}
+                  onChange={(e) => onChange(i, 'emoji', e.target.value)}
+                  className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                  style={emojiStyle}
+                  placeholder="🏠"
+                  aria-label="マーク"
+                />
+                <input
+                  type="text"
+                  value={area.name}
+                  onChange={(e) => onChange(i, 'name', e.target.value)}
+                  className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                  style={nameStyle}
+                  placeholder="エリア名"
+                  aria-label="エリア名"
+                />
+                <input
+                  type="time"
+                  step={AREA_TIME_STEP_SECONDS}
+                  value={area.time ?? ''}
+                  onChange={(e) => onChange(i, 'time', e.target.value)}
+                  className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                  style={timeStyle}
+                  aria-label="基準時間"
+                />
+                <button
+                  onClick={() => onRemove(i)}
+                  className="shrink-0 text-xs px-2 py-2 rounded-md transition-colors hover:bg-[var(--red-pale)]"
+                  style={{ color: 'var(--red)' }}
+                  aria-label={`${area.name || 'エリア'}を削除`}
+                  title="削除"
+                >
+                  ✕
+                </button>
               </div>
-              <input
-                type="text"
-                value={area.emoji}
-                onChange={(e) => onChange(i, 'emoji', e.target.value)}
-                className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-                style={emojiStyle}
-                placeholder="🏠"
-                aria-label="マーク"
-              />
-              <input
-                type="text"
-                value={area.name}
-                onChange={(e) => onChange(i, 'name', e.target.value)}
-                className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-                style={nameStyle}
-                placeholder="エリア名"
-                aria-label="エリア名"
-              />
-              <input
-                type="time"
-                step={AREA_TIME_STEP_SECONDS}
-                value={area.time ?? ''}
-                onChange={(e) => onChange(i, 'time', e.target.value)}
-                className="outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-                style={timeStyle}
-                aria-label="基準時間"
-              />
-              <button
-                onClick={() => onRemove(i)}
-                className="shrink-0 text-xs px-2 py-2 rounded-md transition-colors hover:bg-[var(--red-pale)]"
-                style={{ color: 'var(--red)' }}
-                aria-label={`${area.name || 'エリア'}を削除`}
-                title="削除"
-              >
-                ✕
-              </button>
+              {/* 2行目: 住所（児童モーダルのメモ自動入力に使用） */}
+              <div className="flex items-center gap-2 pl-8">
+                <span className="shrink-0 text-sm" style={{ color: 'var(--ink-3)' }} aria-hidden>📍</span>
+                <input
+                  type="text"
+                  value={area.address ?? ''}
+                  onChange={(e) => onChange(i, 'address', e.target.value)}
+                  className="flex-1 min-w-0 outline-none focus:ring-2 focus:ring-[var(--accent)]/30 text-xs"
+                  style={{
+                    ...inputStyle,
+                    padding: '6px 10px',
+                    fontSize: '0.8rem',
+                  }}
+                  placeholder="住所（例: 愛知県大府市吉田町123）— 選択時に自動入力されます"
+                  aria-label="エリアの住所"
+                />
+              </div>
             </div>
           );
         })}

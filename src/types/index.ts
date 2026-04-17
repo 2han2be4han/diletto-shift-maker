@@ -6,10 +6,10 @@
 
 // ----- テナント -----
 /**
- * エリアラベル。time はそのエリアの基準時刻（迎 or 送の時）。
- * マーク（emoji）と時間はセットで扱い、児童の送迎パターンでエリアを選ぶと time が自動入力される。
+ * エリアラベル。time はそのエリアの基準時刻（迎 or 送の時）、address はそのエリアの住所（Google Maps検索・住所メモ自動入力用）。
+ * マーク（emoji）と時間・住所はセットで扱い、児童の送迎パターンでエリアを選ぶと time / address が自動入力される（編集可）。
  */
-export type AreaLabel = { emoji: string; name: string; time?: string };
+export type AreaLabel = { emoji: string; name: string; time?: string; address?: string };
 export type QualificationType = { name: string; countable: boolean };
 
 export type TenantSettings = {
