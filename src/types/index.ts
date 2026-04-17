@@ -5,12 +5,23 @@
  * ============================================= */
 
 // ----- テナント -----
+export type AreaLabel = { emoji: string; name: string };
+export type QualificationType = { name: string; countable: boolean };
+
+export type TenantSettings = {
+  transport_areas?: AreaLabel[];
+  qualification_types?: QualificationType[];
+  min_qualified_staff?: number;
+  request_deadline_day?: number;
+};
+
 export type TenantRow = {
   id: string;
   name: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   status: 'active' | 'inactive' | 'suspended';
+  settings: TenantSettings;
   created_at: string;
 };
 
@@ -29,6 +40,7 @@ export type StaffRow = {
   default_start_time: string | null;
   default_end_time: string | null;
   transport_areas: string[];
+  qualifications: string[];
   is_qualified: boolean;
   created_at: string;
 };
@@ -50,6 +62,7 @@ export type ChildRow = {
   name: string;
   grade_type: GradeType;
   is_active: boolean;
+  parent_contact: string | null;
   created_at: string;
 };
 

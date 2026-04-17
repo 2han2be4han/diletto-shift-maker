@@ -23,12 +23,12 @@ import type { StaffRow, ShiftAssignmentType } from '@/types';
 
 /* 仮データ */
 const MOCK_STAFF: StaffRow[] = [
-  { id: 's1', tenant_id: 't1', user_id: null, name: '金田', email: null, role: 'admin', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🌳'], is_qualified: true, created_at: '' },
-  { id: 's2', tenant_id: 't1', user_id: null, name: '加藤', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🏭'], is_qualified: true, created_at: '' },
-  { id: 's3', tenant_id: 't1', user_id: null, name: '鈴木', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🌳', '✈'], is_qualified: false, created_at: '' },
-  { id: 's4', tenant_id: 't1', user_id: null, name: '田中', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:30', default_end_time: '17:30', transport_areas: ['🍇'], is_qualified: false, created_at: '' },
-  { id: 's5', tenant_id: 't1', user_id: null, name: '佐藤', email: null, role: 'viewer', employment_type: 'part_time', default_start_time: '10:00', default_end_time: '16:00', transport_areas: ['🌳'], is_qualified: false, created_at: '' },
-  { id: 's6', tenant_id: 't1', user_id: null, name: '山本', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🏭', '✈'], is_qualified: true, created_at: '' },
+  { id: 's1', tenant_id: 't1', user_id: null, name: '金田', email: null, role: 'admin', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🌳'], qualifications: [], is_qualified: true, created_at: '' },
+  { id: 's2', tenant_id: 't1', user_id: null, name: '加藤', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🍇', '🏭'], qualifications: [], is_qualified: true, created_at: '' },
+  { id: 's3', tenant_id: 't1', user_id: null, name: '鈴木', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🌳', '✈'], qualifications: [], is_qualified: false, created_at: '' },
+  { id: 's4', tenant_id: 't1', user_id: null, name: '田中', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:30', default_end_time: '17:30', transport_areas: ['🍇'], qualifications: [], is_qualified: false, created_at: '' },
+  { id: 's5', tenant_id: 't1', user_id: null, name: '佐藤', email: null, role: 'viewer', employment_type: 'part_time', default_start_time: '10:00', default_end_time: '16:00', transport_areas: ['🌳'], qualifications: [], is_qualified: false, created_at: '' },
+  { id: 's6', tenant_id: 't1', user_id: null, name: '山本', email: null, role: 'editor', employment_type: 'full_time', default_start_time: '09:00', default_end_time: '17:00', transport_areas: ['🏭', '✈'], qualifications: [], is_qualified: true, created_at: '' },
 ];
 
 /* 利用予定の仮データ（4月平日に5〜8名） */
