@@ -7,7 +7,7 @@ import type { AuthenticatedStaff, StaffRole } from '@/types';
  * 解決戦略:
  *   1. staff.user_id = auth.uid() で検索
  *   2. なければ email 一致 & user_id IS NULL の staff を admin client で自動リンク
- *      （DB トリガー 0005 が未発火・seed 未実行のケース救済）
+ *      ※ 複数テナントに同一 email がある場合は曖昧性を避けるため null を返す
  *   3. それでも見つからなければ null
  */
 export async function getCurrentStaff(): Promise<AuthenticatedStaff | null> {
@@ -18,35 +18,42 @@ export async function getCurrentStaff(): Promise<AuthenticatedStaff | null> {
 
   if (!user) return null;
 
-  /* 1. user_id で検索 */
-  const { data: byUserId } = await supabase
+  /* 1. user_id で検索（複数ヒットも想定して limit 1） */
+  const { data: byUserIdList } = await supabase
     .from('staff')
     .select('id, tenant_id, name, email, role')
     .eq('user_id', user.id)
-    .maybeSingle();
+    .limit(1);
+  const byUserId = byUserIdList?.[0];
 
   if (byUserId) return byUserId as AuthenticatedStaff;
 
-  /* 2. email 一致で自動リンク（RLS を回避するため admin client） */
+  /* 2. email 一致で自動リンク（admin client）
+        複数候補がある場合は曖昧なのでリンクせずに null を返す */
   if (user.email) {
     try {
       const admin = createAdminClient();
-      const { data: byEmail } = await admin
+      const { data: candidates } = await admin
         .from('staff')
         .select('id, tenant_id, name, email, role')
         .eq('email', user.email)
         .is('user_id', null)
-        .maybeSingle();
+        .limit(2);
 
-      if (byEmail) {
-        await admin
-          .from('staff')
-          .update({ user_id: user.id })
-          .eq('id', byEmail.id);
-        return byEmail as AuthenticatedStaff;
+      if (!candidates || candidates.length === 0) return null;
+      if (candidates.length > 1) {
+        /* 複数テナントに同 email が存在 → 自動リンクしない（管理者が手動で対応） */
+        return null;
       }
+
+      const target = candidates[0];
+      await admin
+        .from('staff')
+        .update({ user_id: user.id })
+        .eq('id', target.id);
+      return target as AuthenticatedStaff;
     } catch {
-      /* service_role key 未設定時は失敗する可能性があるため catch */
+      return null;
     }
   }
 

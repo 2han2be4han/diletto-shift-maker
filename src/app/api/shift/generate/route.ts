@@ -38,6 +38,27 @@ export async function POST(request: NextRequest) {
       supabase.from('schedule_entries').select('*').gte('date', from).lte('date', to),
     ]);
 
+    /* 3 クエリのいずれかが失敗していたら、空配列で処理を続行せず明示的にエラー。
+       silent degradation を防ぐ（Codex レビュー #3 P2） */
+    if (sRes.error) {
+      return NextResponse.json(
+        { error: `職員取得に失敗しました: ${sRes.error.message}` },
+        { status: 500 }
+      );
+    }
+    if (rRes.error) {
+      return NextResponse.json(
+        { error: `休み希望取得に失敗しました: ${rRes.error.message}` },
+        { status: 500 }
+      );
+    }
+    if (eRes.error) {
+      return NextResponse.json(
+        { error: `利用予定取得に失敗しました: ${eRes.error.message}` },
+        { status: 500 }
+      );
+    }
+
     const result = generateShiftAssignments({
       tenantId: gate.staff.tenant_id,
       year,
