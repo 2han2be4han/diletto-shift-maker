@@ -585,12 +585,12 @@ function StaffSelect({
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
               {availableStaff.map((s) => {
-                /* 各候補の担当マークを option label に含める（🌳🍶 のように） */
-                const optMarks = s.areaMarks.length > 0 ? ` ${s.areaMarks.join('')}` : '';
+                /* 各候補の担当マークを option label の先頭に含める（🌳🍶 本岡 恵 のように） */
+                const optMarks = s.areaMarks.length > 0 ? `${s.areaMarks.join('')} ` : '';
                 return (
                   <option key={s.id} value={s.id}>
-                    {s.name}
                     {optMarks}
+                    {s.name}
                   </option>
                 );
               })}
@@ -598,7 +598,7 @@ function StaffSelect({
             {/* 選択中職員のマーク表示（select の value は option label の装飾を見せないので補足表示） */}
             {id && !isMissing && marks.length > 0 && (
               <span
-                className="text-xs"
+                className="text-xs shrink-0 order-first"
                 style={{ lineHeight: 1 }}
                 title={`この日の担当エリア: ${marks.join(' ')}`}
                 aria-label={`担当エリア ${marks.join(' ')}`}
