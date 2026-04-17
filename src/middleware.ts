@@ -17,7 +17,7 @@ const SUPABASE_CONFIGURED =
   !!SUPABASE_ANON_KEY &&
   !SUPABASE_URL.includes('placeholder');
 
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/auth/signout'];
+const PUBLIC_PATHS = ['/login', '/signup', '/auth/callback', '/auth/signout'];
 
 export async function middleware(request: NextRequest) {
   /* Supabase 未接続 or 明示スキップ時 = 開発用バイパス */
@@ -48,8 +48,8 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-  // 認証済みユーザーが /login にアクセス → /dashboard へ
-  if (user && pathname === '/login') {
+  // 認証済みユーザーが /login /signup にアクセス → /dashboard へ
+  if (user && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
