@@ -43,6 +43,7 @@
 | grade_type | text | `src/types/index.ts` (ChildRow, GradeType) |
 | is_active | boolean | `src/types/index.ts` (ChildRow) |
 | display_order | integer | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (ORDER BY), `src/app/api/children/reorder/route.ts`, `src/app/(app)/settings/children/page.tsx` (DnD 並び替え) |
+| home_address | text | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (POST), `[id]/route.ts` (PATCH), `src/app/(app)/settings/children/page.tsx` (入力UI + 送り住所fallback), `src/app/(app)/transport/page.tsx` (送迎表表示時fallback) |
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
@@ -217,3 +218,5 @@
 | 2026-04-17 | Phase 16: AreaLabel.address 追加。tenant でエリアごとに住所入力 → 児童モーダルでエリア選択時に住所が自動入力（手入力は尊重）。/settings/children から /settings/tenant へのショートカットリンク |
 | 2026-04-17 | Phase 17: 送迎表で児童名クリック→場所詳細カード展開。各カードで Google Maps 起動 |
 | 2026-04-17 | Phase 18: area 住所の load 時フォールバック（children モーダル + 送迎表）、children.display_order で児童並べ替え（Migration 0015、/api/children/reorder 新設、ドラッグハンドル UI） |
+| 2026-04-17 | Phase 19: VBAのRunAllCoverageChecksをTypeScript移植。ShiftGrid に 有資格者/提供時間/余力 の3行追加（児童11人超は要確認） |
+| 2026-04-17 | Phase 20: children.home_address 追加（Migration 0016）、送り先フォールバックに児童自宅住所を追加、/locations 機能撤去（LocationImage→SignedImage汎用化） |

@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       grade_type: body.grade_type,
       is_active: body.is_active ?? true,
       parent_contact: body.parent_contact ?? null,
+      home_address: body.home_address ?? null,
     })
     .select()
     .single();

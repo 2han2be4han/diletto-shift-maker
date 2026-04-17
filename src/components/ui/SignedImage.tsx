@@ -2,22 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { CHILD_LOCATION_IMAGES_BUCKET, COMMENT_IMAGES_BUCKET } from '@/types';
+import { COMMENT_IMAGES_BUCKET } from '@/types';
 
 type Props = {
   storagePath: string;
   alt: string;
-  bucket?: typeof CHILD_LOCATION_IMAGES_BUCKET | typeof COMMENT_IMAGES_BUCKET;
+  bucket?: string;
   className?: string;
 };
 
 /**
- * 非公開 Storage 画像を署名付き URL で取得して表示
+ * 非公開 Storage 画像を署名付き URL で取得して表示する汎用コンポーネント
+ * （Phase 20: /locations 機能撤去に伴い LocationImage から移設・汎用化）
  */
-export default function LocationImage({
+export default function SignedImage({
   storagePath,
   alt,
-  bucket = CHILD_LOCATION_IMAGES_BUCKET,
+  bucket = COMMENT_IMAGES_BUCKET,
   className,
 }: Props) {
   const [url, setUrl] = useState<string | null>(null);

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Badge from '@/components/ui/Badge';
-import LocationImage from '@/components/locations/LocationImage';
+import SignedImage from '@/components/ui/SignedImage';
 import { COMMENT_IMAGES_BUCKET } from '@/types';
 import type { CommentStatus, CommentTargetType } from '@/types';
 
@@ -122,7 +122,7 @@ export default function CommentsApprovalList({
               {c.comment_images && c.comment_images.length > 0 && (
                 <div className="flex gap-2 mb-2 flex-wrap">
                   {c.comment_images.map((img) => (
-                    <LocationImage
+                    <SignedImage
                       key={img.id}
                       storagePath={img.storage_path}
                       alt=""

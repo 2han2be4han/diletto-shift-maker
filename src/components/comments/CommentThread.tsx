@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import LocationImage from '@/components/locations/LocationImage';
+import SignedImage from '@/components/ui/SignedImage';
 import { COMMENT_IMAGES_BUCKET } from '@/types';
 import type { CommentTargetType, CommentStatus } from '@/types';
 
@@ -171,7 +171,7 @@ export default function CommentThread({
                 {c.comment_images && c.comment_images.length > 0 && (
                   <div className="flex gap-2 mt-2 flex-wrap">
                     {c.comment_images.map((img) => (
-                      <LocationImage
+                      <SignedImage
                         key={img.id}
                         storagePath={img.storage_path}
                         alt=""
@@ -222,7 +222,7 @@ export default function CommentThread({
           <div className="flex gap-2 mt-2 flex-wrap">
             {imagePaths.map((p) => (
               <div key={p} className="relative">
-                <LocationImage
+                <SignedImage
                   storagePath={p}
                   alt=""
                   bucket={COMMENT_IMAGES_BUCKET}

@@ -37,7 +37,6 @@ export default async function DashboardPage() {
     { href: '/request', title: '休み希望を出す', desc: '今月・来月の休み希望をカレンダーから登録', icon: '✋' },
     { href: '/shift', title: 'シフト表を見る', desc: '自分の出勤予定と全体のシフトを確認', icon: '📋' },
     { href: '/transport', title: '送迎表を見る', desc: '今日・明日の送迎担当を確認', icon: '🚗' },
-    { href: '/locations', title: '送り場所を確認', desc: '児童ごとの送り場所と目印写真を見る', icon: '📍' },
   ];
 
   const ADMIN_CARDS: { href: string; title: string; desc: string; icon: string }[] = [
@@ -45,7 +44,6 @@ export default async function DashboardPage() {
     { href: '/shift', title: 'シフト表', desc: 'シフト生成・調整・確定', icon: '📋' },
     { href: '/transport', title: '送迎表', desc: '担当割り当て・確定', icon: '🚗' },
     { href: '/request', title: '休み希望一覧', desc: '全職員の提出状況を確認', icon: '✋' },
-    { href: '/locations', title: '送り場所', desc: '児童ごとの住所・写真を管理', icon: '📍' },
     { href: '/settings/tenant', title: '設定', desc: 'テナント・職員・児童の管理', icon: '⚙️' },
   ];
 

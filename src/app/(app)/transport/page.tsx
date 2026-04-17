@@ -124,6 +124,11 @@ export default function TransportPage() {
     () => new Map(children.map((c) => [c.id, c.name])),
     [children]
   );
+  /* 自宅住所の逆引きマップ（Phase 20: 送り住所のフォールバック） */
+  const childHomeAddressMap = useMemo(
+    () => new Map(children.map((c) => [c.id, c.home_address])),
+    [children]
+  );
 
   /* UI 用エントリ構築: selectedDate の schedule_entries を列挙し、transport_assignments と結合 */
   const currentDayEntries: UiTransportEntry[] = useMemo(() => {
@@ -146,7 +151,10 @@ export default function TransportPage() {
       const pattern = e.pattern_id ? patternById.get(e.pattern_id) : undefined;
       const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
       const dropoffAreaLabel = pattern?.dropoff_area_label ?? null;
-      /* 個別住所優先、空ならエリア設定の住所をフォールバック */
+      /* 住所フォールバック優先順位:
+           1. pattern の個別住所
+           2. エリア設定の住所
+           3. 送り側は児童の自宅住所 (home_address)  ← Phase 20 */
       const pickupLocation =
         pattern?.pickup_location
         || (pickupAreaLabel ? areaAddressMap.get(pickupAreaLabel) ?? null : null)
@@ -154,6 +162,7 @@ export default function TransportPage() {
       const dropoffLocation =
         pattern?.dropoff_location
         || (dropoffAreaLabel ? areaAddressMap.get(dropoffAreaLabel) ?? null : null)
+        || childHomeAddressMap.get(e.child_id)
         || null;
       return {
         scheduleEntryId: sid,
@@ -170,7 +179,7 @@ export default function TransportPage() {
         isConfirmed: t?.is_confirmed ?? false,
       };
     });
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, patterns, pickupAreas, dropoffAreas]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, childHomeAddressMap, patterns, pickupAreas, dropoffAreas]);
 
   const unassignedTotal = useMemo(() => {
     return transportAssignments.filter((t) => t.is_unassigned).length;

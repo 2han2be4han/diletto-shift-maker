@@ -26,7 +26,6 @@ const NAV_ITEMS = [
   { href: '/shift', label: 'シフト表', icon: '📋' },
   { href: '/transport', label: '送迎表', icon: '🚗' },
   { href: '/request', label: '休み希望', icon: '✋' },
-  { href: '/locations', label: '送り場所', icon: '📍' },
 ];
 
 const NAV_SETTINGS = [

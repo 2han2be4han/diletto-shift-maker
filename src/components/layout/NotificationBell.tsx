@@ -18,7 +18,8 @@ const TARGET_HREF: Record<string, string> = {
   shift_request: '/request',
   shift_assignment: '/shift',
   transport_assignment: '/transport',
-  child_dropoff_location: '/locations',
+  /* child_dropoff_location は Phase 20 で /locations 機能廃止。児童管理へ誘導 */
+  child_dropoff_location: '/settings/children',
 };
 
 export default function NotificationBell() {

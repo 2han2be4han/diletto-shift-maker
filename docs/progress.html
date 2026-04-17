@@ -309,6 +309,42 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 19: 有資格者/提供時間/余力 カバレッジ判定（2026-04-17）</div>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>19-1</td><td>VBA RunAllCoverageChecks を TypeScript 移植</td><td>src/lib/logic/qualifiedCoverage.ts</td><td class="status-done">完了</td><td>100%</td><td>有資格者カウント / 提供時間(常時2名) / 余力(3名重複時間)</td></tr>
+            <tr><td>19-2</td><td>ShiftGrid に 3行 (有資格者/提供時間/余力) を出勤数の下に追加</td><td>src/components/shift/ShiftGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>CoverageRow コンポーネントで共通化</td></tr>
+            <tr><td>19-3</td><td>shift/page で scheduleEntries から日別児童数を算出、ShiftGrid に渡す</td><td>src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>childrenCountByDate を useMemo で計算</td></tr>
+            <tr><td>19-4</td><td>児童 11 人以上の日は 3名重複判定をスキップし "要確認(N名)" バッジ</td><td>src/lib/logic/qualifiedCoverage.ts</td><td class="status-done">完了</td><td>100%</td><td>規模外の自動判定は行わない</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 20: 自宅住所追加 + /locations 削除（2026-04-17）</div>
+    <p>
+        <strong>ユーザー判断</strong>: 「Dにしてロケーション削除で、これがあればロケーションいらん」<br>
+        送り先は児童ごとに固有（自宅）が大半のため、<code>children.home_address</code> をデフォルト値として持たせ、
+        /locations 機能（<code>child_dropoff_locations</code> を使う重装備な画面）は撤去。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>20-1</td><td>Migration 0016: children.home_address text 追加</td><td>supabase/migrations/0016_children_home_address.sql</td><td class="status-done">完了</td><td>100%</td><td>nullable、後方互換</td></tr>
+            <tr><td>20-2</td><td>ChildRow 型に home_address 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>任意項目</td></tr>
+            <tr><td>20-3</td><td>/api/children GET/POST/PATCH で home_address 対応</td><td>src/app/api/children/route.ts, [id]/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>20-4</td><td>児童モーダル基本情報に「自宅住所」入力追加</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>保護者連絡先の下にフル幅で配置</td></tr>
+            <tr><td>20-5</td><td>住所フォールバックチェーン拡張: pattern memo → area.address → child.home_address</td><td>children modal handleEdit / handleDropoffAreaChange, transport/page useMemo</td><td class="status-done">完了</td><td>100%</td><td>送り先は空なら自宅、完全自動化</td></tr>
+            <tr><td>20-6</td><td>/locations ページ・API・LocationImage コンポーネント削除</td><td>src/app/(app)/locations, src/app/api/locations, src/components/locations</td><td class="status-done">完了</td><td>100%</td><td>type / DB テーブル は残置（CLAUDE.md §6）</td></tr>
+            <tr><td>20-7</td><td>Sidebar / Dashboard から /locations リンク削除</td><td>src/components/layout/Sidebar.tsx, src/app/(app)/dashboard/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ナビゲーション整理</td></tr>
+            <tr><td>20-8</td><td>LocationImage を SignedImage に移設（comment機能で使われているため汎用化）</td><td>src/components/ui/SignedImage.tsx, Comment*.tsx</td><td class="status-done">完了</td><td>100%</td><td>署名URL取得の汎用コンポーネント化</td></tr>
+            <tr><td>20-9</td><td>NotificationBell の child_dropoff_location 遷移先を /settings/children に変更</td><td>src/components/layout/NotificationBell.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

@@ -43,6 +43,7 @@ type EditableChild = {
   grade_type: GradeType;
   is_active: boolean;
   parent_contact: string | null;
+  home_address: string | null;
   patterns: PatternItem[];
   isNew?: boolean;
 };
@@ -131,6 +132,7 @@ export default function ChildrenSettingsPage() {
       grade_type: 'elementary_1',
       is_active: true,
       parent_contact: null,
+      home_address: null,
       patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
@@ -149,6 +151,10 @@ export default function ChildrenSettingsPage() {
           pickupAreas.find((a) => formatAreaLabel(a) === pickupLabel)?.address ?? '';
         const dropoffAreaAddress =
           dropoffAreas.find((a) => formatAreaLabel(a) === dropoffLabel)?.address ?? '';
+        /* 住所フォールバック優先順位:
+             1. 個別memo (p.pickup_location / p.dropoff_location) が最優先
+             2. エリア設定の住所
+             3. 送り側は児童の自宅住所 (home_address) */
         return {
           id: p.id,
           pattern_name: p.pattern_name,
@@ -156,7 +162,7 @@ export default function ChildrenSettingsPage() {
           pickup_time: p.pickup_time ?? '14:00',
           pickup_method: p.pickup_method,
           pickup_area_label: pickupLabel,
-          dropoff_location: p.dropoff_location || dropoffAreaAddress,
+          dropoff_location: p.dropoff_location || dropoffAreaAddress || (child.home_address ?? ''),
           dropoff_time: p.dropoff_time ?? '16:00',
           dropoff_method: p.dropoff_method,
           dropoff_area_label: dropoffLabel,
@@ -168,6 +174,7 @@ export default function ChildrenSettingsPage() {
       grade_type: child.grade_type,
       is_active: child.is_active,
       parent_contact: child.parent_contact,
+      home_address: child.home_address,
       patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
   };
@@ -187,6 +194,7 @@ export default function ChildrenSettingsPage() {
             grade_type: editing.grade_type,
             is_active: editing.is_active,
             parent_contact: editing.parent_contact,
+            home_address: editing.home_address,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
@@ -201,6 +209,7 @@ export default function ChildrenSettingsPage() {
             grade_type: editing.grade_type,
             is_active: editing.is_active,
             parent_contact: editing.parent_contact,
+            home_address: editing.home_address,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
@@ -314,14 +323,16 @@ export default function ChildrenSettingsPage() {
     const ps = [...editing.patterns];
     const shouldAutofillTime =
       !!area?.time && (!current.dropoff_time || current.dropoff_time === '16:00');
-    const shouldAutofillAddress = !!area?.address && !current.dropoff_location;
+    /* 住所フォールバック: 個別memo → area.address → child.home_address */
+    let nextLocation = current.dropoff_location;
+    if (!current.dropoff_location) {
+      nextLocation = area?.address || editing.home_address || '';
+    }
     ps[index] = {
       ...current,
       dropoff_area_label: newLabel,
       dropoff_time: shouldAutofillTime ? (area?.time ?? current.dropoff_time) : current.dropoff_time,
-      dropoff_location: shouldAutofillAddress
-        ? (area?.address ?? current.dropoff_location)
-        : current.dropoff_location,
+      dropoff_location: nextLocation,
     };
     setEditing({ ...editing, patterns: ps });
   };
@@ -556,6 +567,24 @@ export default function ChildrenSettingsPage() {
                     {editing.is_active ? '在籍' : '退籍'}
                   </span>
                 </label>
+              </div>
+
+              {/* 自宅住所（Phase 20: 送迎パターンの dropoff default） */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                  自宅住所（送り先のデフォルト）
+                </label>
+                <input
+                  type="text"
+                  value={editing.home_address ?? ''}
+                  onChange={(e) => setEditing({ ...editing, home_address: e.target.value })}
+                  className="outline-none"
+                  style={inputStyle}
+                  placeholder="例）愛知県知多郡東浦町藤江西之宮95"
+                />
+                <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                  送迎パターンの送り先が未入力の場合、ここが自動で使われます（送迎表 → 地図で開く）
+                </p>
               </div>
             </section>
 

@@ -83,6 +83,8 @@ export type ChildRow = {
   parent_contact: string | null;
   /** 児童一覧の表示順。NULL の場合は created_at フォールバック */
   display_order: number | null;
+  /** 自宅住所。送迎パターンの dropoff_location 未入力時の default 値 */
+  home_address: string | null;
   created_at: string;
 };
 
