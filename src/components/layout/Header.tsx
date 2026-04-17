@@ -3,11 +3,14 @@
 import type { ReactNode } from 'react';
 import { useSidebarToggle } from '@/components/layout/AppShell';
 import NotificationBell from '@/components/layout/NotificationBell';
+import MonthSelector from '@/components/layout/MonthSelector';
 
 type HeaderProps = {
   title: string;
   onMenuToggle?: () => void;
   actions?: ReactNode;
+  /** Phase 25: 対象月セレクタを表示（/schedule /shift /transport /request） */
+  showMonthSelector?: boolean;
 };
 
 /**
@@ -17,7 +20,7 @@ type HeaderProps = {
  *
  * onMenuToggle未指定時はSidebarContextのtoggleを使用
  */
-export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
+export default function Header({ title, onMenuToggle, actions, showMonthSelector }: HeaderProps) {
   const { toggle } = useSidebarToggle();
   const handleToggle = onMenuToggle || toggle;
 
@@ -50,6 +53,7 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        {showMonthSelector && <MonthSelector />}
         {actions}
         <NotificationBell />
       </div>

@@ -149,6 +149,8 @@ export type ShiftRequestRow = {
   dates: string[];
   notes: string | null;
   submitted_at: string;
+  /** Phase 25: 入力者 id。NULL or = staff_id なら本人、異なれば代理入力 */
+  submitted_by_staff_id: string | null;
 };
 
 // ----- シフト確定 -----

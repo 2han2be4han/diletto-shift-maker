@@ -50,6 +50,8 @@ export async function POST(request: NextRequest) {
         request_type: body.request_type,
         dates: body.dates,
         notes: body.notes ?? null,
+        submitted_by_staff_id: gate.staff.id,
+        submitted_at: new Date().toISOString(),
       },
       { onConflict: 'tenant_id,staff_id,month,request_type' }
     )

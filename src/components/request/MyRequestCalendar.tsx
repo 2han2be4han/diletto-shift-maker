@@ -19,6 +19,8 @@ type Props = {
   myStaffName: string;
   targetMonth: string; // 'YYYY-MM'
   initialRequests: ShiftRequestRow[];
+  /** Phase 25: 提出成功時に呼ばれる（AdminRequestList の代理入力後の再取得に使う） */
+  onSubmitted?: () => void;
 };
 
 type DayStatus = 'none' | ShiftRequestType;
@@ -31,7 +33,7 @@ const STATUS_CONFIG: Record<Exclude<DayStatus, 'none'>, { label: string; color: 
 
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-export default function MyRequestCalendar({ myStaffId, myStaffName, targetMonth, initialRequests }: Props) {
+export default function MyRequestCalendar({ myStaffId, myStaffName, targetMonth, initialRequests, onSubmitted }: Props) {
   const [year, monthNum] = targetMonth.split('-').map(Number);
 
   /* initialRequests から dayStatuses を構築 */
@@ -110,6 +112,7 @@ export default function MyRequestCalendar({ myStaffId, myStaffName, targetMonth,
         if (!res.ok) throw new Error((await res.json()).error ?? '提出失敗');
       }
       setSavedAt(new Date().toLocaleTimeString('ja-JP'));
+      onSubmitted?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : '提出に失敗しました');
     } finally {

@@ -112,12 +112,9 @@ export function generateShiftAssignments(
       } else if (dow === 0) {
         /* 日曜は全員休み（デフォルト） */
         assignmentType = 'off';
-      } else if (s.employment_type === 'part_time' && !requests?.availableDays.has(dateStr)) {
-        /* パートは出勤可能日のみ出勤（出勤可能日未指定なら休み） */
-        if (requests && requests.availableDays.size > 0) {
-          assignmentType = 'off';
-        }
       }
+      /* Phase 25: パートは休み希望(公休/有給)以外は反映せず、常勤と同じく normal 扱い
+         （旧仕様では available_day に含まれない日を off にしていたが、希望無提出で全員休み化してしまう不具合があったため撤廃） */
 
       const isWorking = assignmentType === 'normal';
 

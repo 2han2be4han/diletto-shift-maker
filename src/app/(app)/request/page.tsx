@@ -9,19 +9,29 @@ import AdminRequestList from '@/components/request/AdminRequestList';
 
 /**
  * 休み希望ページ
- * - admin / editor: 全職員の提出状況リスト
+ * - admin / editor: 全職員の提出状況リスト（代理入力可）
  * - viewer: 自分の休み希望カレンダー
+ *
+ * Phase 25: URL ?month=YYYY-MM で対象月を切替可能（デフォルトは来月）
  */
-export default async function RequestPage() {
+export default async function RequestPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
   const staff = await getCurrentStaff();
   if (!staff) redirect('/login');
 
   const supabase = await createClient();
+  const sp = await searchParams;
 
-  /* 対象月は「来月」 */
+  /* 対象月: ?month= 指定があれば優先、無ければ来月 */
   const now = new Date();
-  const target = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const targetMonth = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`;
+  const defaultTarget = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const defaultMonth = `${defaultTarget.getFullYear()}-${String(defaultTarget.getMonth() + 1).padStart(2, '0')}`;
+  const targetMonth = /^\d{4}-\d{2}$/.test(sp.month ?? '') ? sp.month! : defaultMonth;
+  const [ty, tm] = targetMonth.split('-').map(Number);
+  const target = new Date(ty, tm - 1, 1);
 
   const { data: myRequests } = await supabase
     .from('shift_requests')
@@ -35,7 +45,7 @@ export default async function RequestPage() {
   let allRequests: ShiftRequestRow[] = [];
   if (showAdminView) {
     const [sRes, rRes] = await Promise.all([
-      supabase.from('staff').select('*').order('name'),
+      supabase.from('staff').select('*').order('display_order', { ascending: true, nullsFirst: false }).order('name'),
       supabase.from('shift_requests').select('*').eq('month', targetMonth),
     ]);
     allStaff = (sRes.data ?? []) as StaffRow[];
@@ -44,7 +54,7 @@ export default async function RequestPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="休み希望" />
+      <Header title="休み希望" showMonthSelector />
 
       <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -59,7 +69,7 @@ export default async function RequestPage() {
         {showAdminView ? (
           <AdminRequestList
             staff={allStaff}
-            requests={allRequests}
+            initialRequests={allRequests}
             targetMonth={targetMonth}
           />
         ) : (

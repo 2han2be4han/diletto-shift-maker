@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -9,17 +9,27 @@ import type { ShiftRequestRow, StaffRow } from '@/types';
 
 /**
  * 管理者向け: 全職員の休み希望提出状況
+ * Phase 25: 代理入力時は submitted_by_staff_id で判定して「代理」バッジ表示
  */
 type Props = {
   staff: StaffRow[];
-  requests: ShiftRequestRow[];
+  initialRequests: ShiftRequestRow[];
   targetMonth: string;
 };
 
-export default function AdminRequestList({ staff, requests, targetMonth }: Props) {
+export default function AdminRequestList({ staff, initialRequests, targetMonth }: Props) {
+  const [requests, setRequests] = useState<ShiftRequestRow[]>(initialRequests);
   const [detail, setDetail] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
   /* Phase 25: 管理者が代理で休み希望を入力するモーダル */
   const [proxyTarget, setProxyTarget] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
+
+  /** 代理入力・再取得時に shift_requests を fetch し直す */
+  const refetch = useCallback(async () => {
+    const res = await fetch(`/api/shift-requests?month=${targetMonth}`);
+    if (!res.ok) return;
+    const { requests: next } = await res.json();
+    setRequests((next ?? []) as ShiftRequestRow[]);
+  }, [targetMonth]);
 
   const byStaff = useMemo(() => {
     const map = new Map<string, ShiftRequestRow[]>();
@@ -69,6 +79,13 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
               const reqs = byStaff.get(s.id);
               const isSubmitted = !!reqs && reqs.length > 0;
               const phRow = reqs?.find((r) => r.request_type === 'public_holiday');
+              /* 代理入力判定: いずれかの request_type で submitted_by != staff_id */
+              const proxyRow = reqs?.find(
+                (r) => r.submitted_by_staff_id && r.submitted_by_staff_id !== s.id
+              );
+              const proxyStaff = proxyRow
+                ? staff.find((x) => x.id === proxyRow.submitted_by_staff_id)
+                : null;
 
               return (
                 <tr
@@ -81,6 +98,21 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
                 >
                   <td className="px-3 py-2 font-medium" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
                     {s.name}
+                    {proxyRow && (
+                      <span
+                        className="ml-2 text-xs font-semibold"
+                        style={{
+                          background: 'var(--gold-pale)',
+                          color: 'var(--gold)',
+                          border: '1px solid var(--gold)',
+                          borderRadius: '4px',
+                          padding: '1px 6px',
+                        }}
+                        title={proxyStaff ? `${proxyStaff.name} が代理入力` : '代理入力'}
+                      >
+                        代理
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {s.employment_type === 'full_time' ? '常勤' : 'パート'}
@@ -172,7 +204,10 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
 
       <Modal
         isOpen={!!proxyTarget}
-        onClose={() => setProxyTarget(null)}
+        onClose={() => {
+          setProxyTarget(null);
+          refetch();
+        }}
         title={proxyTarget ? `${proxyTarget.staff.name} の休み希望（代理入力）` : ''}
         size="lg"
       >
@@ -183,8 +218,17 @@ export default function AdminRequestList({ staff, requests, targetMonth }: Props
               myStaffName={proxyTarget.staff.name}
               targetMonth={targetMonth}
               initialRequests={proxyTarget.reqs}
+              onSubmitted={refetch}
             />
-            <Button variant="secondary" onClick={() => setProxyTarget(null)}>閉じる</Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setProxyTarget(null);
+                refetch();
+              }}
+            >
+              閉じる
+            </Button>
           </div>
         )}
       </Modal>

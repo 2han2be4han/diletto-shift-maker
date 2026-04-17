@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
@@ -25,9 +26,12 @@ import type {
  * - 確定 → is_confirmed: true
  */
 
-const now = new Date();
-const currentYear = now.getFullYear();
-const currentMonth = now.getMonth() + 1;
+/** Phase 25: URL ?month=YYYY-MM。デフォルトは来月 */
+function defaultNextMonthStr(): string {
+  const d = new Date();
+  const t = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+}
 
 type ShiftCell = {
   staff_id: string;
@@ -40,8 +44,13 @@ type ShiftCell = {
 type Warning = { date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string };
 
 export default function ShiftPage() {
-  const [year, setYear] = useState(currentYear);
-  const [month, setMonth] = useState(currentMonth);
+  const searchParams = useSearchParams();
+  const urlMonth = searchParams.get('month');
+  const { year, month } = useMemo(() => {
+    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
+    const [y, m] = source.split('-').map(Number);
+    return { year: y, month: m };
+  }, [urlMonth]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -228,29 +237,7 @@ export default function ShiftPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header
-        title="シフト表"
-        actions={
-          <select
-            value={`${year}-${month}`}
-            onChange={(e) => {
-              const [y, m] = e.target.value.split('-').map(Number);
-              setYear(y); setMonth(m);
-            }}
-            className="px-2 py-1 rounded text-sm"
-            style={{ border: '1px solid var(--rule)' }}
-          >
-            {Array.from({ length: 12 }, (_, i) => {
-              const d = new Date(currentYear, currentMonth - 1 - 3 + i, 1);
-              return (
-                <option key={`${d.getFullYear()}-${d.getMonth() + 1}`} value={`${d.getFullYear()}-${d.getMonth() + 1}`}>
-                  {d.getFullYear()}年{d.getMonth() + 1}月
-                </option>
-              );
-            })}
-          </select>
-        }
-      />
+      <Header title="シフト表" showMonthSelector />
 
       <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
