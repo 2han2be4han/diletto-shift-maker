@@ -611,21 +611,49 @@ export default function ChildrenSettingsPage() {
                 </p>
               </div>
 
-              {/* Phase 21: お迎えマーク（複数選択）*/}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+              {/* Phase 27: 職員管理と同じカード風レイアウト（accent-pale 背景・全選択/全解除・縦並びチップ） */}
+              <div
+                className="flex flex-col gap-1.5 rounded-md p-2"
+                style={{ border: '1px solid var(--rule)', background: 'var(--accent-pale)' }}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
                     お迎えマーク（複数選択）
                   </label>
-                  <a
-                    href="/settings/tenant"
-                    target="_blank"
-                    rel="noopener"
-                    className="text-xs"
-                    style={{ color: 'var(--accent)', textDecoration: 'underline' }}
-                  >
-                    テナント設定で追加 →
-                  </a>
+                  <div className="flex items-center gap-2 text-xs">
+                    {pickupAreas.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditing({
+                              ...editing,
+                              pickup_area_labels: pickupAreas.map((a) => formatAreaLabel(a)),
+                            })
+                          }
+                          style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                        >
+                          全選択
+                        </button>
+                        <span style={{ color: 'var(--ink-3)' }}>/</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ ...editing, pickup_area_labels: [] })}
+                          style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}
+                        >
+                          全解除
+                        </button>
+                      </>
+                    )}
+                    <a
+                      href="/settings/tenant"
+                      target="_blank"
+                      rel="noopener"
+                      style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+                    >
+                      テナント設定で追加 →
+                    </a>
+                  </div>
                 </div>
                 <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
                   選択したマークに設定された時間が送迎表で自動反映されます（個別パターンで上書きも可）
@@ -635,28 +663,32 @@ export default function ChildrenSettingsPage() {
                     テナント設定で 迎のエリア を登録してください。
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {pickupAreas.map((a) => {
+                  <div className="flex flex-col gap-1">
+                    {pickupAreas.map((a, idx) => {
                       const label = formatAreaLabel(a);
                       const checked = editing.pickup_area_labels.includes(label);
                       return (
                         <button
                           type="button"
-                          key={label}
+                          key={`${idx}-${label}`}
                           onClick={() => {
                             const next = checked
                               ? editing.pickup_area_labels.filter((l) => l !== label)
                               : [...editing.pickup_area_labels, label];
                             setEditing({ ...editing, pickup_area_labels: next });
                           }}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+                          className="rounded-md transition-all text-left"
                           style={{
-                            background: checked ? 'var(--accent)' : 'var(--bg)',
+                            padding: '5px 10px',
+                            fontSize: '0.78rem',
+                            fontWeight: 500,
+                            background: checked ? 'var(--accent)' : 'var(--white)',
                             color: checked ? '#fff' : 'var(--ink-2)',
                             border: `1px solid ${checked ? 'var(--accent)' : 'var(--rule)'}`,
                           }}
                           title={a.time ? `${label}：${a.time}〜` : label}
                         >
+                          {checked ? '✓ ' : ''}
                           {label}
                           {a.time && (
                             <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
