@@ -104,6 +104,9 @@ export type ChildRow = {
   /** お迎えマーク（複数選択）。emoji+name 形式。テナント pickup_areas の選択肢から選ぶ。
       Phase 21: 送迎パターンを個別登録せずに、マーク選択だけで時間が決まるド王仕様 */
   pickup_area_labels: string[];
+  /** 送りマーク（複数選択）。emoji+name 形式。テナント dropoff_areas の選択肢から選ぶ。
+      Phase 27 追加: 児童に送り側マークを持たせて送迎表で自動反映。 */
+  dropoff_area_labels: string[];
   created_at: string;
 };
 

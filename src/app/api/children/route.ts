@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
       parent_contact: body.parent_contact ?? null,
       home_address: body.home_address ?? null,
       pickup_area_labels: Array.isArray(body.pickup_area_labels) ? body.pickup_area_labels : [],
+      /* Phase 27: 送り対応エリアも受け入れ */
+      dropoff_area_labels: Array.isArray(body.dropoff_area_labels) ? body.dropoff_area_labels : [],
     })
     .select()
     .single();
