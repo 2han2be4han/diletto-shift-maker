@@ -224,3 +224,44 @@
 | 2026-04-17 | Phase 21: children.pickup_area_labels text[] 追加（Migration 0017）、児童モーダルでお迎えマーク複数選択UI |
 | 2026-04-17 | Phase 22: Excel貼付のNFKC正規化＋児童名の(学年)除去、未登録児童の検出バナー、一括登録サブダイアログ（学年はparseChildName自動推定） |
 | 2026-04-17 | Phase 23: 児童一覧の行背景を学年カテゴリでうっすら色分け（未就学=青/年少-年長=赤/小1以降=緑） |
+| 2026-04-17 | Phase 25: 職員退職(ソフト削除)・児童出欠+履歴・シフト変更申請・日次出力 |
+
+---
+
+## Phase 25 変更一覧
+
+### 新規テーブル
+- `attendance_audit_logs`（Migration 0021）: schedule_entry_id, child_id, entry_date, changed_by_staff_id, changed_by_name, old_status, new_status, changed_at
+- `shift_change_requests`（Migration 0022）: staff_id, target_date, change_type('time'|'leave'|'type_change'), requested_payload jsonb, snapshot_before jsonb, reason, status, reviewed_by_staff_id, reviewed_by_name, reviewed_at, admin_note
+
+### カラム追加
+- `staff.is_active` bool（Migration 0020）: `src/types/index.ts` (StaffRow), `src/lib/auth/getCurrentStaff.ts`（退職者除外）, `src/app/api/staff/[id]/route.ts` (DELETE→ソフト削除), `src/app/api/staff/route.ts` (?include_retired=1), `src/app/(app)/settings/staff/page.tsx` (退職バッジ・復帰ボタン)
+- `staff.retired_at` timestamptz（Migration 0020）
+- `schedule_entries.attendance_status` text（Migration 0021）: `src/types/index.ts` (ScheduleEntryRow, AttendanceStatus), `src/app/(app)/schedule/page.tsx` (出欠UI), `src/app/(app)/output/daily/page.tsx`（absent 除外）, `src/app/api/output/daily/pdf/route.ts`（absent 除外）
+- `schedule_entries.attendance_updated_at`, `attendance_updated_by`
+
+### 新規 API ルート
+- `PATCH /api/schedule-entries/[id]/attendance`（全ロール・RPC経由）
+- `GET /api/attendance-logs`（全ロール）
+- `GET/POST /api/shift-change-requests`
+- `PATCH /api/shift-change-requests/[id]`（approve/reject=出勤中admin、cancel=本人）
+- `GET /api/output/daily/pdf`（全ロール、PDF出力）
+
+### 新規 RPC
+- `update_schedule_entry_attendance(p_entry_id uuid, p_status text)`: SECURITY DEFINER, tenant チェック＋履歴自動記録
+
+### 新規 lib
+- `src/lib/auth/isOnDutyAdmin.ts`: 現在時刻がシフト内の admin 判定
+- `src/lib/auth/requireRole.ts`: requireAuthenticated / requireOnDutyAdmin 追加
+- `src/lib/dates/nextBusinessDay.ts`: 土日→翌月曜ロジック、defaultOutputDate
+
+### 新規 UI
+- `src/components/request/ShiftChangeRequestSection.tsx`（申請フォーム＋一覧）
+- `src/components/shift/ApprovalQueue.tsx`（承認キュー）
+- `src/app/(app)/output/daily/page.tsx`（日次出力ページ）
+
+### 変更
+- `src/app/api/staff/[id]/route.ts` DELETE: 物理削除→ソフト削除（is_active=false）
+- `src/app/api/me/route.ts`: `on_duty_admin` フラグを返す
+- `src/components/layout/Sidebar.tsx`: 「日次出力」ナビ追加
+- `CLAUDE.md §8`: 権限ルール刷新（出欠例外・退職フラグ・承認フロー）

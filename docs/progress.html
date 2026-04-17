@@ -427,11 +427,11 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
         <tbody>
-            <tr><td>25-B-1</td><td>getCurrentStaff で is_active=false → forceSignOut</td><td>src/lib/auth/getCurrentStaff.ts</td><td class="status-todo">未着手</td><td>0%</td><td>middleware でも弾く</td></tr>
-            <tr><td>25-B-2</td><td>RLS: schedule_entries の attendance_status 列だけは全ロール UPDATE 可にする分離ポリシー</td><td>supabase/migrations/0021_attendance.sql</td><td class="status-todo">未着手</td><td>0%</td><td>column-level policy 不可なら専用 RPC 経由</td></tr>
-            <tr><td>25-B-3</td><td>requireRole に selfOnly / onDutyAdmin モード追加</td><td>src/lib/auth/requireRole.ts</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-B-4</td><td>isOnDutyAdmin(staff, now) ヘルパー</td><td>src/lib/auth/isOnDutyAdmin.ts</td><td class="status-todo">未着手</td><td>0%</td><td>shift_assignments 当日 start〜end 内</td></tr>
-            <tr><td>25-B-5</td><td>ずれ確認: CLAUDE.md §8 のロール定義と B-1〜4 の整合</td><td>CLAUDE.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>25-B-1</td><td>getCurrentStaff で is_active=true に絞り込み（退職者は自動的にログイン不可）</td><td>src/lib/auth/getCurrentStaff.ts</td><td class="status-done">完了</td><td>100%</td><td>auto-link パスも is_active=true のみに</td></tr>
+            <tr><td>25-B-2</td><td>RLS: update_schedule_entry_attendance RPC で全ロール更新可に（A-2 と一体）</td><td>supabase/migrations/0021_attendance.sql</td><td class="status-done">完了</td><td>100%</td><td>RPC grant execute to authenticated</td></tr>
+            <tr><td>25-B-3</td><td>requireAuthenticated / requireOnDutyAdmin を requireRole に追加</td><td>src/lib/auth/requireRole.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-B-4</td><td>isOnDutyAdmin(staff, now) ヘルパー</td><td>src/lib/auth/isOnDutyAdmin.ts</td><td class="status-done">完了</td><td>100%</td><td>JST 今日 + 現在時刻 が start_time〜end_time 内</td></tr>
+            <tr><td>25-B-5</td><td>ずれ確認: tsc 通過、CLAUDE.md §8 は E-1 で更新</td><td>CLAUDE.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
 
@@ -439,15 +439,15 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
         <tbody>
-            <tr><td>25-C-1</td><td>/api/schedule-entries/[id]/attendance PATCH（全ロール、audit_log 自動記録）</td><td>src/app/api/schedule-entries/[id]/attendance/route.ts</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-C-2</td><td>/api/attendance-logs GET（履歴閲覧、全ロール）</td><td>src/app/api/attendance-logs/route.ts</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-C-3</td><td>/api/shift-change-requests POST (self) / GET / PATCH(approve|reject, on-duty admin only)</td><td>src/app/api/shift-change-requests/route.ts + /[id]/route.ts</td><td class="status-todo">未着手</td><td>0%</td><td>承認時は shift_assignments を transaction 更新</td></tr>
-            <tr><td>25-C-4</td><td>/api/staff/[id] DELETE → is_active=false に変更（物理削除撤去）</td><td>src/app/api/staff/[id]/route.ts</td><td class="status-todo">未着手</td><td>0%</td><td>auth.users は残す</td></tr>
-            <tr><td>25-C-5</td><td>利用予定セル: 出欠切替ボタン + 履歴モーダル</td><td>src/app/(app)/schedule/page.tsx + components/schedule/AttendanceCell.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>UI案は25-D-0承認後</td></tr>
-            <tr><td>25-C-6</td><td>/request ページにシフト変更希望タブ追加</td><td>src/app/(app)/request/page.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>UI案は25-D-0承認後</td></tr>
-            <tr><td>25-C-7</td><td>/shift ページに「申請待ち N件」バッジ + 承認モーダル（onDutyAdmin のみ）</td><td>src/app/(app)/shift/page.tsx + components/shift/ApprovalQueue.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>onDuty でない admin は閲覧のみ</td></tr>
-            <tr><td>25-C-8</td><td>職員管理画面に「退職」ボタン（ソフト削除）、退職者フィルタ</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-C-9</td><td>ずれ確認: API ↔ UI の型 / ロール整合</td><td>（横断）</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>25-C-1</td><td>/api/schedule-entries/[id]/attendance PATCH（全ロール、RPC 経由で履歴自動記録）</td><td>src/app/api/schedule-entries/[id]/attendance/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-2</td><td>/api/attendance-logs GET（履歴閲覧、全ロール）</td><td>src/app/api/attendance-logs/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-3</td><td>/api/shift-change-requests POST (self) / GET / PATCH(approve|reject, on-duty admin only / cancel=本人)</td><td>src/app/api/shift-change-requests/route.ts + /[id]/route.ts</td><td class="status-done">完了</td><td>100%</td><td>承認時は shift_assignments upsert</td></tr>
+            <tr><td>25-C-4</td><td>/api/staff/[id] DELETE → is_active=false + retired_at に変更（物理削除撤去）、?include_retired=1 対応</td><td>src/app/api/staff/[id]/route.ts + /api/staff/route.ts</td><td class="status-done">完了</td><td>100%</td><td>auth.users は残す</td></tr>
+            <tr><td>25-C-5</td><td>利用予定モーダル: 当日の出欠ステータスUI（5段階）+ 履歴インラインパネル</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ロール編集可</td></tr>
+            <tr><td>25-C-6</td><td>/request ページに ShiftChangeRequestSection（申請フォーム+自分の申請一覧）追加</td><td>src/app/(app)/request/page.tsx + src/components/request/ShiftChangeRequestSection.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-7</td><td>/shift に ApprovalQueue コンポーネント（admin のみ表示、onDutyAdmin のみ承認可）</td><td>src/app/(app)/shift/page.tsx + src/components/shift/ApprovalQueue.tsx + /api/me (on_duty_admin)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-8</td><td>職員管理: 「退職」ボタン（ソフト削除）、「復帰」ボタン、「退職者も表示」チェックボックス、退職バッジ</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-C-9</td><td>ずれ確認: tsc 通過 + next build 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>エラー0</td></tr>
         </tbody>
     </table>
 
@@ -455,12 +455,12 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
         <tbody>
-            <tr><td>25-D-0</td><td>UI案ユーザー承認（ホワイトボード風 / 出勤リスト / 印刷対応）</td><td>（Slack等で提示済）</td><td class="status-doing">進行中</td><td>50%</td><td>初稿は本スレッドで提示済、本実装前に再確認</td></tr>
-            <tr><td>25-D-1</td><td>/output/daily ページ新設（2カラム: 送迎カード + 出勤リスト）</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>デザイントークン厳守</td></tr>
-            <tr><td>25-D-2</td><td>日付ナビ: 土曜アクセス時は翌月曜を初期選択、祝日スキップは将来対応</td><td>src/lib/dates/nextBusinessDay.ts</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-D-3</td><td>PDF ダウンロード（全職員可能）</td><td>src/app/api/output/daily/pdf/route.ts</td><td class="status-todo">未着手</td><td>0%</td><td>@react-pdf/renderer か print-to-pdf 検討</td></tr>
-            <tr><td>25-D-4</td><td>サイドバーに「日次出力」項目追加</td><td>src/components/layout/Sidebar.tsx</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-D-5</td><td>ずれ確認: attendance_status と送迎表示の整合（欠席児童は送迎から除外）</td><td>（横断）</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>25-D-0</td><td>UI案ユーザー承認（ホワイトボード風 / 出勤リスト / 印刷対応）</td><td>（Slack等で提示済）</td><td class="status-done">完了</td><td>100%</td><td>休憩欄スキップ＋レイアウトOK済</td></tr>
+            <tr><td>25-D-1</td><td>/output/daily ページ（2カラム: 送迎カード + 出勤リスト）。未割当は赤背景、NEW タグ、エリア絵文字表示</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>デザイントークン準拠</td></tr>
+            <tr><td>25-D-2</td><td>nextBusinessDay: 土日→翌月曜、defaultOutputDate 初期値</td><td>src/lib/dates/nextBusinessDay.ts</td><td class="status-done">完了</td><td>100%</td><td>祝日は将来</td></tr>
+            <tr><td>25-D-3</td><td>PDF ダウンロード API（@react-pdf/renderer）、全職員アクセス可</td><td>src/app/api/output/daily/pdf/route.ts</td><td class="status-done">完了</td><td>100%</td><td>A4縦、左=送迎/右=出勤</td></tr>
+            <tr><td>25-D-4</td><td>サイドバーに「日次出力」ナビ追加（全ロール可視）</td><td>src/components/layout/Sidebar.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-D-5</td><td>ずれ確認: attendance_status='absent' 児童は Web/PDF 双方で除外、next build 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
 
@@ -468,9 +468,9 @@
     <table>
         <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
         <tbody>
-            <tr><td>25-E-1</td><td>CLAUDE.md §8 権限制御ルール更新（出欠例外 / 退職フラグ / 承認フロー追記）</td><td>CLAUDE.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-E-2</td><td>reference-map.md 更新（新テーブル / 新カラム / 新APIルート）</td><td>reference-map.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>25-E-3</td><td>error-log.md に詰まり所を都度記録</td><td>error-log.md</td><td class="status-todo">未着手</td><td>0%</td><td>必要時のみ</td></tr>
+            <tr><td>25-E-1</td><td>CLAUDE.md §8 権限制御ルール刷新（出欠例外 / 退職フラグ / 承認フロー / 出欠記録 / シフト変更申請セクション追加）</td><td>CLAUDE.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-E-2</td><td>reference-map.md に Phase 25 変更一覧追記（新テーブル/新カラム/新APIルート/新lib/新UI）</td><td>reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>25-E-3</td><td>error-log.md 記載すべき詰まりなし（tsc/next build 一発通過）</td><td>error-log.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
 

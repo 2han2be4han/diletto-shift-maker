@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { ShiftRequestRow, StaffRow } from '@/types';
 import MyRequestCalendar from '@/components/request/MyRequestCalendar';
 import AdminRequestList from '@/components/request/AdminRequestList';
+import ShiftChangeRequestSection from '@/components/request/ShiftChangeRequestSection';
 
 /**
  * 休み希望ページ
@@ -70,6 +71,9 @@ export default async function RequestPage() {
             initialRequests={(myRequests as ShiftRequestRow[]) ?? []}
           />
         )}
+
+        {/* Phase 25: シフト変更申請（全ロール共通） */}
+        <ShiftChangeRequestSection myStaffId={staff.id} />
       </div>
     </div>
   );
