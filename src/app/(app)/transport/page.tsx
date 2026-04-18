@@ -378,25 +378,38 @@ export default function TransportPage() {
 
   const handleGenerate = async () => {
     try {
+      let totalAssigned = 0;
+      let totalUnassigned = 0;
+      const errors: string[] = [];
+
       /* 各日付ごとに /api/transport/generate → 結果を /api/transport-assignments に upsert */
       for (const date of workDays) {
+        const entriesForDate = scheduleEntries.filter((e) => e.date === date);
+        if (entriesForDate.length === 0) continue; /* 利用予定なしの日はスキップ */
+
         const genRes = await fetch('/api/transport/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             date,
-            scheduleEntries: scheduleEntries.filter((e) => e.date === date),
+            scheduleEntries: entriesForDate,
             patterns,
             staff,
             shiftAssignments: shiftAssignments.filter((a) => a.date === date),
             minEndTime: transportMinEndTime,
           }),
         });
-        if (!genRes.ok) continue;
-        const { assignments } = await genRes.json();
-        if (!Array.isArray(assignments) || assignments.length === 0) continue;
+        if (!genRes.ok) {
+          errors.push(`${date}: 生成 API エラー`);
+          continue;
+        }
+        const { assignments, unassignedCount } = await genRes.json();
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+          errors.push(`${date}: 生成結果が空`);
+          continue;
+        }
 
-        await fetch('/api/transport-assignments', {
+        const upsertRes = await fetch('/api/transport-assignments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -409,8 +422,29 @@ export default function TransportPage() {
             })),
           }),
         });
+        if (!upsertRes.ok) {
+          const j = await upsertRes.json().catch(() => ({}));
+          errors.push(`${date}: DB 保存失敗 ${j.error ?? ''}`);
+          continue;
+        }
+        totalAssigned += assignments.length;
+        totalUnassigned += unassignedCount ?? 0;
       }
       await fetchAll();
+
+      /* 結果通知（ユーザーが何が起きたか把握できるように） */
+      if (errors.length > 0) {
+        alert(
+          `再生成完了 (一部エラー):\n` +
+          `対象 ${totalAssigned} 件 / 未割当 ${totalUnassigned} 件\n` +
+          `エラー:\n${errors.slice(0, 5).join('\n')}`
+        );
+      } else {
+        alert(
+          `再生成完了: ${totalAssigned} 件の担当を再割り当てしました` +
+          (totalUnassigned > 0 ? `\n（条件を満たす職員がいない: ${totalUnassigned} 件）` : '')
+        );
+      }
     } catch (e) {
       alert(e instanceof Error ? e.message : '生成失敗');
     }
