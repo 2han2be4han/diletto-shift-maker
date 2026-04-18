@@ -17,6 +17,8 @@ import type {
   ScheduleEntryRow,
   AttendanceStatus,
   AttendanceAuditLogRow,
+  AreaLabel,
+  TenantSettings,
 } from '@/types';
 import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 
@@ -109,6 +111,9 @@ export default function SchedulePage() {
   const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
   /* Phase 27-A-1: 過去の schedule_entries 全件から child_id→pattern_id 使用頻度を集計（最頻パターン初期選択用） */
   const [patternUsage, setPatternUsage] = useState<Map<string, string>>(new Map());
+  /* Phase 28: テナントエリア（PDF/Excel インポートのマーク自動推論用） */
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
+  const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [cells, setCells] = useState<CellData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -142,10 +147,11 @@ export default function SchedulePage() {
       const usageFrom = `${year - 1}-${String(month).padStart(2, '0')}-01`;
       const usageTo = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      const [cRes, eRes, uRes] = await Promise.all([
+      const [cRes, eRes, uRes, tRes] = await Promise.all([
         fetch('/api/children'),
         fetch(`/api/schedule-entries?from=${from}&to=${to}`),
         fetch(`/api/schedule-entries?from=${usageFrom}&to=${usageTo}`),
+        fetch('/api/tenant'),
       ]);
 
       if (!cRes.ok) throw new Error('児童の取得に失敗しました');
@@ -154,6 +160,13 @@ export default function SchedulePage() {
       const { children: ch, patterns: pt } = await cRes.json();
       const { entries } = await eRes.json();
       const uJson = uRes.ok ? await uRes.json() : { entries: [] };
+      /* Phase 28: tenant エリアを取得してマーク推論に使う */
+      if (tRes.ok) {
+        const tJson = await tRes.json();
+        const settings: TenantSettings = tJson.tenant?.settings ?? {};
+        setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
+        setDropoffAreas(settings.dropoff_areas ?? []);
+      }
 
       setChildren((ch as ChildRow[]).filter((c) => c.is_active));
       setPatterns((pt as ChildTransportPatternRow[]) ?? []);
@@ -336,6 +349,9 @@ export default function SchedulePage() {
         dropoff_method: e.dropoff_method ?? 'dropoff',
         /* Phase 27-A-1: 確認画面で選択された pattern_id を送信（null=該当なし） */
         pattern_id: e.pattern_id ?? null,
+        /* Phase 28: マーク（emoji+name）を送信。null=該当なし */
+        pickup_mark: e.pickup_mark ?? null,
+        dropoff_mark: e.dropoff_mark ?? null,
       }));
     if (rows.length === 0) {
       alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
@@ -418,6 +434,8 @@ export default function SchedulePage() {
         childList={children}
         patterns={patterns}
         patternUsage={patternUsage}
+        pickupAreas={pickupAreas}
+        dropoffAreas={dropoffAreas}
       />
 
       <Modal

@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { openInGoogleMaps } from '@/lib/utils/googleMaps';
+import type { TransportColumnKey } from '@/types';
+import { DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
 
 /**
  * 日別送迎表ビュー
@@ -60,6 +62,10 @@ type TransportDayViewProps = {
   ) => void;
   onAddPattern?: (childName: string, pickupTime: string | null, dropoffTime: string | null) => void;
   disabled?: boolean;
+  /** Phase 28: 列の並び順（児童名は常に先頭固定なので含めない）。未指定は DEFAULT_TRANSPORT_COLUMN_ORDER */
+  columnOrder?: TransportColumnKey[];
+  /** Phase 28: 列を並び替えたときに呼ばれる。テナント設定へ保存する親側で処理 */
+  onColumnReorder?: (order: TransportColumnKey[]) => void;
 };
 
 /** "HH:MM" または "HH:MM:SS" 形式 → 分数 */
@@ -95,8 +101,30 @@ export default function TransportDayView({
   onStaffChange,
   onAddPattern,
   disabled = false,
+  columnOrder,
+  onColumnReorder,
 }: TransportDayViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /* Phase 28: 列並び替え DnD 用のドラッグ中インデックス（columnOrder 上の位置） */
+  const [dragCol, setDragCol] = useState<number | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<number | null>(null);
+
+  /* columnOrder が未指定 or 既知キー以外が混入している場合のフォールバック */
+  const effectiveOrder: TransportColumnKey[] = React.useMemo(() => {
+    const known: TransportColumnKey[] = [
+      'pickup_time',
+      'pickup_location',
+      'pickup_staff',
+      'dropoff_time',
+      'dropoff_location',
+      'dropoff_staff',
+    ];
+    const base = columnOrder ?? DEFAULT_TRANSPORT_COLUMN_ORDER;
+    /* 未知キーを除き、欠けているキーを末尾に補完 */
+    const filtered = base.filter((k) => known.includes(k));
+    const missing = known.filter((k) => !filtered.includes(k));
+    return [...filtered, ...missing];
+  }, [columnOrder]);
 
   if (children.length === 0) {
     return (
@@ -108,8 +136,8 @@ export default function TransportDayView({
     );
   }
 
-  /* Phase 27: 「設定+登録」列を撤去。登録ボタンは展開詳細内（未登録パターンのみ）に移動 */
-  const colSpan = 7;
+  /* 児童名 + 並び替え可能列数 = 合計列数（展開行の colSpan 用） */
+  const colSpan = 1 + effectiveOrder.length;
 
   /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
   const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
@@ -126,19 +154,145 @@ export default function TransportDayView({
   const headerBase: React.CSSProperties = {
     background: 'var(--ink)',
     color: '#fff',
-    fontSize: '0.72rem',
-    letterSpacing: '0.08em',
-    padding: '10px 12px',
+    fontSize: '0.7rem',
+    letterSpacing: '0.06em',
+    /* Phase 28: 左右パディングを限界まで削る */
+    padding: '8px 4px',
     fontWeight: 700,
     textTransform: 'none',
     whiteSpace: 'nowrap',
+    /* Phase 28: 列区切りの縦線（ヘッダーも含めて全列右端に 1px） */
+    borderRight: '1px solid rgba(255,255,255,0.15)',
   };
+  /* Phase 28: データセルの縦区切り（全列右端に薄い線） */
+  const cellBorderRight = '1px solid var(--rule)';
   const SectionLabel = ({ color, children }: { color: string; children: React.ReactNode }) => (
     <span className="inline-flex items-center gap-1.5">
       <span aria-hidden style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: color }} />
       <span>{children}</span>
     </span>
   );
+
+  /* Phase 28: 列のメタデータ + セル描画。ヘッダー/セルどちらもここから読む */
+  type ColMeta = {
+    header: React.ReactNode;
+    minWidth: string;
+    textAlign: 'left' | 'center';
+    accent: string;
+    renderCell: (child: TransportChild, isExpanded: boolean) => React.ReactNode;
+  };
+  const colMeta: Record<TransportColumnKey, ColMeta> = {
+    pickup_time: {
+      header: <SectionLabel color={PICK_ACCENT}>迎 時刻</SectionLabel>,
+      minWidth: '70px',
+      textAlign: 'center',
+      accent: PICK_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <TimeCell time={child.pickupTime} timeColor={PICK_ACCENT} isExpanded={isExpanded} />
+      ),
+    },
+    pickup_location: {
+      header: <SectionLabel color={PICK_ACCENT}>迎 場所</SectionLabel>,
+      minWidth: '115px',
+      textAlign: 'left',
+      accent: PICK_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <LocationCellInline
+          areaLabel={child.pickupAreaLabel}
+          location={child.pickupLocation}
+          accentColor={PICK_ACCENT}
+          isExpanded={isExpanded}
+        />
+      ),
+    },
+    pickup_staff: {
+      header: <SectionLabel color={PICK_ACCENT}>迎 担当</SectionLabel>,
+      minWidth: '260px',
+      textAlign: 'left',
+      accent: PICK_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <td
+          className="px-1 py-1.5 align-top"
+          style={{
+            borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+            borderRight: cellBorderRight,
+          }}
+        >
+          {child.pickupMethod === 'self' ? (
+            <SelfTransportBadge />
+          ) : (
+            <StaffSelect
+              staffIds={child.pickupStaffIds}
+              availableStaff={eligibleStaff}
+              onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
+              disabled={disabled}
+              direction="pickup"
+            />
+          )}
+        </td>
+      ),
+    },
+    dropoff_time: {
+      header: <SectionLabel color={DROP_ACCENT}>送 時刻</SectionLabel>,
+      minWidth: '70px',
+      textAlign: 'center',
+      accent: DROP_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <TimeCell time={child.dropoffTime} timeColor={DROP_ACCENT} isExpanded={isExpanded} />
+      ),
+    },
+    dropoff_location: {
+      header: <SectionLabel color={DROP_ACCENT}>送 場所</SectionLabel>,
+      minWidth: '115px',
+      textAlign: 'left',
+      accent: DROP_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <LocationCellInline
+          areaLabel={child.dropoffAreaLabel}
+          location={child.dropoffLocation}
+          accentColor={DROP_ACCENT}
+          isExpanded={isExpanded}
+        />
+      ),
+    },
+    dropoff_staff: {
+      header: <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>,
+      minWidth: '260px',
+      textAlign: 'left',
+      accent: DROP_ACCENT,
+      renderCell: (child, isExpanded) => (
+        <td
+          className="px-1 py-1.5 align-top"
+          style={{
+            borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+            borderRight: cellBorderRight,
+          }}
+        >
+          {child.dropoffMethod === 'self' ? (
+            <SelfTransportBadge />
+          ) : (
+            <StaffSelect
+              staffIds={child.dropoffStaffIds}
+              availableStaff={eligibleStaff}
+              onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
+              disabled={disabled}
+              direction="dropoff"
+            />
+          )}
+        </td>
+      ),
+    },
+  };
+
+  /* 列ドラッグ完了: fromIdx を toIdx へ移動した新しい順序を親に通知 */
+  const handleColumnDrop = (fromIdx: number, toIdx: number) => {
+    if (!onColumnReorder) return;
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    const next = [...effectiveOrder];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onColumnReorder(next);
+  };
 
   return (
     <div
@@ -153,25 +307,69 @@ export default function TransportDayView({
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
         <thead>
           <tr>
-            <th className="text-left" style={{ ...headerBase, minWidth: '140px' }}>児童名</th>
-            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: PICK_ACCENT }}>
-              <SectionLabel color={PICK_ACCENT}>迎 時刻</SectionLabel>
-            </th>
-            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: PICK_ACCENT }}>
-              <SectionLabel color={PICK_ACCENT}>迎 場所</SectionLabel>
-            </th>
-            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: PICK_ACCENT }}>
-              <SectionLabel color={PICK_ACCENT}>迎 担当</SectionLabel>
-            </th>
-            <th className="text-center" style={{ ...headerBase, minWidth: '70px', color: DROP_ACCENT }}>
-              <SectionLabel color={DROP_ACCENT}>送 時刻</SectionLabel>
-            </th>
-            <th className="text-left" style={{ ...headerBase, minWidth: '180px', color: DROP_ACCENT }}>
-              <SectionLabel color={DROP_ACCENT}>送 場所</SectionLabel>
-            </th>
-            <th className="text-left" style={{ ...headerBase, minWidth: '220px', color: DROP_ACCENT }}>
-              <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>
-            </th>
+            {/* 児童名は常時先頭固定。ドラッグ対象外 */}
+            <th className="text-left" style={{ ...headerBase, minWidth: '115px' }}>児童名</th>
+            {effectiveOrder.map((key, idx) => {
+              const m = colMeta[key];
+              const draggable = !!onColumnReorder && !disabled;
+              const isDragging = dragCol === idx;
+              const isDropTarget = dragOverCol === idx && dragCol !== idx;
+              return (
+                <th
+                  key={key}
+                  className={m.textAlign === 'center' ? 'text-center' : 'text-left'}
+                  style={{
+                    ...headerBase,
+                    minWidth: m.minWidth,
+                    color: m.accent,
+                    cursor: draggable ? 'grab' : 'default',
+                    opacity: isDragging ? 0.4 : 1,
+                    /* Phase 28: ドロップ先にわかりやすいインジケータ線を出す */
+                    outline: isDropTarget ? `2px solid ${m.accent}` : 'none',
+                    outlineOffset: isDropTarget ? '-2px' : '0',
+                  }}
+                  draggable={draggable}
+                  onDragStart={(e) => {
+                    if (!draggable) return;
+                    setDragCol(idx);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    if (!draggable || dragCol === null) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverCol !== idx) setDragOverCol(idx);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverCol === idx) setDragOverCol(null);
+                  }}
+                  onDrop={(e) => {
+                    if (!draggable || dragCol === null) return;
+                    e.preventDefault();
+                    handleColumnDrop(dragCol, idx);
+                    setDragCol(null);
+                    setDragOverCol(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragCol(null);
+                    setDragOverCol(null);
+                  }}
+                  title={draggable ? 'ドラッグで列を並び替え' : undefined}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {draggable && (
+                      <span
+                        aria-hidden
+                        style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.8em', cursor: 'grab' }}
+                      >
+                        ⋮⋮
+                      </span>
+                    )}
+                    {m.header}
+                  </span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -180,8 +378,6 @@ export default function TransportDayView({
             const hasAnyLocation =
               !!(child.pickupLocation || child.dropoffLocation ||
                  child.pickupAreaLabel || child.dropoffAreaLabel);
-            const pickupSelf = child.pickupMethod === 'self';
-            const dropoffSelf = child.dropoffMethod === 'self';
             return (
               <React.Fragment key={child.scheduleEntryId}>
                 <tr
@@ -189,110 +385,54 @@ export default function TransportDayView({
                     background: child.isUnassigned ? 'var(--red-pale)' : 'transparent',
                   }}
                 >
-                  {/* 児童名（クリックで詳細展開） */}
+                  {/* 児童名（クリックで詳細展開）。並び替え対象外で常に先頭
+                      Phase 28 fix: 未割当バッジをフル幅下に独立配置して改行・切れを防ぐ */}
                   <td
-                    className="px-3 py-2 font-medium align-top"
+                    className="px-1.5 py-2 font-medium align-top"
                     style={{
                       borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+                      borderRight: cellBorderRight,
                       color: child.isUnassigned ? 'var(--red)' : 'var(--ink)',
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : child.scheduleEntryId)}
-                      className="inline-flex items-center gap-1.5 py-1 rounded transition-colors hover:bg-[var(--accent-pale)]"
-                      style={{ color: 'inherit', fontWeight: 'inherit' }}
-                      aria-expanded={isExpanded}
-                      title={hasAnyLocation ? '場所を確認（地図が開けます）' : '場所の詳細を開く'}
-                    >
-                      <span
-                        className="inline-block transition-transform text-xs"
-                        style={{
-                          transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                          color: 'var(--ink-3)',
-                        }}
-                        aria-hidden
+                    <div className="flex flex-col items-start gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : child.scheduleEntryId)}
+                        className="inline-flex items-center gap-1.5 py-1 rounded transition-colors hover:bg-[var(--accent-pale)] text-left"
+                        style={{ color: 'inherit', fontWeight: 'inherit' }}
+                        aria-expanded={isExpanded}
+                        title={hasAnyLocation ? '場所を確認（地図が開けます）' : '場所の詳細を開く'}
                       >
-                        ▶
-                      </span>
-                      <span>{child.name}</span>
-                    </button>
-                    {child.isUnassigned && (
-                      <span
-                        className="ml-2 text-xs px-1.5 py-0.5 font-bold rounded"
-                        style={{ background: 'var(--red)', color: '#fff', fontSize: '0.65rem' }}
-                      >
-                        未割当
-                      </span>
-                    )}
+                        <span
+                          className="inline-block transition-transform text-xs shrink-0"
+                          style={{
+                            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                            color: 'var(--ink-3)',
+                          }}
+                          aria-hidden
+                        >
+                          ▶
+                        </span>
+                        <span className="break-words">{child.name}</span>
+                      </button>
+                      {child.isUnassigned && (
+                        <span
+                          className="text-xs px-1.5 py-0.5 font-bold rounded whitespace-nowrap"
+                          style={{ background: 'var(--red)', color: '#fff', fontSize: '0.65rem' }}
+                        >
+                          未割当
+                        </span>
+                      )}
+                    </div>
                   </td>
 
-                  {/* 迎え時間（HH:MM） */}
-                  <TimeCell
-                    time={child.pickupTime}
-                    timeColor="var(--accent)"
-                    isExpanded={isExpanded}
-                  />
-
-                  {/* 迎場所: エリア絵文字 + 名称 + 住所（Maps リンク） */}
-                  <LocationCellInline
-                    areaLabel={child.pickupAreaLabel}
-                    location={child.pickupLocation}
-                    accentColor="var(--accent)"
-                    isExpanded={isExpanded}
-                  />
-
-                  {/* 迎え担当（method=self のときは保護者送迎バッジ） */}
-                  <td
-                    className="px-2 py-1.5 align-top"
-                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
-                  >
-                    {pickupSelf ? (
-                      <SelfTransportBadge />
-                    ) : (
-                      <StaffSelect
-                        staffIds={child.pickupStaffIds}
-                        availableStaff={eligibleStaff}
-                        onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
-                        disabled={disabled}
-                        direction="pickup"
-                      />
-                    )}
-                  </td>
-
-                  {/* 送り時間（HH:MM） */}
-                  <TimeCell
-                    time={child.dropoffTime}
-                    timeColor="var(--green)"
-                    isExpanded={isExpanded}
-                  />
-
-                  {/* 送り場所 */}
-                  <LocationCellInline
-                    areaLabel={child.dropoffAreaLabel}
-                    location={child.dropoffLocation}
-                    accentColor="var(--green)"
-                    isExpanded={isExpanded}
-                  />
-
-                  {/* 送り担当 */}
-                  <td
-                    className="px-2 py-1.5 align-top"
-                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
-                  >
-                    {dropoffSelf ? (
-                      <SelfTransportBadge />
-                    ) : (
-                      <StaffSelect
-                        staffIds={child.dropoffStaffIds}
-                        availableStaff={eligibleStaff}
-                        onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
-                        disabled={disabled}
-                        direction="dropoff"
-                      />
-                    )}
-                  </td>
-
+                  {/* Phase 28: 並び替え可能な 6 列を effectiveOrder の順に描画 */}
+                  {effectiveOrder.map((key) => (
+                    <React.Fragment key={key}>
+                      {colMeta[key].renderCell(child, isExpanded)}
+                    </React.Fragment>
+                  ))}
                 </tr>
 
                 {/* 展開: 送迎場所リスト + 未登録パターン時の登録ボタン */}
@@ -357,9 +497,10 @@ function TimeCell({
 }) {
   return (
     <td
-      className="px-2 py-2 text-center align-middle font-semibold"
+      className="px-1 py-2 text-center align-middle font-semibold"
       style={{
         borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+        borderRight: '1px solid var(--rule)',
         color: timeColor,
         fontSize: '0.95rem',
         letterSpacing: '0.02em',
@@ -395,8 +536,11 @@ function LocationCellInline({
 
   return (
     <td
-      className="px-3 py-2 align-middle"
-      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--rule)' }}
+      className="px-1.5 py-2 align-middle"
+      style={{
+        borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
+        borderRight: '1px solid var(--rule)',
+      }}
     >
       {!hasAny ? (
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>—</span>
@@ -422,7 +566,7 @@ function LocationCellInline({
           {emoji && (
             <span
               className="shrink-0"
-              style={{ fontSize: '1.2rem', lineHeight: 1 }}
+              style={{ fontSize: '1rem', lineHeight: 1 }}
               aria-hidden
             >
               {emoji}
@@ -431,7 +575,7 @@ function LocationCellInline({
           {name && (
             <span
               className="font-semibold truncate"
-              style={{ color: accentColor, fontSize: '0.85rem' }}
+              style={{ color: accentColor, fontSize: '0.75rem' }}
             >
               {name}
             </span>
@@ -588,37 +732,62 @@ function StaffSelect({
     onChange([...staffIds, '']);
   };
 
-  /* Phase 27 redesigned: 各スロットを縦並びでコンパクトに揃える。
-     select は固定幅、マークは右側に薄く表示、＋追加は下に小さく。 */
-  const SELECT_WIDTH = 130;
+  /* Phase 28: 横並びコンパクト表示（Excel 準拠）
+     絵文字マーク + 氏名ドロップダウンを inline-flex で横に並べ、
+     2 人目追加ボタンも横にインラインで配置する。行数を 1 行に抑えるのが目的。
+     マークは担当者全員分のユニオンを先頭に 1 回だけ表示（Excel の "🚂🍇 金田・加藤" 準拠）
+     SELECT_WIDTH: 日本語氏名（4〜5 文字 + 姓名スペース）が欠けず読めることを優先。
+     2 担当 + マーク 1 行の場合は担当列 minWidth を合計幅に合わせて広げる */
+  const SELECT_WIDTH = 104;
+
+  /* 全担当者のマークを集約（重複排除、表示順保持） */
+  const aggregatedMarks = (() => {
+    const out: string[] = [];
+    for (const id of staffIds) {
+      if (!id) continue;
+      const s = availableStaff.find((x) => x.id === id);
+      if (!s) continue;
+      const ms = (direction === 'pickup' ? s.pickupAreaMarks : s.dropoffAreaMarks) ?? [];
+      for (const m of ms) {
+        if (!out.includes(m)) out.push(m);
+      }
+    }
+    return out;
+  })();
+
+  /* Phase 28: マーク幅を固定化し、0〜3 マークでも名前の開始 x 位置が揃うようにする。
+     サイドバー展開時も 1 行に収めるため slot は 2 マーク幅 + はみ出し許容とする */
+  const MARK_SLOT_WIDTH = '2.3em';
   return (
-    <div className="flex flex-col gap-1">
+    /* Phase 28: flex-wrap を禁止。担当セルは常に 1 行で、幅が足りなければテーブル側で横スクロール */
+    <div className="flex flex-nowrap items-center gap-1.5">
+      <span
+        className="shrink-0 text-left"
+        style={{
+          display: 'inline-block',
+          width: MARK_SLOT_WIDTH,
+          lineHeight: 1,
+          fontSize: '1rem',
+          letterSpacing: '-0.02em',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          opacity: aggregatedMarks.length > 0 ? 0.9 : 0,
+        }}
+        title={aggregatedMarks.length > 0 ? `この日の担当エリア: ${aggregatedMarks.join(' ')}` : undefined}
+        aria-label={aggregatedMarks.length > 0 ? `担当エリア ${aggregatedMarks.join(' ')}` : undefined}
+        aria-hidden={aggregatedMarks.length === 0}
+      >
+        {aggregatedMarks.slice(0, 3).join('')}
+      </span>
       {staffIds.map((id, i) => {
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
-        const selectedStaff = availableStaff.find((s) => s.id === id);
-        const marks = (direction === 'pickup'
-          ? selectedStaff?.pickupAreaMarks
-          : selectedStaff?.dropoffAreaMarks) ?? [];
+        /* Phase 28 fix: 他スロットで既に選ばれている職員を候補から除外し、
+           同一送迎で同じ職員が 2 回選ばれるバグを防ぐ。自スロットの値は残す */
+        const takenByOthers = new Set(
+          staffIds.filter((sid, idx) => idx !== i && sid !== ''),
+        );
         return (
-          <div key={i} className="flex items-center gap-1.5">
-            {/* Phase 27: マーク → 名前 の並びがマスト（ユーザー指定） */}
-            <span
-              className="shrink-0 text-right"
-              style={{
-                display: 'inline-block',
-                width: '4.6em',
-                lineHeight: 1,
-                fontSize: '0.95rem',
-                letterSpacing: '-0.02em',
-                whiteSpace: 'nowrap',
-                overflow: 'visible',
-                opacity: id && !isMissing ? 0.9 : 0,
-              }}
-              title={id && !isMissing && marks.length > 0 ? `この日の担当エリア: ${marks.join(' ')}` : undefined}
-              aria-label={id && !isMissing && marks.length > 0 ? `担当エリア ${marks.join(' ')}` : undefined}
-            >
-              {id && !isMissing ? marks.slice(0, 3).join('') : ''}
-            </span>
+          <div key={i} className="inline-flex items-center gap-1">
             <select
               value={id}
               onChange={(e) => handleChange(i, e.target.value)}
@@ -626,7 +795,7 @@ function StaffSelect({
               className="outline-none disabled:opacity-60"
               style={{
                 width: SELECT_WIDTH,
-                padding: '5px 8px',
+                padding: '4px 6px',
                 fontSize: '0.78rem',
                 border: `1px solid ${isMissing ? 'var(--red)' : id ? 'var(--rule)' : 'var(--red)'}`,
                 borderRadius: '6px',
@@ -636,49 +805,46 @@ function StaffSelect({
               title={
                 isMissing
                   ? 'この職員は当日の送迎候補外です（勤務時間を確認してください）'
-                  : marks.length > 0
-                  ? `この日の担当エリア: ${marks.join(' ')}`
+                  : aggregatedMarks.length > 0
+                  ? `この日の担当エリア: ${aggregatedMarks.join(' ')}`
                   : undefined
               }
             >
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
-              {availableStaff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              {availableStaff
+                .filter((s) => !takenByOthers.has(s.id))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
             </select>
           </div>
         );
       })}
-      {/* ＋追加 / 担当を選択 ボタンは select と同じレイアウトラインに揃える
-         （先頭にマーク幅の透明プレースホルダを置く） */}
+      {/* ＋追加 / 担当を選択 ボタン。横並びの末尾にインライン配置。
+          2 人目追加時はアイコンのみにして横幅をコンパクトに（未選択時は「担当を選択」を残す） */}
       {(staffIds.length === 0 || (staffIds.length < 2 && !disabled)) && (
-        <div className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="shrink-0"
-            style={{ display: 'inline-block', width: '4.6em' }}
-          />
-          <button
-            onClick={handleAdd}
-            disabled={disabled}
-            className="rounded-md transition-colors disabled:opacity-60"
-            style={{
-              width: SELECT_WIDTH,
-              padding: '5px 8px',
-              fontSize: '0.74rem',
-              fontWeight: 500,
-              color: staffIds.length === 0 ? 'var(--red)' : 'var(--accent)',
-              border: `1px dashed ${staffIds.length === 0 ? 'var(--red)' : 'var(--accent)'}`,
-              background: 'transparent',
-              textAlign: 'center',
-            }}
-          >
-            {staffIds.length === 0 ? '担当を選択' : '＋ 追加'}
-          </button>
-        </div>
+        <button
+          onClick={handleAdd}
+          disabled={disabled}
+          className="rounded-md transition-colors disabled:opacity-60 shrink-0"
+          style={{
+            padding: staffIds.length === 0 ? '4px 10px' : '4px 6px',
+            fontSize: '0.74rem',
+            fontWeight: 500,
+            color: staffIds.length === 0 ? 'var(--red)' : 'var(--accent)',
+            border: `1px dashed ${staffIds.length === 0 ? 'var(--red)' : 'var(--accent)'}`,
+            background: 'transparent',
+            whiteSpace: 'nowrap',
+            minWidth: staffIds.length === 0 ? undefined : '24px',
+          }}
+          title={staffIds.length === 0 ? undefined : 'もう 1 名追加'}
+          aria-label={staffIds.length === 0 ? '担当を選択' : '担当をもう 1 名追加'}
+        >
+          {staffIds.length === 0 ? '担当を選択' : '＋'}
+        </button>
       )}
     </div>
   );

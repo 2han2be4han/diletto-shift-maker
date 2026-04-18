@@ -98,6 +98,14 @@ export default function ScheduleGrid({
     return 'transparent';
   };
 
+  /* sticky ヘッダー/フッター用: 半透明 tint の下に不透明な var(--bg) を敷いて
+     スクロール時にデータ行が透けないようにする */
+  const getStickyBg = (dow: number): string => {
+    const tint = getCellBg(dow);
+    if (tint === 'transparent') return 'var(--bg)';
+    return `linear-gradient(${tint}, ${tint}), var(--bg)`;
+  };
+
   return (
     <div className="flex-1 overflow-auto border-2 rounded-xl" style={{ borderColor: 'var(--rule)', background: 'var(--white)' }}>
       <table
@@ -127,8 +135,10 @@ export default function ScheduleGrid({
                   borderBottom: '2px solid var(--rule-strong)',
                   borderRight: '1px solid var(--rule)',
                   minWidth: '80px',
-                  background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
                   ...getDowStyle(d.dow),
+                  /* Phase 27-fix: sticky 背景は getStickyBg（不透明ベース）で上書きし、
+                     土日の tint が透けてデータ行が重なる不具合を防ぐ */
+                  background: getStickyBg(d.dow),
                   boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                 }}
               >
@@ -241,7 +251,7 @@ export default function ScheduleGrid({
                     borderRight: '1px solid var(--rule)',
                     color: count > 10 ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
                     fontWeight: count > 10 ? 800 : 700,
-                    background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
+                    background: getStickyBg(d.dow),
                     boxShadow: '0 -4px 4px rgba(0,0,0,0.02)',
                   }}
                 >

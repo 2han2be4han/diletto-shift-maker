@@ -47,6 +47,9 @@
 | display_order | integer | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (ORDER BY), `src/app/api/children/reorder/route.ts`, `src/app/(app)/settings/children/page.tsx` (DnD 並び替え) |
 | home_address | text | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (POST), `[id]/route.ts` (PATCH), `src/app/(app)/settings/children/page.tsx` (入力UI + 送り住所fallback), `src/app/(app)/transport/page.tsx` (送迎表表示時fallback) |
 | pickup_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx` (マーク複数選択 UI), Phase 21 ド王仕様 |
+| dropoff_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx`, `src/lib/logic/resolveTransportSpec.ts`, Phase 27 追加 |
+| custom_pickup_areas | jsonb (AreaLabel[]) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` + `[id]/route.ts` (sanitize), `src/lib/logic/resolveTransportSpec.ts` (mergeAreas), `src/components/schedule/PdfImportModal.tsx` (assignMarks マージ), `src/components/schedule/PdfConfirmTable.tsx` (警告抑制), `src/app/(app)/settings/children/page.tsx` (CustomAreasEditor), Phase 28 A案 追加 (migration 0029) |
+| custom_dropoff_areas | jsonb (AreaLabel[]) | 上記 custom_pickup_areas と同じ参照セット。送り側用。Phase 28 A案 追加 (migration 0029) |
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
@@ -227,6 +230,7 @@
 | 2026-04-17 | Phase 22: Excel貼付のNFKC正規化＋児童名の(学年)除去、未登録児童の検出バナー、一括登録サブダイアログ（学年はparseChildName自動推定） |
 | 2026-04-17 | Phase 23: 児童一覧の行背景を学年カテゴリでうっすら色分け（未就学=青/年少-年長=赤/小1以降=緑） |
 | 2026-04-17 | Phase 25: 職員退職(ソフト削除)・児童出欠+履歴・シフト変更申請・日次出力 |
+| 2026-04-18 | Phase 28 A案: children.custom_pickup_areas / custom_dropoff_areas jsonb 追加（Migration 0029）。児童ごとのイレギュラーエリアをマークとしてテナント共通と合流。resolveTransportSpec.mergeAreas / PdfImportModal / PdfConfirmTable / settings/children の CustomAreasEditor で参照 |
 
 ---
 

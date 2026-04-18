@@ -527,6 +527,52 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 28: マーク第一級市民化（Phase 21 ド王仕様の完全実装）</div>
+    <p style="font-size:0.9rem;color:#555;">
+        現状マークは <code>children.pickup_area_labels</code> / <code>dropoff_area_labels</code> に保存されるが送迎生成ロジックは一切読んでいない（飾り状態）。
+        本フェーズではマークを第一級市民に格上げし、マーク選択だけで送迎表の時刻・場所・エリアが自動解決される設計へ移行する。
+        イレギュラー児童は既存 <code>child_transport_patterns</code> を継続利用。既存 <code>schedule_entries</code> にも遡って効かせる（on-the-fly 解決）。
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>ステップ</th>
+                <th>対応内容</th>
+                <th>対象ファイル</th>
+                <th>ステータス</th>
+                <th>完了率</th>
+                <th>ずれ・整合性チェック</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>28-1</td><td>migration 0028: schedule_entries.pickup_mark / dropoff_mark (text null) 追加。コメント付与。既存データは NULL（= pattern_id 経路 or mark 未紐付け）</td><td>supabase/migrations/0028_schedule_entries_marks.sql</td><td class="status-done">完了</td><td>100%</td><td>Supabase 本番適用済み（ユーザー確認 2026-04-18）</td></tr>
+            <tr><td>28-2</td><td>ScheduleEntryRow / ParsedScheduleEntry に pickup_mark / dropoff_mark を追加（既存削除・変更禁止 §6）</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>tsc 通過</td></tr>
+            <tr><td>28-3</td><td>共通解決ヘルパー resolveEntryTransportSpec() 新設。解決順: (a) pattern_id → (b) mark → tenant pickup_areas/dropoff_areas → (c) entry 直入力値。戻り値は { areaLabel, time, location } を迎/送それぞれで</td><td>src/lib/logic/resolveTransportSpec.ts（新規）</td><td class="status-done">完了</td><td>100%</td><td>inferMarkFromTime も併設（PDFインポート側で再利用予定）</td></tr>
+            <tr><td>28-4</td><td>generateTransport.ts を刷新: 上記ヘルパー経由で areaLabel / time / location を取得。直接 pattern を読む処理を置換</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>input に children/pickupAreas/dropoffAreas を optional 追加（シグネチャ非破壊）</td></tr>
+            <tr><td>28-5</td><td>transport/page.tsx の resolvePattern / childHomeAddressMap ロジックを resolveEntryTransportSpec に移行。staffAreaMarksForDay も mark ベースで動作させる</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存 pattern_id 付きデータ / mark のみデータ 両方で解決</td></tr>
+            <tr><td>28-6</td><td>/api/schedule-entries の POST で pickup_mark / dropoff_mark を受け入れ・返却</td><td>src/app/api/schedule-entries/route.ts</td><td class="status-done">完了</td><td>100%</td><td>既存クライアント（フィールド未送信）は null で保存</td></tr>
+            <tr><td>28-7</td><td>PDF インポートで mark 自動マッチング: 児童の pickup_area_labels と解析 pickup_time からテナント pickup_areas の time で一致マーク推論（送も同様）。schedule/page.tsx で tenant 設定を取得し modal へ渡す。handleBulkImport で pickup_mark/dropoff_mark を POST に含める</td><td>src/components/schedule/PdfImportModal.tsx, src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>pattern_id とマークは並列保存（送迎表では pattern_id を優先、両方無ければ mark で解決）</td></tr>
+            <tr><td>28-8</td><td>PdfConfirmTable に 迎マーク / 送マーク の 2 列追加。児童管理で選んだマークだけを選択肢に出す。「—」で該当なし</td><td>src/components/schedule/PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td>児童マーク未登録 → 「（児童に未登録）」、テナント未設定 → 「（テナント未設定）」で区別</td></tr>
+            <tr><td>28-9</td><td>settings/children: マーク選択 UI を主役に昇格（既存）。パターン登録セクションは「イレギュラー用」として折りたたみ default 閉じに格下げ。?child=X 深リンクで自動モーダル展開</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存 pattern 持ち or #pattern-new anchor で自動展開</td></tr>
+            <tr><td>28-10</td><td>npm run dev で動作確認: (1) 新規 PDF → マークだけで生成 / (2) 既存 pattern_id 付き entries で振る舞い変化なし / (3) mark も pattern も無い entries は entry.pickup_time fallback</td><td>（横断）</td><td class="status-todo">未着手</td><td>0%</td><td>異常系: tenant pickup_areas が空のテナントで mark 付き entry → unassigned に落ちること</td></tr>
+            <tr><td>28-11</td><td>docs/reference-map.md 更新（schedule_entries マーク列・helper・使用箇所）</td><td>docs/reference-map.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>28-12</td><td>docs/error-log.md 発生時に記録</td><td>docs/error-log.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>28-13</td><td>送迎自動割当: エリア未解決（pattern も mark も無い児童）は候補外 → is_unassigned=true のまま。手動割当を強制</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>pickup_method='self' は従来どおり担当不要</td></tr>
+            <tr><td>28-14</td><td>送迎自動割当: 1 送迎に付ける自動担当人数を 1 名に固定（定数 AUTO_ASSIGN_STAFF_COUNT）。2 名目は手動追加のみ</td><td>src/lib/logic/generateTransport.ts, src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>テナント設定化は複雑化のため採用せず 1 名固定</td></tr>
+            <tr><td>28-15</td><td>送迎自動割当: 迎のクールダウン機能（デフォルト 45 分、テナント設定 transport_pickup_cooldown_minutes で変更可）。同職員が cooldown 内に迎を再担当しないよう pickup_time 昇順で処理 + lastPickupMinByStaff 追跡</td><td>src/lib/logic/generateTransport.ts, src/types/index.ts, src/app/api/transport/generate/route.ts, src/app/(app)/transport/page.tsx, src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>送りには非適用。手動編集は制約対象外</td></tr>
+            <tr><td>28-16</td><td>職員管理の対応エリア表示をサマリー + ホバーポップオーバー式に変更（TransportAreasPopover）。position:fixed + 上下反転で親 overflow の影響を受けない</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>一覧行のノイズ削減</td></tr>
+            <tr><td>28-17</td><td>migration 0029: children.custom_pickup_areas / custom_dropoff_areas jsonb 追加</td><td>supabase/migrations/0029_children_custom_areas.sql</td><td class="status-done">完了</td><td>100%</td><td>児童ごと特殊エリア（A案）。default '[]'::jsonb、RLS 変更なし。ユーザーが Supabase Studio で手動適用</td></tr>
+            <tr><td>28-18</td><td>ChildRow 型に custom_pickup_areas / custom_dropoff_areas: AreaLabel[] を追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>既存フィールドは変更禁止</td></tr>
+            <tr><td>28-19</td><td>children API POST/PATCH で custom_*_areas を受付・sanitize</td><td>src/app/api/children/route.ts, src/app/api/children/[id]/route.ts</td><td class="status-done">完了</td><td>100%</td><td>Array.isArray + 要素 shape チェック</td></tr>
+            <tr><td>28-20</td><td>resolveTransportSpec: child.custom_*_areas を tenant areas にマージ（custom 優先）してから findArea / inferMarkFromTime へ</td><td>src/lib/logic/resolveTransportSpec.ts</td><td class="status-done">完了</td><td>100%</td><td>同 emoji+name は custom 側の time/address を採用</td></tr>
+            <tr><td>28-21</td><td>PDF インポート: PdfImportModal.assignMarks と PdfConfirmTable のマーク候補に児童 custom を合流。テナント未登録 warning 抑制</td><td>src/components/schedule/PdfImportModal.tsx, src/components/schedule/PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>28-22</td><td>settings/children モーダルに「この児童専用エリア」セクション追加（tenant 編集 UI 参考）。マーク候補リストは【共通】【児童専用】見出し + 重複統合</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>reference-map.md も更新</td></tr>
+        </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+        <strong>スコープ外（別タスク）</strong>: viewer ロール編集ガード / /output/daily レイアウト再設計。
+    </p>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

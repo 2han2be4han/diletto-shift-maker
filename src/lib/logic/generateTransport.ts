@@ -4,8 +4,16 @@ import type {
   ScheduleEntryRow,
   ChildTransportPatternRow,
   TransportAssignmentRow,
+  ChildRow,
+  AreaLabel,
 } from '@/types';
-import { MAX_STAFF_PER_TRANSPORT, TRANSPORT_GROUP_TIME_WINDOW_MINUTES, DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
+import {
+  TRANSPORT_GROUP_TIME_WINDOW_MINUTES,
+  DEFAULT_TRANSPORT_MIN_END_TIME,
+  AUTO_ASSIGN_STAFF_COUNT,
+  DEFAULT_PICKUP_COOLDOWN_MINUTES,
+} from '@/types';
+import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 
 /**
  * 送迎担当仮割り当てロジック（ルールベース）
@@ -34,6 +42,15 @@ type GenerateTransportInput = {
   shiftAssignments: ShiftAssignmentRow[];
   /** Phase 26: この時刻以降に退勤する職員のみ候補。"HH:MM"。省略時 "16:31" */
   minEndTime?: string;
+  /** Phase 28: マーク解決に使う児童情報。未指定なら pattern_id / 時刻 fallback のみ。 */
+  children?: ChildRow[];
+  /** Phase 28: テナント pickup_areas。マーク → time/address 解決に使用。 */
+  pickupAreas?: AreaLabel[];
+  /** Phase 28: テナント dropoff_areas。マーク → time/address 解決に使用。 */
+  dropoffAreas?: AreaLabel[];
+  /** Phase 28: 迎え連続担当禁止時間（分）。ある職員が pickup 担当後、この分数内は同職員を候補から除外。
+      未指定はデフォルト 45 分。送り側には適用しない。 */
+  pickupCooldownMinutes?: number;
 };
 
 type GenerateTransportResult = {
@@ -46,6 +63,18 @@ export function generateTransportAssignments(
 ): GenerateTransportResult {
   const { tenantId, date, scheduleEntries, patterns, staff, shiftAssignments } = input;
   const minEndTime = input.minEndTime ?? DEFAULT_TRANSPORT_MIN_END_TIME;
+  const children = input.children ?? [];
+  const pickupAreas = input.pickupAreas ?? [];
+  const dropoffAreas = input.dropoffAreas ?? [];
+  const pickupCooldownMin = input.pickupCooldownMinutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES;
+  const childById = new Map(children.map((c) => [c.id, c]));
+  /* Phase 28: 児童ごとのパターン事前グルーピング（resolveEntryTransportSpec に渡す） */
+  const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
+  for (const p of patterns) {
+    const list = patternsByChild.get(p.child_id) ?? [];
+    list.push(p);
+    patternsByChild.set(p.child_id, list);
+  }
 
   /* ① 出勤している職員のみ抽出（Phase 26: さらに退勤時刻 >= minEndTime で絞る） */
   const workingStaff = staff.filter((s) => {
@@ -60,6 +89,9 @@ export function generateTransportAssignments(
   /* 職員ごとの送迎担当回数（均等分散用） */
   const staffAssignCount = new Map<string, number>();
   workingStaff.forEach((s) => staffAssignCount.set(s.id, 0));
+  /* Phase 28: 職員ごとに「最後に迎を担当した pickup_time（分）」を記録し、
+     クールダウン内の再アサインを防ぐ。送り側には適用しない。 */
+  const lastPickupMinByStaff = new Map<string, number>();
 
   /* パターンをマップ化 */
   const patternMap = new Map<string, ChildTransportPatternRow>();
@@ -68,27 +100,44 @@ export function generateTransportAssignments(
   const assignments: Omit<TransportAssignmentRow, 'id' | 'created_at'>[] = [];
   let unassignedCount = 0;
 
+  /* Phase 28: 迎のクールダウンを時系列順に正しく評価するため、pickup_time 昇順で処理。
+     送りは処理順に依存しないが、同一配列で扱ってまとめて assignments を push する。 */
+  const dateEntries = scheduleEntries
+    .filter((e) => e.date === date)
+    .slice()
+    .sort((a, b) => {
+      const ap = normalizeTimeMinutes(a.pickup_time) ?? Number.MAX_SAFE_INTEGER;
+      const bp = normalizeTimeMinutes(b.pickup_time) ?? Number.MAX_SAFE_INTEGER;
+      return ap - bp;
+    });
+
   /* 各利用予定に対して担当を割り当て */
-  for (const entry of scheduleEntries) {
-    if (entry.date !== date) continue;
+  for (const entry of dateEntries) {
+    /* Phase 28: 統一解決ヘルパーでエリア・時刻を決定。
+       pattern_id → mark → 時刻fallback → entry 直入力、の順で解決される */
+    const spec = resolveEntryTransportSpec(entry, {
+      child: childById.get(entry.child_id),
+      childPatterns: patternsByChild.get(entry.child_id) ?? [],
+      patternById: patternMap,
+      pickupAreas,
+      dropoffAreas,
+    });
+    const pickupAreaLabel = spec.pickup.areaLabel;
+    const dropoffAreaLabel = spec.dropoff.areaLabel;
+    const pickupTime = spec.pickup.time;
+    const dropoffTime = spec.dropoff.time;
 
-    const pattern = entry.pattern_id ? patternMap.get(entry.pattern_id) : null;
-    /* Phase 27: 迎は pickup_area_label、送は dropoff_area_label を優先し、
-       両者とも無い旧データは legacy area_label にフォールバック。
-       これにより職員の pickup_transport_areas / dropoff_transport_areas とのマッチが
-       実際の方向のエリアで行われる。 */
-    const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
-    const dropoffAreaLabel = pattern?.dropoff_area_label ?? pattern?.area_label ?? null;
-    const pickupTime = entry.pickup_time;
-    const dropoffTime = entry.dropoff_time;
-
-    /* Phase 26: 保護者送迎（method='self'）は担当不要。割り当てをスキップし、
-       is_unassigned=false で空配列を記録する（UI でエラー扱いしない） */
+    /* Phase 26: 保護者送迎（method='self'）は担当不要 */
     const pickupNeedsStaff = entry.pickup_method !== 'self';
     const dropoffNeedsStaff = entry.dropoff_method !== 'self';
 
-    /* 迎え担当を選定（保護者送迎なら空） */
-    const pickupStaff = pickupNeedsStaff
+    /* Phase 28: エリアが pattern でも mark でも解決できない児童は自動割当しない。
+       unassigned のまま残して、送迎表で手動割当させる（ユーザー運用）。 */
+    const pickupResolvable = pickupNeedsStaff && !!pickupAreaLabel;
+    const dropoffResolvable = dropoffNeedsStaff && !!dropoffAreaLabel;
+
+    /* 迎え担当を選定（保護者送迎なら空 / エリア未解決なら空） */
+    const pickupStaff = pickupResolvable
       ? selectStaff({
           workingStaff,
           shiftAssignments,
@@ -97,12 +146,18 @@ export function generateTransportAssignments(
           areaLabel: pickupAreaLabel,
           direction: 'pickup',
           staffAssignCount,
-          maxStaff: MAX_STAFF_PER_TRANSPORT,
+          /* Phase 28: 自動割当は 1 名固定。2 名目は手動で追加する運用に統一。 */
+          maxStaff: AUTO_ASSIGN_STAFF_COUNT,
+          /* Phase 28: 迎のクールダウン適用 */
+          cooldownContext: {
+            lastPickupMinByStaff,
+            cooldownMinutes: pickupCooldownMin,
+          },
         })
       : [];
 
-    /* 送り担当を選定（保護者送迎なら空） */
-    const dropoffStaff = dropoffNeedsStaff
+    /* 送り担当を選定（保護者送迎なら空 / エリア未解決なら空） */
+    const dropoffStaff = dropoffResolvable
       ? selectStaff({
           workingStaff,
           shiftAssignments,
@@ -111,11 +166,24 @@ export function generateTransportAssignments(
           areaLabel: dropoffAreaLabel,
           direction: 'dropoff',
           staffAssignCount,
-          maxStaff: MAX_STAFF_PER_TRANSPORT,
+          maxStaff: AUTO_ASSIGN_STAFF_COUNT,
+          /* 送りにはクールダウンを適用しない */
         })
       : [];
 
-    /* is_unassigned: 必要な側が空のときだけ true */
+    /* Phase 28: 迎を割り当てた職員について pickup_time を記録（次のクールダウン判定用） */
+    const pickupMin = normalizeTimeMinutes(pickupTime);
+    if (pickupMin !== null) {
+      for (const s of pickupStaff) {
+        const prev = lastPickupMinByStaff.get(s.id);
+        if (prev === undefined || pickupMin > prev) {
+          lastPickupMinByStaff.set(s.id, pickupMin);
+        }
+      }
+    }
+
+    /* is_unassigned: 必要な側が空のときだけ true。
+       pickupResolvable=false でも pickupNeedsStaff=true なら unassigned 扱い。 */
     const pickupEmpty = pickupNeedsStaff && pickupStaff.length === 0;
     const dropoffEmpty = dropoffNeedsStaff && dropoffStaff.length === 0;
     const isUnassigned = pickupEmpty || dropoffEmpty;
@@ -144,6 +212,7 @@ function selectStaff({
   direction,
   staffAssignCount,
   maxStaff,
+  cooldownContext,
 }: {
   workingStaff: StaffRow[];
   shiftAssignments: ShiftAssignmentRow[];
@@ -154,8 +223,14 @@ function selectStaff({
   direction: 'pickup' | 'dropoff';
   staffAssignCount: Map<string, number>;
   maxStaff: number;
+  /** Phase 28: 迎のみ渡す。直近 pickup_time（分）を職員ごとに記録し、cooldown 内を候補から除外 */
+  cooldownContext?: {
+    lastPickupMinByStaff: Map<string, number>;
+    cooldownMinutes: number;
+  };
 }): StaffRow[] {
   if (!time) return [];
+  const timeMin = normalizeTimeMinutes(time);
 
   let candidates = workingStaff.filter((s) => {
     const shift = shiftAssignments.find(
@@ -179,6 +254,14 @@ function selectStaff({
       if (!effective.includes(areaLabel)) return false;
     }
 
+    /* Phase 28: 迎のクールダウンチェック。直近 pickup_time + cooldown 以降でなければ候補外。 */
+    if (cooldownContext && timeMin !== null) {
+      const last = cooldownContext.lastPickupMinByStaff.get(s.id);
+      if (last !== undefined && timeMin - last < cooldownContext.cooldownMinutes) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -198,6 +281,14 @@ function selectStaff({
   });
 
   return selected;
+}
+
+/** "HH:MM" or "HH:MM:SS" → 分数。null 可 */
+function normalizeTimeMinutes(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
 }
 
 /* 時間が範囲内かチェック（HH:MM形式） */

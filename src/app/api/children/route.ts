@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/requireRole';
+import type { AreaLabel } from '@/types';
+
+/** Phase 28: 児童専用エリア（AreaLabel[]）の緩い sanitize。emoji と name は必須、time/address は任意。 */
+function sanitizeAreaLabels(input: unknown): AreaLabel[] {
+  if (!Array.isArray(input)) return [];
+  const out: AreaLabel[] = [];
+  for (const v of input) {
+    if (!v || typeof v !== 'object') continue;
+    const r = v as Record<string, unknown>;
+    const emoji = typeof r.emoji === 'string' ? r.emoji.trim() : '';
+    const name = typeof r.name === 'string' ? r.name.trim() : '';
+    if (!emoji && !name) continue;
+    const item: AreaLabel = { emoji, name };
+    if (typeof r.time === 'string' && r.time.trim()) item.time = r.time.trim();
+    if (typeof r.address === 'string' && r.address.trim()) item.address = r.address.trim();
+    out.push(item);
+  }
+  return out;
+}
 
 export async function GET() {
   const gate = await requireRole('viewer');
@@ -45,6 +64,9 @@ export async function POST(request: NextRequest) {
       pickup_area_labels: Array.isArray(body.pickup_area_labels) ? body.pickup_area_labels : [],
       /* Phase 27: 送り対応エリアも受け入れ */
       dropoff_area_labels: Array.isArray(body.dropoff_area_labels) ? body.dropoff_area_labels : [],
+      /* Phase 28 A案: 児童専用エリア（イレギュラー用） */
+      custom_pickup_areas: sanitizeAreaLabels(body.custom_pickup_areas),
+      custom_dropoff_areas: sanitizeAreaLabels(body.custom_dropoff_areas),
     })
     .select()
     .single();

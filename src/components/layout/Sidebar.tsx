@@ -40,7 +40,7 @@ const NAV_BOTTOM = [
   { href: '/billing', label: '契約管理', icon: '💳' },
 ];
 
-const MINI_WIDTH = 64;
+const MINI_WIDTH = 56;
 const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 360;
@@ -81,24 +81,39 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
+  /* Phase 28: ミニモード（isOpen=false）ではアイコン中央揃え + パディング統一で縦列をスッキリさせる
+     共通化のため nav item のスタイルをここで集約 */
+  const navItemClass = isOpen
+    ? 'flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden'
+    : 'flex items-center justify-center h-10 mx-auto w-10 rounded-md transition-all group overflow-hidden';
+
   const navContent = (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ロゴ */}
-      <div className="px-5 py-5 flex items-center h-16 shrink-0 transition-all">
-        <Link href="/dashboard" className="text-xl font-black tracking-tight" style={{ color: 'var(--ink)' }}>
+      {/* ロゴ: ミニモードでは中央揃え + コンパクト */}
+      <div className={`flex items-center h-16 shrink-0 transition-all ${isOpen ? 'px-5 py-5' : 'px-0 py-5 justify-center'}`}>
+        <Link
+          href="/dashboard"
+          className="text-xl font-black tracking-tight"
+          style={{ color: 'var(--ink)' }}
+          title={!isOpen ? 'ShiftPuzzle' : undefined}
+        >
           {isOpen ? 'ShiftPuzzle' : 'S'}
         </Link>
       </div>
 
       {/* メインナビ */}
-      <nav className="flex-1 px-2.5 overflow-y-auto overflow-x-hidden">
+      <nav
+        className={`flex-1 overflow-y-auto overflow-x-hidden ${isOpen ? 'px-2.5' : 'px-0'}`}
+        /* ミニモード時はスクロールバーを薄くしてノイズを減らす */
+        style={!isOpen ? { scrollbarWidth: 'thin' } : undefined}
+      >
         <ul className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
                 onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                className={navItemClass}
                 title={!isOpen ? item.label : undefined}
                 style={{
                   color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-2)',
@@ -106,11 +121,11 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
                 }}
               >
                 <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
-                <span
-                  className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-                >
-                  {item.label}
-                </span>
+                {isOpen && (
+                  <span className="ml-3 text-sm font-medium whitespace-nowrap">
+                    {item.label}
+                  </span>
+                )}
               </Link>
             </li>
           ))}
@@ -130,7 +145,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
                 <Link
                   href={item.href}
                   onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                  className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                  className={navItemClass}
                   title={!isOpen ? item.label : undefined}
                   style={{
                     color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
@@ -138,11 +153,11 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
                   }}
                 >
                   <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
-                  <span
-                    className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-                  >
-                    {item.label}
-                  </span>
+                  {isOpen && (
+                    <span className="ml-3 text-sm font-medium whitespace-nowrap">
+                      {item.label}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}
@@ -153,14 +168,14 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
 
       {/* 下部ナビ（admin のみ） */}
       {canSeeBilling && (
-      <div className="px-2.5 pb-4 mt-auto border-t pt-4" style={{ borderColor: 'var(--rule)' }}>
+      <div className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2.5' : 'px-0'}`} style={{ borderColor: 'var(--rule)' }}>
         <ul className="flex flex-col gap-1">
           {NAV_BOTTOM.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
                 onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                className="flex items-center h-10 px-2.5 rounded-md transition-all group overflow-hidden"
+                className={navItemClass}
                 title={!isOpen ? item.label : undefined}
                 style={{
                   color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
@@ -168,11 +183,11 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
                 }}
               >
                 <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
-                <span
-                  className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-                >
-                  {item.label}
-                </span>
+                {isOpen && (
+                  <span className="ml-3 text-sm font-medium whitespace-nowrap">
+                    {item.label}
+                  </span>
+                )}
               </Link>
             </li>
           ))}
@@ -181,20 +196,23 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
       )}
 
       {/* サインアウト（常時表示） */}
-      <div className={`px-2.5 pb-4 ${canSeeBilling ? '' : 'mt-auto border-t pt-4'}`} style={{ borderColor: 'var(--rule)' }}>
+      <div
+        className={`pb-4 ${canSeeBilling ? '' : 'mt-auto border-t pt-4'} ${isOpen ? 'px-2.5' : 'px-0'}`}
+        style={{ borderColor: 'var(--rule)' }}
+      >
         <form action="/auth/signout" method="POST">
           <button
             type="submit"
-            className="w-full flex items-center h-10 px-2.5 rounded-md transition-all hover:bg-[var(--red-pale)]"
+            className={`${navItemClass} ${isOpen ? 'w-full' : ''} hover:bg-[var(--red-pale)]`}
             title={!isOpen ? 'サインアウト' : undefined}
             style={{ color: 'var(--ink-3)' }}
           >
             <span className="text-xl w-7 flex items-center justify-center shrink-0">🚪</span>
-            <span
-              className={`ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-            >
-              サインアウト
-            </span>
+            {isOpen && (
+              <span className="ml-3 text-sm font-medium whitespace-nowrap">
+                サインアウト
+              </span>
+            )}
           </button>
         </form>
       </div>

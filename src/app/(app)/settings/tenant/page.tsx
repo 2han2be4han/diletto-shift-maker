@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
-import { DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
+import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES } from '@/types';
 
 /**
  * テナント設定ページ（admin専用）
@@ -49,6 +49,8 @@ export default function TenantSettingsPage() {
   const [requestDeadline, setRequestDeadline] = useState(20);
   /* Phase 26: 送迎担当の最低退勤時刻（この時刻以降に退勤する職員のみ送迎候補） */
   const [transportMinEndTime, setTransportMinEndTime] = useState<string>(DEFAULT_TRANSPORT_MIN_END_TIME);
+  /* Phase 28: 迎のクールダウン（分）。ある職員が迎を担当したら、この分数内は別の迎を割り当てない */
+  const [pickupCooldownMinutes, setPickupCooldownMinutes] = useState<number>(DEFAULT_PICKUP_COOLDOWN_MINUTES);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +81,7 @@ export default function TenantSettingsPage() {
         setMinQualified(s.min_qualified_staff ?? 2);
         setRequestDeadline(s.request_deadline_day ?? 20);
         setTransportMinEndTime(s.transport_min_end_time ?? DEFAULT_TRANSPORT_MIN_END_TIME);
+        setPickupCooldownMinutes(s.transport_pickup_cooldown_minutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES);
       } catch (e) {
         setError(e instanceof Error ? e.message : '読み込みに失敗しました');
       } finally {
@@ -134,6 +137,7 @@ export default function TenantSettingsPage() {
             min_qualified_staff: minQualified,
             request_deadline_day: requestDeadline,
             transport_min_end_time: transportMinEndTime,
+            transport_pickup_cooldown_minutes: pickupCooldownMinutes,
           } as TenantSettings,
         }),
       });
@@ -314,6 +318,34 @@ export default function TenantSettingsPage() {
               className="w-32 outline-none"
               style={inputStyle}
             />
+          </div>
+
+          {/* Phase 28: 迎のクールダウン設定 */}
+          <div className="flex flex-col gap-2 max-w-2xl">
+            <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+              迎え連続担当の禁止時間（分）
+            </label>
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              ある職員が迎を担当した後、この分数が経過するまで別の迎には自動割当されません。
+              例: 45 を指定すると、13:20 に迎を行った職員は 14:05 まで次の迎の候補外。
+              送り側には適用されません。手動編集は制約対象外です。
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={180}
+                step={5}
+                value={pickupCooldownMinutes}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  setPickupCooldownMinutes(Number.isNaN(v) ? DEFAULT_PICKUP_COOLDOWN_MINUTES : Math.max(0, Math.min(180, v)));
+                }}
+                className="w-24 outline-none"
+                style={inputStyle}
+              />
+              <span className="text-sm" style={{ color: 'var(--ink-2)' }}>分</span>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2 max-w-2xl">

@@ -48,6 +48,10 @@ type EditableChild = {
   pickup_area_labels: string[];
   /** Phase 27: 送りマーク（複数選択） */
   dropoff_area_labels: string[];
+  /** Phase 28 A案: この児童専用の迎えエリア候補 */
+  custom_pickup_areas: AreaLabel[];
+  /** Phase 28 A案: この児童専用の送りエリア候補 */
+  custom_dropoff_areas: AreaLabel[];
   patterns: PatternItem[];
   isNew?: boolean;
 };
@@ -112,6 +116,9 @@ export default function ChildrenSettingsPage() {
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
+  /* Phase 28: パターン登録セクションの開閉状態。
+     既存パターン有 or URL #pattern-new 時のみ自動で開く（イレギュラー児童用に格下げ） */
+  const [patternSectionOpen, setPatternSectionOpen] = useState(false);
   /* ドラッグ並び替え用 */
   const [draggingChildIdx, setDraggingChildIdx] = useState<number | null>(null);
   const [dragOverChildIdx, setDragOverChildIdx] = useState<number | null>(null);
@@ -146,6 +153,19 @@ export default function ChildrenSettingsPage() {
     fetchAll();
   }, [fetchAll]);
 
+  /* Phase 28: /settings/children?child=<id>#pattern-new で来た場合、対象児童を自動で編集モーダルに開く。
+     送迎表 [未登録パターンあり] から誘導される導線用。children/patterns 取得完了後に 1 度だけ実行。 */
+  useEffect(() => {
+    if (loading || children.length === 0) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const childParam = params.get('child');
+    if (!childParam || editing) return;
+    const target = children.find((c) => c.id === childParam);
+    if (target) handleEdit(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, children, patterns]);
+
 
   const handleAdd = () => {
     setEditing({
@@ -157,9 +177,13 @@ export default function ChildrenSettingsPage() {
       home_address: null,
       pickup_area_labels: [],
       dropoff_area_labels: [],
+      custom_pickup_areas: [],
+      custom_dropoff_areas: [],
       patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
+    /* Phase 28: 新規追加時はパターン登録不要（マーク選択のみで十分）→ 閉じる */
+    setPatternSectionOpen(false);
   };
 
   const handleEdit = (child: ChildRow) => {
@@ -201,8 +225,15 @@ export default function ChildrenSettingsPage() {
       home_address: child.home_address,
       pickup_area_labels: child.pickup_area_labels ?? [],
       dropoff_area_labels: child.dropoff_area_labels ?? [],
+      custom_pickup_areas: Array.isArray(child.custom_pickup_areas) ? child.custom_pickup_areas : [],
+      custom_dropoff_areas: Array.isArray(child.custom_dropoff_areas) ? child.custom_dropoff_areas : [],
       patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
+    /* Phase 28: 既存パターンがある児童だけ自動展開。新規児童ではマーク選択のみで OK なので閉じた状態 */
+    const hasDbPatterns = childPatterns.some((p) => !!p.id);
+    const hasHashAnchor =
+      typeof window !== 'undefined' && window.location.hash === '#pattern-new';
+    setPatternSectionOpen(hasDbPatterns || hasHashAnchor);
   };
 
   const handleSave = async () => {
@@ -223,6 +254,8 @@ export default function ChildrenSettingsPage() {
             home_address: editing.home_address,
             pickup_area_labels: editing.pickup_area_labels,
             dropoff_area_labels: editing.dropoff_area_labels,
+            custom_pickup_areas: editing.custom_pickup_areas,
+            custom_dropoff_areas: editing.custom_dropoff_areas,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
@@ -240,6 +273,8 @@ export default function ChildrenSettingsPage() {
             home_address: editing.home_address,
             pickup_area_labels: editing.pickup_area_labels,
             dropoff_area_labels: editing.dropoff_area_labels,
+            custom_pickup_areas: editing.custom_pickup_areas,
+            custom_dropoff_areas: editing.custom_dropoff_areas,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
@@ -633,11 +668,33 @@ export default function ChildrenSettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(['pickup', 'dropoff'] as const).map((direction) => {
                   const key = direction === 'pickup' ? 'pickup_area_labels' : 'dropoff_area_labels';
+                  const customKey = direction === 'pickup' ? 'custom_pickup_areas' : 'custom_dropoff_areas';
                   const label = direction === 'pickup' ? 'お迎えマーク' : 'お送りマーク';
                   const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
                   const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
-                  const areas = direction === 'pickup' ? pickupAreas : dropoffAreas;
+                  const tenantAreasDir = direction === 'pickup' ? pickupAreas : dropoffAreas;
+                  const customAreas = editing[customKey];
                   const selected = editing[key];
+                  /* Phase 28 A案: 共通 + 児童専用 をマージ表示（重複は custom 優先で 1 件に統合） */
+                  type AreaRow = { area: AreaLabel; source: 'tenant' | 'custom'; label: string };
+                  const merged: AreaRow[] = [];
+                  const seen = new Set<string>();
+                  for (const a of tenantAreasDir) {
+                    const l = formatAreaLabel(a);
+                    seen.add(l);
+                    const overrideIdx = customAreas.findIndex((c) => formatAreaLabel(c) === l);
+                    merged.push(
+                      overrideIdx >= 0
+                        ? { area: customAreas[overrideIdx], source: 'custom', label: l }
+                        : { area: a, source: 'tenant', label: l },
+                    );
+                  }
+                  for (const c of customAreas) {
+                    const l = formatAreaLabel(c);
+                    if (seen.has(l)) continue;
+                    merged.push({ area: c, source: 'custom', label: l });
+                  }
+                  const allLabels = merged.map((r) => r.label);
                   return (
                     <div
                       key={direction}
@@ -648,16 +705,11 @@ export default function ChildrenSettingsPage() {
                         <label className="text-xs font-semibold" style={{ color: accentVar }}>
                           {label}
                         </label>
-                        {areas.length > 0 && (
+                        {merged.length > 0 && (
                           <div className="flex items-center gap-2 text-xs">
                             <button
                               type="button"
-                              onClick={() =>
-                                setEditing({
-                                  ...editing,
-                                  [key]: areas.map((a) => formatAreaLabel(a)),
-                                })
-                              }
+                              onClick={() => setEditing({ ...editing, [key]: allLabels })}
                               style={{ color: accentVar, textDecoration: 'underline' }}
                             >
                               全選択
@@ -673,44 +725,54 @@ export default function ChildrenSettingsPage() {
                           </div>
                         )}
                       </div>
-                      {areas.length === 0 ? (
+                      {merged.length === 0 ? (
                         <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                          （テナント設定で{label.replace('マーク', '')}エリアを追加してください）
+                          （テナント設定または下の「この児童専用エリア」で{label.replace('マーク', '')}エリアを追加してください）
                         </p>
                       ) : (
                         <div className="flex flex-col gap-1">
-                          {areas.map((a, idx) => {
-                            const ll = formatAreaLabel(a);
-                            const checked = selected.includes(ll);
+                          {(['tenant', 'custom'] as const).map((src) => {
+                            const rows = merged.filter((r) => r.source === src);
+                            if (rows.length === 0) return null;
                             return (
-                              <button
-                                type="button"
-                                key={`${idx}-${ll}`}
-                                onClick={() => {
-                                  const next = checked
-                                    ? selected.filter((l) => l !== ll)
-                                    : [...selected, ll];
-                                  setEditing({ ...editing, [key]: next });
-                                }}
-                                className="rounded-md transition-all text-left"
-                                style={{
-                                  padding: '5px 10px',
-                                  fontSize: '0.78rem',
-                                  fontWeight: 500,
-                                  background: checked ? accentVar : 'var(--white)',
-                                  color: checked ? '#fff' : 'var(--ink-2)',
-                                  border: `1px solid ${checked ? accentVar : 'var(--rule)'}`,
-                                }}
-                                title={a.time ? `${ll}：${a.time}〜` : ll}
-                              >
-                                {checked ? '✓ ' : ''}
-                                {ll}
-                                {a.time && (
-                                  <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
-                                    {a.time}
-                                  </span>
-                                )}
-                              </button>
+                              <div key={src} className="flex flex-col gap-1">
+                                <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-3)' }}>
+                                  {src === 'tenant' ? '【テナント共通】' : '【この児童専用】'}
+                                </span>
+                                {rows.map(({ area: a, label: ll }, idx) => {
+                                  const checked = selected.includes(ll);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={`${src}-${idx}-${ll}`}
+                                      onClick={() => {
+                                        const next = checked
+                                          ? selected.filter((l) => l !== ll)
+                                          : [...selected, ll];
+                                        setEditing({ ...editing, [key]: next });
+                                      }}
+                                      className="rounded-md transition-all text-left"
+                                      style={{
+                                        padding: '5px 10px',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 500,
+                                        background: checked ? accentVar : 'var(--white)',
+                                        color: checked ? '#fff' : 'var(--ink-2)',
+                                        border: `1px solid ${checked ? accentVar : 'var(--rule)'}`,
+                                      }}
+                                      title={a.time ? `${ll}：${a.time}〜` : ll}
+                                    >
+                                      {checked ? '✓ ' : ''}
+                                      {ll}
+                                      {a.time && (
+                                        <span className="ml-1.5 opacity-80" style={{ fontSize: '0.7rem' }}>
+                                          {a.time}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             );
                           })}
                         </div>
@@ -719,16 +781,50 @@ export default function ChildrenSettingsPage() {
                   );
                 })}
               </div>
+
+              {/* Phase 28 A案: この児童専用エリア（イレギュラー用） */}
+              <CustomAreasEditor
+                editing={editing}
+                setEditing={setEditing}
+                inputStyle={inputStyle}
+              />
             </section>
 
-            {/* 送迎パターン */}
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                  送迎パターン（{editing.patterns.length}件）
-                </label>
-                <span className="text-xs" style={{ color: 'var(--ink-3)' }}>最大5パターン</span>
-              </div>
+            {/* 送迎パターン（Phase 28: イレギュラー児童専用セクションに格下げ。
+                既存パターン有 or URL #pattern-new で自動展開、それ以外は閉じた状態がデフォルト） */}
+            <section className="flex flex-col gap-3" id="pattern-new">
+              <button
+                type="button"
+                onClick={() => setPatternSectionOpen((v) => !v)}
+                className="flex items-center justify-between w-full px-3 py-2 rounded-md transition-colors text-left"
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--rule)',
+                  color: 'var(--ink)',
+                }}
+                aria-expanded={patternSectionOpen}
+                aria-controls="pattern-section-body"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">
+                    <span aria-hidden style={{ marginRight: 8 }}>{patternSectionOpen ? '▼' : '▶'}</span>
+                    送迎パターン登録（イレギュラー児童用）
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                    通常はお迎え/お送りマークの選択だけで送迎表に自動反映されます。
+                    曜日や時間帯で例外がある児童だけ、ここで個別パターンを登録してください。
+                    {editing.patterns.some((p) => !!p.id) && (
+                      <span style={{ color: 'var(--accent)', marginLeft: 4, fontWeight: 600 }}>
+                        （登録済み {editing.patterns.filter((p) => !!p.id).length} 件）
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <span className="text-xs shrink-0 ml-3" style={{ color: 'var(--ink-3)' }}>最大5件</span>
+              </button>
+
+              {patternSectionOpen && (
+                <div id="pattern-section-body" className="flex flex-col gap-3">
               {!hasAnyArea && (
                 <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
                   迎/送エリアが未設定です。テナント設定でマーク・エリア名・時間を登録してから利用してください。
@@ -785,6 +881,8 @@ export default function ChildrenSettingsPage() {
                 >
                   + パターン追加
                 </Button>
+              )}
+                </div>
               )}
             </section>
 
@@ -1016,4 +1114,131 @@ function timeInputStyle(): React.CSSProperties {
     padding: '6px 8px',
     width: '6.5rem',
   };
+}
+
+/**
+ * Phase 28 A案: この児童専用エリアの編集 UI。
+ * テナント共通では扱えないイレギュラー時刻/場所を、児童ごとに追加できる。
+ * フィールドは tenant 設定の AreaLabel 編集と同じ（絵文字 / 名前 / 時刻 / 住所 / 削除）。
+ * ドラッグ並び替えは不要（件数が少ない想定）。
+ */
+function CustomAreasEditor({
+  editing,
+  setEditing,
+  inputStyle,
+}: {
+  editing: EditableChild;
+  setEditing: (c: EditableChild) => void;
+  inputStyle: React.CSSProperties;
+}) {
+  const sections = [
+    { key: 'custom_pickup_areas' as const, title: 'お迎え（この児童専用）', accent: 'var(--accent)', pale: 'var(--accent-pale)' },
+    { key: 'custom_dropoff_areas' as const, title: 'お送り（この児童専用）', accent: 'var(--green)', pale: 'var(--green-pale)' },
+  ];
+
+  const updateArea = (
+    key: 'custom_pickup_areas' | 'custom_dropoff_areas',
+    i: number,
+    field: keyof AreaLabel,
+    value: string,
+  ) => {
+    const next = editing[key].map((a, idx) => (idx === i ? { ...a, [field]: value } : a));
+    setEditing({ ...editing, [key]: next });
+  };
+  const addArea = (key: 'custom_pickup_areas' | 'custom_dropoff_areas') => {
+    setEditing({ ...editing, [key]: [...editing[key], { emoji: '🏠', name: '' }] });
+  };
+  const removeArea = (key: 'custom_pickup_areas' | 'custom_dropoff_areas', i: number) => {
+    setEditing({ ...editing, [key]: editing[key].filter((_, idx) => idx !== i) });
+  };
+
+  const emojiStyle: React.CSSProperties = { ...inputStyle, width: '2.75rem', textAlign: 'center', padding: '6px 4px', fontSize: '1rem' };
+  const nameStyle: React.CSSProperties = { ...inputStyle, padding: '6px 10px' };
+  const timeStyle: React.CSSProperties = { ...inputStyle, width: '6rem', padding: '6px 8px', fontVariantNumeric: 'tabular-nums' };
+  const addrStyle: React.CSSProperties = { ...inputStyle, padding: '6px 10px', flex: 1 };
+
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-md p-3 mt-1"
+      style={{ border: '1px dashed var(--rule-strong)', background: 'var(--bg)' }}
+    >
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs font-semibold" style={{ color: 'var(--ink)' }}>
+          この児童専用エリア（イレギュラー用）
+        </span>
+        <span className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+          テナント共通マークでは表現できない時刻・場所をここに追加できます。追加したマークは上の「お迎え / お送りマーク」の【この児童専用】に並び、選択するとこの児童の送迎表だけに反映されます。
+        </span>
+      </div>
+
+      {sections.map(({ key, title, accent, pale }) => (
+        <div key={key} className="flex flex-col gap-1.5 rounded-md p-2" style={{ border: '1px solid var(--rule)', background: pale }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold" style={{ color: accent }}>{title}</span>
+            <button
+              type="button"
+              onClick={() => addArea(key)}
+              className="text-xs px-2 py-1 rounded"
+              style={{ color: accent, border: `1px solid ${accent}`, background: 'var(--white)' }}
+            >
+              ＋ 追加
+            </button>
+          </div>
+          {editing[key].length === 0 ? (
+            <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+              （未登録）
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {editing[key].map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                  <input
+                    type="text"
+                    value={a.emoji}
+                    onChange={(e) => updateArea(key, i, 'emoji', e.target.value)}
+                    style={emojiStyle}
+                    maxLength={2}
+                    aria-label="絵文字"
+                  />
+                  <input
+                    type="text"
+                    value={a.name}
+                    onChange={(e) => updateArea(key, i, 'name', e.target.value)}
+                    style={nameStyle}
+                    placeholder="エリア名（例: おばあちゃん家）"
+                    aria-label="エリア名"
+                  />
+                  <input
+                    type="time"
+                    value={a.time ?? ''}
+                    onChange={(e) => updateArea(key, i, 'time', e.target.value)}
+                    style={timeStyle}
+                    step={600}
+                    aria-label="基準時刻"
+                  />
+                  <input
+                    type="text"
+                    value={a.address ?? ''}
+                    onChange={(e) => updateArea(key, i, 'address', e.target.value)}
+                    style={addrStyle}
+                    placeholder="住所（任意）"
+                    aria-label="住所"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeArea(key, i)}
+                    className="text-xs px-2 py-1 rounded"
+                    style={{ color: 'var(--red)', border: '1px solid var(--rule)', background: 'var(--white)' }}
+                    aria-label="削除"
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }

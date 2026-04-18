@@ -5,7 +5,8 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import PdfConfirmTable from './PdfConfirmTable';
-import type { ChildRow, ChildTransportPatternRow, ParsedScheduleEntry } from '@/types';
+import type { ChildRow, ChildTransportPatternRow, ParsedScheduleEntry, AreaLabel } from '@/types';
+import { inferMarkFromTime, mergeAreas } from '@/lib/logic/resolveTransportSpec';
 
 /**
  * PDFインポートモーダル
@@ -27,6 +28,9 @@ type PdfImportModalProps = {
   childList: ChildRow[];
   patterns: ChildTransportPatternRow[];
   patternUsage: Map<string, string>;
+  /** Phase 28: マーク自動推論用テナントエリア */
+  pickupAreas?: AreaLabel[];
+  dropoffAreas?: AreaLabel[];
 };
 
 /** "HH:MM:SS" → "HH:MM"（比較用正規化） */
@@ -90,6 +94,34 @@ function assignPatternIds(
   });
 }
 
+/**
+ * Phase 28: 解析結果にマーク（pickup_mark / dropoff_mark）を付与。
+ * 児童の pickup_area_labels / dropoff_area_labels 候補 × 解析時刻から、
+ * テナント pickup_areas / dropoff_areas の time と一致するマークを推論する。
+ * pattern_id がすでに確定している場合でもマークは推論する（送迎表で併用可能）。
+ */
+function assignMarks(
+  entries: ParsedScheduleEntry[],
+  childList: ChildRow[],
+  pickupAreas: AreaLabel[],
+  dropoffAreas: AreaLabel[],
+): ParsedScheduleEntry[] {
+  const nameToChild = new Map(childList.map((c) => [c.name, c]));
+  return entries.map((e) => {
+    if (e.pickup_mark !== undefined && e.dropoff_mark !== undefined) return e; /* 既設定は尊重 */
+    const child = nameToChild.get(e.child_name);
+    if (!child) return { ...e, pickup_mark: null, dropoff_mark: null };
+    /* Phase 28 A案: 児童専用エリアを tenant に合流してから time 推論に使う */
+    const mergedPickup = mergeAreas(pickupAreas, child.custom_pickup_areas);
+    const mergedDropoff = mergeAreas(dropoffAreas, child.custom_dropoff_areas);
+    const pickup =
+      e.pickup_mark ?? inferMarkFromTime(child.pickup_area_labels, mergedPickup, e.pickup_time);
+    const dropoff =
+      e.dropoff_mark ?? inferMarkFromTime(child.dropoff_area_labels, mergedDropoff, e.dropoff_time);
+    return { ...e, pickup_mark: pickup, dropoff_mark: dropoff };
+  });
+}
+
 type ImportState = 'idle' | 'uploading' | 'confirm' | 'saving';
 
 export default function PdfImportModal({
@@ -99,6 +131,8 @@ export default function PdfImportModal({
   childList,
   patterns,
   patternUsage,
+  pickupAreas = [],
+  dropoffAreas = [],
 }: PdfImportModalProps) {
   const [state, setState] = useState<ImportState>('idle');
   const [entries, setEntries] = useState<ParsedScheduleEntry[]>([]);
@@ -130,8 +164,11 @@ export default function PdfImportModal({
         throw new Error(data.error || 'PDF解析に失敗しました');
       }
 
-      /* Phase 27-A-1: 解析結果に初期 pattern_id を付与 */
-      setEntries(assignPatternIds(data.entries, childList, patterns, patternUsage));
+      /* Phase 27-A-1: 解析結果に初期 pattern_id を付与
+         Phase 28: 同時にマーク（pickup_mark / dropoff_mark）も自動推論 */
+      const withPatterns = assignPatternIds(data.entries, childList, patterns, patternUsage);
+      const withMarks = assignMarks(withPatterns, childList, pickupAreas, dropoffAreas);
+      setEntries(withMarks);
       setIsMock(data.isMock);
       setState('confirm');
     } catch (err) {
@@ -250,6 +287,8 @@ export default function PdfImportModal({
               onEntriesChange={setEntries}
               childList={childList}
               patterns={patterns}
+              pickupAreas={pickupAreas}
+              dropoffAreas={dropoffAreas}
             />
 
             <div className="flex gap-2 mt-2">

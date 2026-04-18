@@ -24,10 +24,42 @@ export type TenantSettings = {
   request_deadline_day?: number;
   /** Phase 26: 送迎担当の最低退勤時間。これ以降に退勤する職員のみ送迎候補。"HH:MM" 形式。デフォルト "16:31" */
   transport_min_end_time?: string;
+  /** Phase 28: 迎え再送迎の禁止時間（分）。ある職員が pickup_time X で迎を担当したら、
+      X + minutes までの別 pickup は候補から除外される。送り側には適用しない。デフォルト 45。
+      自動割り当てのみ対象で、手動編集は制約対象外。 */
+  transport_pickup_cooldown_minutes?: number;
+  /** Phase 28: 送迎表（/transport）の列表示順。"child_name" は常に先頭固定で配列には含めない。
+      未指定（undefined）は DEFAULT_TRANSPORT_COLUMN_ORDER を使う。テナント単位で共有され、
+      並び替えは全職員に反映される。 */
+  transport_column_order?: TransportColumnKey[];
 };
+
+/** Phase 28: /transport の並び替え可能な列キー（児童名は常時先頭固定のため含めない）。 */
+export type TransportColumnKey =
+  | 'pickup_time'
+  | 'pickup_location'
+  | 'pickup_staff'
+  | 'dropoff_time'
+  | 'dropoff_location'
+  | 'dropoff_staff';
+
+export const DEFAULT_TRANSPORT_COLUMN_ORDER: TransportColumnKey[] = [
+  'pickup_time',
+  'pickup_location',
+  'pickup_staff',
+  'dropoff_time',
+  'dropoff_location',
+  'dropoff_staff',
+];
 
 /** Phase 26: transport_min_end_time のデフォルト値。送迎の最早時刻(16:30)直後。 */
 export const DEFAULT_TRANSPORT_MIN_END_TIME = '16:31';
+
+/** Phase 28: 自動割り当ての担当人数（1 名固定）。手動で 2 名追加する場合は UI から。 */
+export const AUTO_ASSIGN_STAFF_COUNT = 1;
+
+/** Phase 28: 迎えクールダウンのデフォルト（45 分）。 */
+export const DEFAULT_PICKUP_COOLDOWN_MINUTES = 45;
 
 export type TenantRow = {
   id: string;
@@ -107,6 +139,12 @@ export type ChildRow = {
   /** 送りマーク（複数選択）。emoji+name 形式。テナント dropoff_areas の選択肢から選ぶ。
       Phase 27 追加: 児童に送り側マークを持たせて送迎表で自動反映。 */
   dropoff_area_labels: string[];
+  /** 児童専用の迎えエリア候補（AreaLabel[]）。tenant pickup_areas とマージしてマーク解決に使う。
+      Phase 28 A案: イレギュラー児童をパターン登録せずマーク運用するためのソース。 */
+  custom_pickup_areas: AreaLabel[];
+  /** 児童専用の送りエリア候補（AreaLabel[]）。tenant dropoff_areas とマージしてマーク解決に使う。
+      Phase 28 A案追加。 */
+  custom_dropoff_areas: AreaLabel[];
   created_at: string;
 };
 
@@ -150,6 +188,10 @@ export type ScheduleEntryRow = {
   /** Phase 24: 'dropoff'=送り, 'self'=自分で帰る */
   dropoff_method: ScheduleEntryDropoffMethod;
   pattern_id: string | null;
+  /** Phase 28: お迎えマーク（emoji+name）。pattern_id が無い場合、テナント pickup_areas から time/address を解決するキー。 */
+  pickup_mark: string | null;
+  /** Phase 28: お送りマーク（emoji+name）。pattern_id が無い場合、テナント dropoff_areas から time/address を解決するキー。 */
+  dropoff_mark: string | null;
   is_confirmed: boolean;
   /** Phase 25: 出欠ステータス。planned=予定／present=出席／absent=欠席／late=遅刻／early_leave=早退 */
   attendance_status: AttendanceStatus;
@@ -288,6 +330,11 @@ export type ParsedScheduleEntry = {
   /** Phase 27-A-1: PDF import の pattern selector。確認画面で初期選択される（時刻一致 → 過去最頻 → 最初の1件 → null）。
    *  null は明示的に「該当なし」を選んだ状態 */
   pattern_id?: string | null;
+  /** Phase 28: 児童のマーク × 解析時刻から自動推論されるお迎えマーク（emoji+name）。
+   *  確認画面で手動変更可能。null = 該当なし、undefined = 未推論。 */
+  pickup_mark?: string | null;
+  /** Phase 28: 児童のマーク × 解析時刻から自動推論されるお送りマーク。上と同様。 */
+  dropoff_mark?: string | null;
 };
 
 // ----- コメント（4機能にポリモーフィック） -----

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { format, getDaysInMonth, getDay } from 'date-fns';
+import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
 import TransportDayView from '@/components/transport/TransportDayView';
@@ -17,8 +17,10 @@ import type {
   TransportAssignmentRow,
   AreaLabel,
   TenantSettings,
+  TransportColumnKey,
 } from '@/types';
-import { DEFAULT_TRANSPORT_MIN_END_TIME } from '@/types';
+import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES, DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
+import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 
 /**
  * 送迎表ページ（Supabase 接続）
@@ -40,38 +42,7 @@ function normTime(t: string | null | undefined): string | null {
   return t.length >= 5 ? t.slice(0, 5) : t;
 }
 
-/**
- * Phase 27-A-2 (interim): schedule_entry.pattern_id が未セットでも、
- * 児童の送迎パターン群から最適な 1 件を推定する。
- *   1. entry.pattern_id が有効ならそれを使う
- *   2. 時刻が両方一致するパターン
- *   3. pickup_time のみ一致
- *   4. dropoff_time のみ一致
- *   5. 児童の最初のパターン
- */
-function resolvePattern(
-  entry: ScheduleEntryRow,
-  patternsByChild: Map<string, ChildTransportPatternRow[]>,
-  patternById: Map<string, ChildTransportPatternRow>,
-): ChildTransportPatternRow | undefined {
-  if (entry.pattern_id) {
-    const p = patternById.get(entry.pattern_id);
-    if (p) return p;
-  }
-  const list = patternsByChild.get(entry.child_id) ?? [];
-  if (list.length === 0) return undefined;
-  const pt = normTime(entry.pickup_time);
-  const dt = normTime(entry.dropoff_time);
-  const exact = list.find(
-    (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
-  );
-  if (exact) return exact;
-  const byPickup = list.find((p) => pt && normTime(p.pickup_time) === pt);
-  if (byPickup) return byPickup;
-  const byDropoff = list.find((p) => dt && normTime(p.dropoff_time) === dt);
-  if (byDropoff) return byDropoff;
-  return list[0];
-}
+/* Phase 28: 旧 resolvePattern は resolveEntryTransportSpec に一本化済み（lib/logic/resolveTransportSpec.ts）。 */
 
 type UiTransportEntry = {
   scheduleEntryId: string;
@@ -121,6 +92,14 @@ export default function TransportPage() {
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   /* Phase 26: 送迎担当の最低退勤時間（HH:MM）。テナント設定 or デフォルト */
   const [transportMinEndTime, setTransportMinEndTime] = useState<string>(DEFAULT_TRANSPORT_MIN_END_TIME);
+  /* Phase 28: 迎のクールダウン（分）。テナント設定 or デフォルト 45 分 */
+  const [pickupCooldownMinutes, setPickupCooldownMinutes] = useState<number>(DEFAULT_PICKUP_COOLDOWN_MINUTES);
+  /* Phase 28: 送迎表の列順。テナント設定 or デフォルト（児童名は固定先頭なので含めない） */
+  const [columnOrder, setColumnOrder] = useState<TransportColumnKey[]>(DEFAULT_TRANSPORT_COLUMN_ORDER);
+  /* Phase 28: 並び替え保存後に他の設定を巻き戻さないよう、最後に取得した settings 全体を保持 */
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
+  /* Phase 28: 自分のロール（viewer は列並び替え不可） */
+  const [myRole, setMyRole] = useState<'admin' | 'editor' | 'viewer' | null>(null);
 
   /* Phase 26: 日ごとの編集を一時保存する pending state（scheduleEntryId → { pickup, dropoff }） */
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingAssignment>>(new Map());
@@ -128,14 +107,13 @@ export default function TransportPage() {
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
+  /* Phase 28: 当月の全日を対象にする（土日も含む。放デイは土曜利用があるため）。
+     ※変数名は workDays のまま残置（他で使われているため）。 */
   const workDays = useMemo(() => {
     const days: string[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month - 1, d);
-      const dow = getDay(dateObj);
-      if (dow !== 0 && dow !== 6) {
-        days.push(format(dateObj, 'yyyy-MM-dd'));
-      }
+      days.push(format(dateObj, 'yyyy-MM-dd'));
     }
     return days;
   }, [year, month, daysInMonth]);
@@ -178,6 +156,9 @@ export default function TransportPage() {
       setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
       setDropoffAreas(settings.dropoff_areas ?? []);
       setTransportMinEndTime(settings.transport_min_end_time ?? DEFAULT_TRANSPORT_MIN_END_TIME);
+      setPickupCooldownMinutes(settings.transport_pickup_cooldown_minutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES);
+      setColumnOrder(settings.transport_column_order ?? DEFAULT_TRANSPORT_COLUMN_ORDER);
+      setTenantSettings(settings);
       /* 再取得時は pending は破棄（保存直後のクリーンアップも兼ねる） */
       setPendingChanges(new Map());
     } catch (e) {
@@ -188,6 +169,14 @@ export default function TransportPage() {
   }, [year, month, daysInMonth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  /* Phase 28: ロール取得（列並び替えの権限判定） */
+  useEffect(() => {
+    void fetch('/api/me')
+      .then((r) => r.json())
+      .then((d) => setMyRole(d.staff?.role ?? null))
+      .catch(() => {});
+  }, []);
 
   /* Phase 26: ブラウザ離脱時（タブ閉じ・リロード）に未保存警告 */
   useEffect(() => {
@@ -204,11 +193,7 @@ export default function TransportPage() {
     () => new Map(children.map((c) => [c.id, c.name])),
     [children]
   );
-  /* 自宅住所の逆引きマップ（Phase 20: 送り住所のフォールバック） */
-  const childHomeAddressMap = useMemo(
-    () => new Map(children.map((c) => [c.id, c.home_address])),
-    [children]
-  );
+  /* Phase 28: 送り先住所の home_address フォールバックは resolveEntryTransportSpec 内で吸収済み */
 
   /* UI 用エントリ構築: selectedDate の schedule_entries を列挙し、transport_assignments と結合 */
   const currentDayEntries: UiTransportEntry[] = useMemo(() => {
@@ -216,41 +201,30 @@ export default function TransportPage() {
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
     const patternById = new Map(patterns.map((p) => [p.id, p]));
-    /* Phase 27-A-2 (interim): 児童ごとにパターンをグルーピングして pattern_id=null 時のフォールバック用に渡す */
+    const childById = new Map(children.map((c) => [c.id, c]));
+    /* Phase 28: 児童管理の並び順（children.display_order）を正として各 entry に採番。
+       API 側で order 済みの children 配列の index をそのまま順位として使う。 */
+    const childOrderById = new Map(children.map((c, idx) => [c.id, idx]));
+    /* Phase 28: 児童ごとにパターンをグルーピング（resolveEntryTransportSpec に渡す） */
     const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
     for (const p of patterns) {
       const list = patternsByChild.get(p.child_id) ?? [];
       list.push(p);
       patternsByChild.set(p.child_id, list);
     }
-    /* エリアラベル → 住所 の逆引きマップ（Phase 18: 個別住所未入力時のフォールバック用） */
-    const areaAddressMap = new Map<string, string>();
-    for (const a of pickupAreas) {
-      if (a.address) areaAddressMap.set(`${a.emoji} ${a.name}`, a.address);
-    }
-    for (const a of dropoffAreas) {
-      if (a.address) areaAddressMap.set(`${a.emoji} ${a.name}`, a.address);
-    }
     const rows = scheduleIds.map((sid) => {
       const e = entryById.get(sid)!;
       const t = assignByEntry.get(sid);
-      /* 場所メモ: pattern_id が未セットでも児童の patterns からフォールバック推定 */
-      const pattern = resolvePattern(e, patternsByChild, patternById);
-      const pickupAreaLabel = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
-      const dropoffAreaLabel = pattern?.dropoff_area_label ?? null;
-      /* 住所フォールバック優先順位:
-           1. pattern の個別住所
-           2. エリア設定の住所
-           3. 送り側は児童の自宅住所 (home_address)  ← Phase 20 */
-      const pickupLocation =
-        pattern?.pickup_location
-        || (pickupAreaLabel ? areaAddressMap.get(pickupAreaLabel) ?? null : null)
-        || null;
-      const dropoffLocation =
-        pattern?.dropoff_location
-        || (dropoffAreaLabel ? areaAddressMap.get(dropoffAreaLabel) ?? null : null)
-        || childHomeAddressMap.get(e.child_id)
-        || null;
+      /* Phase 28: 統一解決ヘルパー。pattern_id → mark → 時刻fallback → entry 直入力 の順で
+         エリア/時刻/住所を一括解決する。既存 entries（mark 未設定）でも児童マーク × 時刻で推論され、
+         テナント pickup_areas/dropoff_areas から time/address を拾える。 */
+      const spec = resolveEntryTransportSpec(e, {
+        child: childById.get(e.child_id),
+        childPatterns: patternsByChild.get(e.child_id) ?? [],
+        patternById,
+        pickupAreas,
+        dropoffAreas,
+      });
 
       /* Phase 26: pending の編集を表示に反映（未保存分を先に見せる） */
       const pending = pendingChanges.get(sid);
@@ -264,7 +238,8 @@ export default function TransportPage() {
       const dropoffEmpty = dropoffNeedsStaff && dropoffStaffIds.length === 0;
       const isUnassigned = pickupEmpty || dropoffEmpty;
 
-      /* Phase 27: pickup_time / dropoff_time の組合せが児童のパターンに登録済みか判定 */
+      /* Phase 27: pickup_time / dropoff_time の組合せが児童のパターンに登録済みか判定
+         （イレギュラー児童用の pattern 登録誘導バナー出し分けに使う） */
       const childPatterns = patternsByChild.get(e.child_id) ?? [];
       const pt = normTime(e.pickup_time);
       const dt = normTime(e.dropoff_time);
@@ -275,12 +250,12 @@ export default function TransportPage() {
       return {
         scheduleEntryId: sid,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
-        pickupTime: e.pickup_time,
-        dropoffTime: e.dropoff_time,
-        pickupLocation,
-        dropoffLocation,
-        pickupAreaLabel,
-        dropoffAreaLabel,
+        pickupTime: spec.pickup.time ?? e.pickup_time,
+        dropoffTime: spec.dropoff.time ?? e.dropoff_time,
+        pickupLocation: spec.pickup.location,
+        dropoffLocation: spec.dropoff.location,
+        pickupAreaLabel: spec.pickup.areaLabel,
+        dropoffAreaLabel: spec.dropoff.areaLabel,
         pickupStaffIds,
         dropoffStaffIds,
         isUnassigned,
@@ -290,8 +265,13 @@ export default function TransportPage() {
         isPatternRegistered,
       };
     });
-    /* Phase 27-A-2: 自動割当の並びに合わせ、pickup_time → dropoff_time → 児童名 で昇順 */
+    /* Phase 28: 児童管理の並び順（children.display_order）を最優先。
+       同一児童に複数 entry がある稀なケースは pickup_time → dropoff_time で安定ソート。
+       これで /schedule と /transport の児童順が完全に一致する。 */
     rows.sort((a, b) => {
+      const oa = childOrderById.get(entryById.get(a.scheduleEntryId)!.child_id) ?? Number.MAX_SAFE_INTEGER;
+      const ob = childOrderById.get(entryById.get(b.scheduleEntryId)!.child_id) ?? Number.MAX_SAFE_INTEGER;
+      if (oa !== ob) return oa - ob;
       const pa = a.pickupTime ?? '99:99';
       const pb = b.pickupTime ?? '99:99';
       if (pa !== pb) return pa < pb ? -1 : 1;
@@ -301,11 +281,41 @@ export default function TransportPage() {
       return a.childName.localeCompare(b.childName, 'ja');
     });
     return rows;
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, childHomeAddressMap, patterns, pickupAreas, dropoffAreas, pendingChanges]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, children, patterns, pickupAreas, dropoffAreas, pendingChanges]);
+
+  /**
+   * Phase 28 修正: 未割当は「現在の状態」から都度計算する。
+   * 旧実装は transport_assignments.is_unassigned（保存時フラグ）に依存しており、
+   * (a) pending 未保存の担当変更が反映されない
+   * (b) pickup_method='self' / dropoff_method='self' が後から変更された児童で
+   *     古いフラグが残り赤表示が続く
+   * (c) 対応する schedule_entry が削除された孤児 assignment を誤カウント
+   * という 3 つのバグを抱えていたため、エントリ × pending × method で再計算する。
+   */
+  const unassignedByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    const assignMap = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
+    for (const e of scheduleEntries) {
+      const assign = assignMap.get(e.id);
+      if (!assign) continue; /* まだ生成されていない日は未割当カウントに含めない */
+      const pending = pendingChanges.get(e.id);
+      const pickupIds = pending?.pickupStaffIds ?? assign.pickup_staff_ids ?? [];
+      const dropoffIds = pending?.dropoffStaffIds ?? assign.dropoff_staff_ids ?? [];
+      const pickupNeedsStaff = e.pickup_method !== 'self';
+      const dropoffNeedsStaff = e.dropoff_method !== 'self';
+      const isUnassigned =
+        (pickupNeedsStaff && pickupIds.length === 0) ||
+        (dropoffNeedsStaff && dropoffIds.length === 0);
+      if (isUnassigned) map.set(e.date, (map.get(e.date) ?? 0) + 1);
+    }
+    return map;
+  }, [scheduleEntries, transportAssignments, pendingChanges]);
 
   const unassignedTotal = useMemo(() => {
-    return transportAssignments.filter((t) => t.is_unassigned).length;
-  }, [transportAssignments]);
+    let total = 0;
+    for (const v of unassignedByDate.values()) total += v;
+    return total;
+  }, [unassignedByDate]);
 
   const confirmed = currentDayEntries.length > 0 && currentDayEntries.every((e) => e.isConfirmed);
   const generated = transportAssignments.length > 0;
@@ -319,6 +329,7 @@ export default function TransportPage() {
     const dropoffResult = new Map<string, string[]>();
     const dayEntries = scheduleEntries.filter((e) => e.date === selectedDate);
     const patternById = new Map(patterns.map((p) => [p.id, p]));
+    const childById = new Map(children.map((c) => [c.id, c]));
     const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
     for (const p of patterns) {
       const list = patternsByChild.get(p.child_id) ?? [];
@@ -334,11 +345,16 @@ export default function TransportPage() {
     };
 
     for (const entry of dayEntries) {
-      const pattern = resolvePattern(entry, patternsByChild, patternById);
-      const pickupArea = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
-      const dropoffArea = pattern?.dropoff_area_label ?? null;
-      const pickupEmoji = pickupArea ? pickupArea.trim().split(' ')[0] : null;
-      const dropoffEmoji = dropoffArea ? dropoffArea.trim().split(' ')[0] : null;
+      /* Phase 28: areaLabel 解決は統一ヘルパーで（mark → pattern → fallback の順） */
+      const spec = resolveEntryTransportSpec(entry, {
+        child: childById.get(entry.child_id),
+        childPatterns: patternsByChild.get(entry.child_id) ?? [],
+        patternById,
+        pickupAreas,
+        dropoffAreas,
+      });
+      const pickupEmoji = spec.pickup.areaLabel ? spec.pickup.areaLabel.trim().split(' ')[0] : null;
+      const dropoffEmoji = spec.dropoff.areaLabel ? spec.dropoff.areaLabel.trim().split(' ')[0] : null;
 
       const pending = pendingChanges.get(entry.id);
       const existing = transportAssignments.find((t) => t.schedule_entry_id === entry.id);
@@ -355,7 +371,7 @@ export default function TransportPage() {
       }
     }
     return { pickup: pickupResult, dropoff: dropoffResult };
-  }, [scheduleEntries, selectedDate, patterns, pendingChanges, transportAssignments]);
+  }, [scheduleEntries, selectedDate, patterns, children, pickupAreas, dropoffAreas, pendingChanges, transportAssignments]);
 
   /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す */
   const availableStaffForDay = useMemo(() => {
@@ -397,6 +413,12 @@ export default function TransportPage() {
             staff,
             shiftAssignments: shiftAssignments.filter((a) => a.date === date),
             minEndTime: transportMinEndTime,
+            /* Phase 28: マーク解決に必要な児童・テナントエリア */
+            children,
+            pickupAreas,
+            dropoffAreas,
+            /* Phase 28: 迎のクールダウン（分） */
+            pickupCooldownMinutes,
           }),
         });
         if (!genRes.ok) {
@@ -537,6 +559,30 @@ export default function TransportPage() {
     }
   };
 
+  /**
+   * Phase 28: 列並び替えをテナント設定に永続化。PATCH /api/tenant に他の既存設定も含めて送信。
+   * editor / admin のみ許可（viewer は UI 側で draggable=false）。失敗時は state を元に戻す。
+   */
+  const handleColumnReorder = async (next: TransportColumnKey[]) => {
+    if (myRole !== 'admin' && myRole !== 'editor') return;
+    const prev = columnOrder;
+    setColumnOrder(next); /* 楽観更新 */
+    try {
+      /* 専用エンドポイント: editor も許可、他の settings を壊さず transport_column_order のみ更新 */
+      const res = await fetch('/api/tenant/transport-column-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: next }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '列順の保存に失敗しました');
+      /* ローカルの tenantSettings キャッシュも追随 */
+      setTenantSettings((s) => ({ ...(s ?? {}), transport_column_order: next }));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '列順の保存に失敗');
+      setColumnOrder(prev);
+    }
+  };
+
   /** 当日の pending 件数（ボタン表示・ガード判定用） */
   const pendingCountForDay = useMemo(() => {
     const ids = new Set(scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id));
@@ -582,7 +628,7 @@ export default function TransportPage() {
     <>
       <Header title="送迎表" showMonthSelector />
 
-      <div className="p-6 overflow-y-auto">
+      <div className="px-2 py-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>{year}年{month}月</h2>
@@ -616,15 +662,16 @@ export default function TransportPage() {
 
         {loading ? (
           <div className="py-20 text-center text-sm" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
-        ) : generated ? (
+        ) : (
           <>
+            {/* Phase 28: 日付タブは当月の全営業日を常時表示。
+                利用予定/割当の有無に関わらず全日切替可能にし、
+                各タブに「利用N / 割当M / 未割当赤」をラベル表示 */}
             <div className="flex gap-1 overflow-x-auto pb-2 mb-4" style={{ scrollbarWidth: 'thin' }}>
               {workDays.map((date) => {
-                const dayAssigns = transportAssignments.filter((t) => {
-                  const entry = scheduleEntries.find((e) => e.id === t.schedule_entry_id);
-                  return entry?.date === date;
-                });
-                const hasUnassigned = dayAssigns.some((t) => t.is_unassigned);
+                const dayEntries = scheduleEntries.filter((e) => e.date === date);
+                const hasUnassigned = (unassignedByDate.get(date) ?? 0) > 0;
+                const isEmpty = dayEntries.length === 0;
                 const isSelected = date === selectedDate;
                 return (
                   <button
@@ -632,19 +679,52 @@ export default function TransportPage() {
                     onClick={() => handleSelectDate(date)}
                     className="px-3 py-2 text-xs font-semibold whitespace-nowrap rounded-md transition-all shrink-0"
                     style={{
-                      background: isSelected ? 'var(--accent)' : hasUnassigned ? 'var(--red-pale)' : 'var(--white)',
-                      color: isSelected ? '#fff' : hasUnassigned ? 'var(--red)' : 'var(--ink-2)',
-                      border: `1px solid ${isSelected ? 'var(--accent)' : hasUnassigned ? 'rgba(155,51,51,0.2)' : 'var(--rule)'}`,
+                      background: isSelected
+                        ? 'var(--accent)'
+                        : hasUnassigned
+                        ? 'var(--red-pale)'
+                        : isEmpty
+                        ? 'var(--bg)'
+                        : 'var(--white)',
+                      color: isSelected
+                        ? '#fff'
+                        : hasUnassigned
+                        ? 'var(--red)'
+                        : isEmpty
+                        ? 'var(--ink-3)'
+                        : 'var(--ink-2)',
+                      border: `1px solid ${
+                        isSelected
+                          ? 'var(--accent)'
+                          : hasUnassigned
+                          ? 'rgba(155,51,51,0.2)'
+                          : 'var(--rule)'
+                      }`,
+                      opacity: isEmpty && !isSelected ? 0.7 : 1,
                     }}
                   >
                     {format(new Date(date), 'M/d（E）', { locale: ja })}
-                    {dayAssigns.length > 0 && (
-                      <span className="ml-1 opacity-70">{dayAssigns.length}名</span>
+                    {dayEntries.length > 0 && (
+                      <span className="ml-1 opacity-70">{dayEntries.length}名</span>
                     )}
                   </button>
                 );
               })}
             </div>
+
+            {!generated && scheduleEntries.length > 0 && (
+              <div
+                className="mb-4 px-4 py-3 rounded"
+                style={{
+                  background: 'var(--bg)',
+                  border: '1px solid var(--rule)',
+                  color: 'var(--ink-3)',
+                  fontSize: '0.85rem',
+                }}
+              >
+                送迎担当が未生成です。上部「割り当て生成」で自動割り当て、または下のドロップダウンで手動割当できます。
+              </div>
+            )}
 
             <TransportDayView
               children={currentDayEntries.map((e) => ({
@@ -678,6 +758,11 @@ export default function TransportPage() {
                 }
               }}
               disabled={confirmed}
+              /* Phase 28: 列の並び順（テナント設定） + 並び替え保存コールバック */
+              columnOrder={columnOrder}
+              onColumnReorder={
+                myRole === 'admin' || myRole === 'editor' ? handleColumnReorder : undefined
+              }
             />
 
             {/* Phase 26: 日ごとの保存ボタン */}
@@ -700,23 +785,6 @@ export default function TransportPage() {
               </Button>
             </div>
           </>
-        ) : (
-          <div
-            className="flex flex-col items-center justify-center py-20"
-            style={{ background: 'var(--white)', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
-          >
-            <p className="text-base font-medium mb-2" style={{ color: 'var(--ink-2)' }}>送迎担当が未生成です</p>
-            <p className="text-sm mb-6" style={{ color: 'var(--ink-3)' }}>
-              確定済みシフトと利用予定を元に送迎担当を自動割り当てします
-            </p>
-            <Button
-              variant="app-card-cta"
-              onClick={handleGenerate}
-              disabled={scheduleEntries.length === 0 || staff.length === 0}
-            >
-              割り当て生成
-            </Button>
-          </div>
         )}
       </div>
     </>

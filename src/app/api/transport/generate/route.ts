@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateTransportAssignments } from '@/lib/logic/generateTransport';
 import { requireRole } from '@/lib/auth/requireRole';
-import type { StaffRow, ShiftAssignmentRow, ScheduleEntryRow, ChildTransportPatternRow } from '@/types';
+import type { StaffRow, ShiftAssignmentRow, ScheduleEntryRow, ChildTransportPatternRow, ChildRow, AreaLabel } from '@/types';
 
 /**
  * POST /api/transport/generate
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { date, scheduleEntries, patterns, staff, shiftAssignments, minEndTime } = body as {
+    const { date, scheduleEntries, patterns, staff, shiftAssignments, minEndTime, children, pickupAreas, dropoffAreas, pickupCooldownMinutes } = body as {
       date: string;
       scheduleEntries: ScheduleEntryRow[];
       patterns: ChildTransportPatternRow[];
@@ -24,6 +24,12 @@ export async function POST(request: NextRequest) {
       shiftAssignments: ShiftAssignmentRow[];
       /** Phase 26: 送迎候補の最低退勤時間 "HH:MM" */
       minEndTime?: string;
+      /** Phase 28: マーク解決に使う児童・テナントエリア */
+      children?: ChildRow[];
+      pickupAreas?: AreaLabel[];
+      dropoffAreas?: AreaLabel[];
+      /** Phase 28: 迎のクールダウン（分） */
+      pickupCooldownMinutes?: number;
     };
 
     if (!date) {
@@ -38,6 +44,10 @@ export async function POST(request: NextRequest) {
       staff: staff || [],
       shiftAssignments: shiftAssignments || [],
       minEndTime,
+      children: children || [],
+      pickupAreas: pickupAreas || [],
+      dropoffAreas: dropoffAreas || [],
+      pickupCooldownMinutes,
     });
 
     return NextResponse.json({

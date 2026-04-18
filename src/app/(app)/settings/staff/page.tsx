@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -21,6 +21,166 @@ import type {
 
 const ROLE_LABELS: Record<StaffRole, string> = { admin: '管理者', editor: '編集者', viewer: '閲覧者' };
 const EMPLOYMENT_LABELS: Record<EmploymentType, string> = { full_time: '常勤', part_time: 'パート' };
+
+/**
+ * Phase 28: 対応エリアをコンパクトなサマリーで表示し、ホバー時のみ詳細ポップオーバーで全一覧を出す。
+ * 一覧ページのノイズを大幅に減らすためのもの。モバイル（タッチ）では onClick でも開くようにしておく。
+ */
+function TransportAreasPopover({
+  pickup,
+  dropoff,
+}: {
+  pickup: string[];
+  dropoff: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  /* Phase 28 fix: 親の overflow:auto に切られないよう position:fixed で描画。
+     下端見切れを防ぐため、画面下部に近いときは自動でボタン上に反転配置する。 */
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  /** ポップオーバー想定高さ（行数で概算）。計算で下スペース判定に使う */
+  const estimatedHeight = 40 /* padding/タイトル */
+    + (pickup.length > 0 ? 28 + pickup.length * 34 : 0)
+    + (dropoff.length > 0 ? 28 + dropoff.length * 34 : 0);
+
+  const updateCoords = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const POPOVER_WIDTH = 220;
+    const left = Math.min(Math.max(rect.left, 8), window.innerWidth - POPOVER_WIDTH - 8);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    /* 下に収まらない かつ 上の方が広い → 上に反転 */
+    if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+      setCoords({ bottom: window.innerHeight - rect.top + 4, left });
+    } else {
+      setCoords({ top: rect.bottom + 4, left });
+    }
+  };
+
+  const handleOpen = () => {
+    updateCoords();
+    setOpen(true);
+  };
+  const handleClose = () => setOpen(false);
+
+  /* スクロール/リサイズ時は追従させるより閉じたほうが挙動が安定 */
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
+  const totalCount = pickup.length + dropoff.length;
+  if (totalCount === 0) {
+    return <span style={{ color: 'var(--ink-3)' }}>-</span>;
+  }
+
+  /** 編集モーダルと同じ「方向別パネル（パレ背景 + 縦積みボタン風セル）」デザイン */
+  const renderSection = (direction: 'pickup' | 'dropoff', items: string[]) => {
+    if (items.length === 0) return null;
+    const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+    const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
+    const label = direction === 'pickup' ? '迎対応' : '送り対応';
+    return (
+      <div
+        className="flex flex-col gap-1.5 rounded-md p-2"
+        style={{ border: '1px solid var(--rule)', background: palVar }}
+      >
+        <span className="text-[0.65rem] font-bold" style={{ color: accentVar }}>{label}</span>
+        <div className="flex flex-col gap-1">
+          {items.map((a, idx) => (
+            <span
+              key={`${direction}-${idx}-${a}`}
+              className="rounded-md"
+              style={{
+                padding: '5px 10px',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                background: 'var(--white)',
+                color: accentVar,
+                border: `1px solid ${accentVar}`,
+              }}
+            >
+              {a}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={handleOpen}
+      onMouseLeave={handleClose}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => (open ? handleClose() : handleOpen())}
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors"
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--rule)',
+          fontSize: '0.7rem',
+          color: 'var(--ink-2)',
+          fontWeight: 500,
+        }}
+        aria-expanded={open}
+        aria-haspopup="true"
+      >
+        {pickup.length > 0 && (
+          <span className="inline-flex items-center gap-0.5" style={{ color: 'var(--accent)' }}>
+            <span className="font-bold">迎</span>
+            <span>{pickup.length}</span>
+          </span>
+        )}
+        {pickup.length > 0 && dropoff.length > 0 && (
+          <span style={{ color: 'var(--rule-strong)' }}>/</span>
+        )}
+        {dropoff.length > 0 && (
+          <span className="inline-flex items-center gap-0.5" style={{ color: 'var(--green)' }}>
+            <span className="font-bold">送</span>
+            <span>{dropoff.length}</span>
+          </span>
+        )}
+        <span aria-hidden style={{ color: 'var(--ink-3)', fontSize: '0.65rem' }}>ⓘ</span>
+      </button>
+      {open && coords && (
+        <div
+          role="tooltip"
+          className="flex flex-col gap-2"
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            bottom: coords.bottom,
+            left: coords.left,
+            zIndex: 1000,
+            background: 'var(--white)',
+            border: '1px solid var(--rule-strong)',
+            borderRadius: '8px',
+            padding: '10px',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+            width: '220px',
+            maxHeight: '70vh',
+            overflowY: 'auto',
+          }}
+        >
+          {renderSection('pickup', pickup)}
+          {renderSection('dropoff', dropoff)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type EditableStaff = Omit<StaffRow, 'tenant_id' | 'user_id' | 'created_at'> & { isNew?: boolean };
 
@@ -465,60 +625,13 @@ export default function StaffSettingsPage() {
                   <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
                     {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
                   </td>
-                  {/* Phase 27-D+G: 迎/送をチップで分離表示。新カラム空時は旧 transport_areas にフォールバック */}
+                  {/* Phase 28: チップ全展開を辞め、サマリー + ホバーでポップオーバー詳細に変更。
+                      旧 transport_areas は新カラム空時のフォールバックとして使用 */}
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                     {(() => {
                       const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
                       const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
-                      if (pickup.length === 0 && dropoff.length === 0) {
-                        return <span style={{ color: 'var(--ink-3)' }}>-</span>;
-                      }
-                      return (
-                        <div className="flex flex-col gap-1">
-                          {pickup.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-[0.65rem] font-bold" style={{ color: 'var(--accent)', minWidth: '1.3em' }}>迎</span>
-                              {pickup.map((a, idx) => (
-                                <span
-                                  key={`p-${idx}-${a}`}
-                                  className="inline-flex items-center rounded-lg whitespace-nowrap"
-                                  style={{
-                                    padding: '2px 8px',
-                                    fontSize: '0.7rem',
-                                    background: 'var(--accent-pale)',
-                                    color: 'var(--accent)',
-                                    border: '1px solid var(--accent)',
-                                    fontWeight: 500,
-                                  }}
-                                >
-                                  {a}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {dropoff.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-[0.65rem] font-bold" style={{ color: 'var(--green)', minWidth: '1.3em' }}>送</span>
-                              {dropoff.map((a, idx) => (
-                                <span
-                                  key={`d-${idx}-${a}`}
-                                  className="inline-flex items-center rounded-lg whitespace-nowrap"
-                                  style={{
-                                    padding: '2px 8px',
-                                    fontSize: '0.7rem',
-                                    background: 'var(--green-pale)',
-                                    color: 'var(--green)',
-                                    border: '1px solid var(--green)',
-                                    fontWeight: 500,
-                                  }}
-                                >
-                                  {a}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
+                      return <TransportAreasPopover pickup={pickup} dropoff={dropoff} />;
                     })()}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
@@ -610,41 +723,14 @@ export default function StaffSettingsPage() {
                 {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
               </div>
 
-              {/* Phase 27-D+G: モバイル行の対応エリアも迎/送チップで表示 */}
+              {/* Phase 28: モバイルも共通ポップオーバー UI に統一 */}
               {(() => {
                 const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
                 const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
                 if (pickup.length === 0 && dropoff.length === 0) return null;
                 return (
-                  <div className="flex flex-col gap-1 mb-1">
-                    {pickup.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[0.65rem] font-bold" style={{ color: 'var(--accent)' }}>迎</span>
-                        {pickup.map((a, idx) => (
-                          <span
-                            key={`p-${idx}-${a}`}
-                            className="inline-flex items-center rounded-lg whitespace-nowrap"
-                            style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: 500 }}
-                          >
-                            {a}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {dropoff.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[0.65rem] font-bold" style={{ color: 'var(--green)' }}>送</span>
-                        {dropoff.map((a, idx) => (
-                          <span
-                            key={`d-${idx}-${a}`}
-                            className="inline-flex items-center rounded-lg whitespace-nowrap"
-                            style={{ padding: '2px 8px', fontSize: '0.7rem', background: 'var(--green-pale)', color: 'var(--green)', border: '1px solid var(--green)', fontWeight: 500 }}
-                          >
-                            {a}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                  <div className="mb-1">
+                    <TransportAreasPopover pickup={pickup} dropoff={dropoff} />
                   </div>
                 );
               })()}
