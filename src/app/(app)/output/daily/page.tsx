@@ -310,6 +310,9 @@ export default function DailyOutputPage() {
                 background: #fff !important;
                 height: auto !important;
                 overflow: visible !important;
+                /* モバイル印刷対策: 狭いビューポートのときだけ 1100px まで広げる。
+                   PC は通常これ以上の幅があるため no-op。 */
+                min-width: 1100px !important;
               }
               /* AppShell や layout が灰色 (var(--bg)) を当てている要素をすべて白に強制 */
               [style*="var(--bg)"],
