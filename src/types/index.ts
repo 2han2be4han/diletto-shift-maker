@@ -151,30 +151,6 @@ export type ChildRow = {
   created_at: string;
 };
 
-// ----- 児童の送迎パターン -----
-export type PickupMethod = 'pickup' | 'self' | 'parent';
-export type DropoffMethod = 'dropoff' | 'self' | 'parent';
-
-export type ChildTransportPatternRow = {
-  id: string;
-  child_id: string;
-  tenant_id: string;
-  pattern_name: string;
-  pickup_location: string | null;
-  pickup_time: string | null;
-  pickup_method: PickupMethod;
-  dropoff_location: string | null;
-  dropoff_time: string | null;
-  dropoff_method: DropoffMethod;
-  /** 旧: パターン全体に1つのエリア。後方互換のため残す */
-  area_label: string | null;
-  /** 迎のエリア（emoji + name 形式） */
-  pickup_area_label: string | null;
-  /** 送のエリア（emoji + name 形式） */
-  dropoff_area_label: string | null;
-  created_at: string;
-};
-
 // ----- 利用予定 -----
 export type ScheduleEntryPickupMethod = 'pickup' | 'self';
 export type ScheduleEntryDropoffMethod = 'dropoff' | 'self';
@@ -190,10 +166,9 @@ export type ScheduleEntryRow = {
   pickup_method: ScheduleEntryPickupMethod;
   /** Phase 24: 'dropoff'=送り, 'self'=自分で帰る */
   dropoff_method: ScheduleEntryDropoffMethod;
-  pattern_id: string | null;
-  /** Phase 28: お迎えマーク（emoji+name）。pattern_id が無い場合、テナント pickup_areas から time/address を解決するキー。 */
+  /** Phase 28: お迎えマーク（emoji+name）。テナント pickup_areas から time/address を解決するキー。 */
   pickup_mark: string | null;
-  /** Phase 28: お送りマーク（emoji+name）。pattern_id が無い場合、テナント dropoff_areas から time/address を解決するキー。 */
+  /** Phase 28: お送りマーク（emoji+name）。テナント dropoff_areas から time/address を解決するキー。 */
   dropoff_mark: string | null;
   is_confirmed: boolean;
   /** Phase 25: 出欠ステータス。planned=予定／present=出席／absent=欠席／late=遅刻／early_leave=早退 */
@@ -330,9 +305,6 @@ export type ParsedScheduleEntry = {
   /** Phase 24: Excel貼付で「迎/送」ラベル無しは self 扱い（任意、未設定は pickup/dropoff 扱い） */
   pickup_method?: ScheduleEntryPickupMethod;
   dropoff_method?: ScheduleEntryDropoffMethod;
-  /** Phase 27-A-1: PDF import の pattern selector。確認画面で初期選択される（時刻一致 → 過去最頻 → 最初の1件 → null）。
-   *  null は明示的に「該当なし」を選んだ状態 */
-  pattern_id?: string | null;
   /** Phase 28: 児童のマーク × 解析時刻から自動推論されるお迎えマーク（emoji+name）。
    *  確認画面で手動変更可能。null = 該当なし、undefined = 未推論。 */
   pickup_mark?: string | null;

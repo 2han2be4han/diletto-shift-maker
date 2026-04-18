@@ -1,24 +1,20 @@
 import type {
   ScheduleEntryRow,
-  ChildTransportPatternRow,
   ChildRow,
   AreaLabel,
 } from '@/types';
 
 /**
- * Phase 28: 送迎仕様の統一解決
+ * Phase 29: 送迎仕様の解決（マーク一本化）
  *
  * schedule_entry から送迎に必要な情報（エリアラベル・時刻・場所）を
  * 迎/送それぞれで解決する。解決順:
- *   (a) pattern_id が有効 → その pattern の値（従来どおり、イレギュラー児童用）
- *   (b) pickup_mark / dropoff_mark が有効 → テナント pickup_areas / dropoff_areas から
- *       time / address / areaLabel を解決（本フェーズの主役）
- *   (c) 児童パターンからの推定（時刻一致フォールバック。旧 resolvePattern 互換）
- *   (d) entry 側の pickup_time / dropoff_time と住所フォールバック（最終手段）
+ *   (a) pickup_mark / dropoff_mark が有効 → テナント pickup_areas / dropoff_areas
+ *       または児童専用 custom_pickup_areas / custom_dropoff_areas から time / address / areaLabel を解決
+ *   (b) マーク未設定なら児童の pickup_area_labels / dropoff_area_labels 候補 × entry の時刻から推論
+ *   (c) entry 側の pickup_time / dropoff_time と住所フォールバック（最終手段）
  *
- * この関数は送迎生成ロジック（generateTransport）と送迎表 UI
- * （transport/page.tsx）の両方で使い、既存 entries（pattern_id / mark が
- * 未設定でも）に遡って「児童マーク × テナントエリア」で解決できるようにする。
+ * 送り側の location は最終フォールバックとして児童の home_address を使う。
  */
 
 export type TransportSpec = {
@@ -48,7 +44,7 @@ function findArea(areas: AreaLabel[], label: string | null): AreaLabel | undefin
 }
 
 /**
- * Phase 28 A案: テナント共通エリア + 児童専用エリアをマージ。
+ * テナント共通エリア + 児童専用エリアをマージ。
  * 同じ emoji+name は児童専用側を優先（time/address の上書き）。
  * custom 側の time/address が undefined の場合は tenant 側の値を維持する。
  */
@@ -130,32 +126,22 @@ export function inferMarkFromTime(
 
 /**
  * schedule_entry を送迎仕様に解決。
- *
- * @param entry 対象の schedule_entry
- * @param params 解決に必要な参照データ一式
  */
 export function resolveEntryTransportSpec(
   entry: ScheduleEntryRow,
   params: {
     child: ChildRow | undefined;
-    /** 該当児童の child_transport_patterns（全件） */
-    childPatterns: ChildTransportPatternRow[];
-    /** pattern_id → row の高速検索用 */
-    patternById: Map<string, ChildTransportPatternRow>;
     pickupAreas: AreaLabel[];
     dropoffAreas: AreaLabel[];
   },
 ): ResolvedTransport {
-  const { child, childPatterns, patternById } = params;
+  const { child } = params;
 
-  /* Phase 28 A案: 児童専用エリアを tenant に合流してから解決に使う */
+  /* 児童専用エリアを tenant に合流してから解決に使う */
   const pickupAreas = mergeAreas(params.pickupAreas, child?.custom_pickup_areas);
   const dropoffAreas = mergeAreas(params.dropoffAreas, child?.custom_dropoff_areas);
 
-  /* (a) pattern_id 優先 */
-  const patternFromId = entry.pattern_id ? patternById.get(entry.pattern_id) : undefined;
-
-  /* (b) mark 解決: entry.pickup_mark / dropoff_mark を最優先、無ければ児童マーク × 時刻から推論 */
+  /* mark 解決: entry.pickup_mark / dropoff_mark を最優先、無ければ児童マーク × 時刻から推論 */
   const pickupMark =
     entry.pickup_mark
     ?? inferMarkFromTime(child?.pickup_area_labels, pickupAreas, entry.pickup_time);
@@ -163,67 +149,28 @@ export function resolveEntryTransportSpec(
     entry.dropoff_mark
     ?? inferMarkFromTime(child?.dropoff_area_labels, dropoffAreas, entry.dropoff_time);
 
-  /* (c) 時刻一致フォールバック（旧 resolvePattern 互換。pattern_id 未設定 & マーク解決もできないとき） */
-  const resolvePatternByTime = (): ChildTransportPatternRow | undefined => {
-    if (childPatterns.length === 0) return undefined;
-    const pt = normTime(entry.pickup_time);
-    const dt = normTime(entry.dropoff_time);
-    const exact = childPatterns.find(
-      (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
-    );
-    if (exact) return exact;
-    const byPickup = childPatterns.find((p) => pt && normTime(p.pickup_time) === pt);
-    if (byPickup) return byPickup;
-    const byDropoff = childPatterns.find((p) => dt && normTime(p.dropoff_time) === dt);
-    if (byDropoff) return byDropoff;
-    return childPatterns[0];
-  };
-
-  /* 各方向ごとに具体的な値を組み立てる。
-     Phase 28 fix: 時刻は **entry.pickup_time / dropoff_time を最優先**。
-     pattern/mark は areaLabel と location のソースで、時刻は entry に
-     明示値がないときのフォールバックに限る。これにより /schedule と
-     /transport の表示時刻が必ず一致する。 */
-  const resolveDirection = (
-    direction: 'pickup' | 'dropoff',
-  ): TransportSpec => {
+  const resolveDirection = (direction: 'pickup' | 'dropoff'): TransportSpec => {
     const areas = direction === 'pickup' ? pickupAreas : dropoffAreas;
     const mark = direction === 'pickup' ? pickupMark : dropoffMark;
-    const pattern = patternFromId ?? resolvePatternByTime();
+    const entryTime = normTime(direction === 'pickup' ? entry.pickup_time : entry.dropoff_time);
+    const area = mark ? findArea(areas, mark) : undefined;
+    const markTime = area?.time ?? null;
+    const markAddr = area?.address ?? null;
 
     if (direction === 'pickup') {
-      const entryTime = normTime(entry.pickup_time);
-      const patternLoc = pattern?.pickup_location ?? null;
-      const patternArea = pattern?.pickup_area_label ?? pattern?.area_label ?? null;
-      const patternTime = pattern?.pickup_time ?? null;
-
-      const area = mark ? findArea(areas, mark) : undefined;
-      const markTime = area?.time ?? null;
-      const markAddr = area?.address ?? null;
-
       return {
-        areaLabel: patternArea ?? mark ?? null,
-        /* entry 優先。entry に時刻が無いときだけ pattern→mark にフォールバック */
-        time: entryTime ?? patternTime ?? markTime,
-        location: patternLoc ?? markAddr ?? null,
-      };
-    } else {
-      const entryTime = normTime(entry.dropoff_time);
-      const patternLoc = pattern?.dropoff_location ?? null;
-      const patternArea = pattern?.dropoff_area_label ?? null;
-      const patternTime = pattern?.dropoff_time ?? null;
-
-      const area = mark ? findArea(areas, mark) : undefined;
-      const markTime = area?.time ?? null;
-      const markAddr = area?.address ?? null;
-
-      return {
-        areaLabel: patternArea ?? mark ?? null,
-        time: entryTime ?? patternTime ?? markTime,
-        /* 送り側は最終フォールバックに児童の自宅住所を使う（Phase 20 互換） */
-        location: patternLoc ?? markAddr ?? child?.home_address ?? null,
+        areaLabel: mark ?? null,
+        /* entry 優先。entry に時刻が無いときは mark の基準時刻にフォールバック */
+        time: entryTime ?? markTime,
+        location: markAddr,
       };
     }
+    return {
+      areaLabel: mark ?? null,
+      time: entryTime ?? markTime,
+      /* 送り側は最終フォールバックに児童の自宅住所を使う */
+      location: markAddr ?? child?.home_address ?? null,
+    };
   };
 
   return {

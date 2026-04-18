@@ -554,9 +554,9 @@
             <tr><td>28-7</td><td>PDF インポートで mark 自動マッチング: 児童の pickup_area_labels と解析 pickup_time からテナント pickup_areas の time で一致マーク推論（送も同様）。schedule/page.tsx で tenant 設定を取得し modal へ渡す。handleBulkImport で pickup_mark/dropoff_mark を POST に含める</td><td>src/components/schedule/PdfImportModal.tsx, src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>pattern_id とマークは並列保存（送迎表では pattern_id を優先、両方無ければ mark で解決）</td></tr>
             <tr><td>28-8</td><td>PdfConfirmTable に 迎マーク / 送マーク の 2 列追加。児童管理で選んだマークだけを選択肢に出す。「—」で該当なし</td><td>src/components/schedule/PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td>児童マーク未登録 → 「（児童に未登録）」、テナント未設定 → 「（テナント未設定）」で区別</td></tr>
             <tr><td>28-9</td><td>settings/children: マーク選択 UI を主役に昇格（既存）。パターン登録セクションは「イレギュラー用」として折りたたみ default 閉じに格下げ。?child=X 深リンクで自動モーダル展開</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存 pattern 持ち or #pattern-new anchor で自動展開</td></tr>
-            <tr><td>28-10</td><td>npm run dev で動作確認: (1) 新規 PDF → マークだけで生成 / (2) 既存 pattern_id 付き entries で振る舞い変化なし / (3) mark も pattern も無い entries は entry.pickup_time fallback</td><td>（横断）</td><td class="status-todo">未着手</td><td>0%</td><td>異常系: tenant pickup_areas が空のテナントで mark 付き entry → unassigned に落ちること</td></tr>
-            <tr><td>28-11</td><td>docs/reference-map.md 更新（schedule_entries マーク列・helper・使用箇所）</td><td>docs/reference-map.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>28-12</td><td>docs/error-log.md 発生時に記録</td><td>docs/error-log.md</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>28-10</td><td>npm run dev で動作確認: (1) 新規 PDF → マークだけで生成 / (2) 既存 pattern_id 付き entries で振る舞い変化なし / (3) mark も pattern も無い entries は entry.pickup_time fallback</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>異常系: tenant pickup_areas が空のテナントで mark 付き entry → unassigned に落ちること</td></tr>
+            <tr><td>28-11</td><td>docs/reference-map.md 更新（schedule_entries マーク列・helper・使用箇所）</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>28-12</td><td>docs/error-log.md 発生時に記録</td><td>docs/error-log.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>28-13</td><td>送迎自動割当: エリア未解決（pattern も mark も無い児童）は候補外 → is_unassigned=true のまま。手動割当を強制</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>pickup_method='self' は従来どおり担当不要</td></tr>
             <tr><td>28-14</td><td>送迎自動割当: 1 送迎に付ける自動担当人数を 1 名に固定（定数 AUTO_ASSIGN_STAFF_COUNT）。2 名目は手動追加のみ</td><td>src/lib/logic/generateTransport.ts, src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>テナント設定化は複雑化のため採用せず 1 名固定</td></tr>
             <tr><td>28-15</td><td>送迎自動割当: 迎のクールダウン機能（デフォルト 45 分、テナント設定 transport_pickup_cooldown_minutes で変更可）。同職員が cooldown 内に迎を再担当しないよう pickup_time 昇順で処理 + lastPickupMinByStaff 追跡</td><td>src/lib/logic/generateTransport.ts, src/types/index.ts, src/app/api/transport/generate/route.ts, src/app/(app)/transport/page.tsx, src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>送りには非適用。手動編集は制約対象外</td></tr>
@@ -574,6 +574,35 @@
     </table>
     <p style="font-size:0.85rem;color:#555;margin-top:8px;">
         <strong>スコープ外（別タスク）</strong>: viewer ロール編集ガード / /output/daily レイアウト再設計。
+    </p>
+
+    <div class="phase-head">Phase 29: 送迎パターン（旧③）完全撤去（2026-04-18 着手）</div>
+    <p style="font-size:0.9rem;">
+        ユーザー判断で、children 設定の「送迎パターン登録」を UI・API・ロジック・DB すべてから撤去。Phase 28 で主役化した「マーク × テナント/児童専用エリア」に一本化する。既存 58 件のパターンは、ユーザーが手動で④（custom_pickup_areas/custom_dropoff_areas）に再登録する。schedule_entries.pattern_id は全行 NULL を確認済み（0 件）。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>29-1</td><td>フロント: children/page.tsx の ③ セクション・patterns 配線撤去</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>patternSectionOpen, emptyPattern, save 処理含む</td></tr>
+            <tr><td>29-2</td><td>フロント: transport/page.tsx の patterns 取得・受け渡し撤去</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>未登録パターン誘導バナーも削除</td></tr>
+            <tr><td>29-3</td><td>フロント: schedule/PdfImportModal/PdfConfirmTable/output の pattern_id 配線撤去</td><td>src/app/(app)/schedule/page.tsx, components/schedule/*</td><td class="status-done">完了</td><td>100%</td><td>PDF import selector は mark のみに</td></tr>
+            <tr><td>29-4</td><td>API: /api/children/[id]/patterns ルート削除</td><td>src/app/api/children/[id]/patterns/route.ts</td><td class="status-done">完了</td><td>100%</td><td>ファイルごと削除</td></tr>
+            <tr><td>29-5</td><td>API: /api/children, transport/generate, schedule-entries, output/daily/pdf から patterns 参照撤去</td><td>src/app/api/**</td><td class="status-done">完了</td><td>100%</td><td>各 API の patterns 引数削除</td></tr>
+            <tr><td>29-6</td><td>ロジック: resolveTransportSpec の (a)(c) 分岐撤去・mark 一本化</td><td>src/lib/logic/resolveTransportSpec.ts</td><td class="status-done">完了</td><td>100%</td><td>patternFromId / resolvePatternByTime 削除</td></tr>
+            <tr><td>29-7</td><td>ロジック: generateTransport から patterns 引数削除</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>patternsByChild / patternMap 削除</td></tr>
+            <tr><td>29-8</td><td>types: ChildTransportPatternRow / pattern_id 削除</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>参照している全箇所も更新</td></tr>
+            <tr><td>29-9</td><td>migration: schedule_entries.pattern_id 削除 + child_transport_patterns DROP</td><td>supabase/migrations/0029_remove_child_transport_patterns.sql</td><td class="status-done">完了</td><td>100%</td><td>FK 参照は 0 件確認済み</td></tr>
+            <tr><td>29-10</td><td>ドキュメント更新（reference-map, CLAUDE.md, SPEC）</td><td>docs/reference-map.md, CLAUDE.md, SPEC_ShiftPuzzle.md</td><td class="status-done">完了</td><td>100%</td><td>child_transport_patterns 記述を削除</td></tr>
+            <tr><td>29-11</td><td>npm run dev で動作確認（児童設定・送迎表・PDF import）</td><td>-</td><td class="status-done">完了</td><td>100%</td><td>型エラーなし / 画面崩れなし</td></tr>
+        </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+        <strong>整合性チェック</strong>: (1) 型削除後に tsc でビルド通るか、(2) /transport で pattern_id=NULL のため child のマーク×時刻推論のみで表示されるか、(3) DROP 後も送迎生成が例外なく動くか。
+    </p>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+        <strong>データ移行</strong>: ユーザー自身で 19 名の旧③登録を④に手動移行（軽微な件数のため確認も兼ねる）。
     </p>
 
     <h2>判断保留 / ユーザー確認事項</h2>

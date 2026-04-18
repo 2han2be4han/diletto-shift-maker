@@ -34,12 +34,7 @@ export async function GET() {
     .order('created_at', { ascending: true });
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
 
-  const { data: patterns, error: pErr } = await supabase
-    .from('child_transport_patterns')
-    .select('*');
-  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
-
-  return NextResponse.json({ children, patterns });
+  return NextResponse.json({ children });
 }
 
 export async function POST(request: NextRequest) {

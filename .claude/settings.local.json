@@ -43,7 +43,11 @@
       "Bash(gh run *)",
       "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__list_teams",
       "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__list_projects",
-      "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__list_deployments"
+      "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__list_deployments",
+      "Bash(echo \"---exit=$?---\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/settings/children)",
+      "Bash(npx eslint *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/transport)"
     ]
   }
 }

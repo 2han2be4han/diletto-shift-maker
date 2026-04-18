@@ -2,13 +2,11 @@ import type {
   StaffRow,
   ShiftAssignmentRow,
   ScheduleEntryRow,
-  ChildTransportPatternRow,
   TransportAssignmentRow,
   ChildRow,
   AreaLabel,
 } from '@/types';
 import {
-  TRANSPORT_GROUP_TIME_WINDOW_MINUTES,
   DEFAULT_TRANSPORT_MIN_END_TIME,
   AUTO_ASSIGN_STAFF_COUNT,
   DEFAULT_PICKUP_COOLDOWN_MINUTES,
@@ -37,16 +35,15 @@ type GenerateTransportInput = {
   tenantId: string;
   date: string;
   scheduleEntries: ScheduleEntryRow[];
-  patterns: ChildTransportPatternRow[];
   staff: StaffRow[];
   shiftAssignments: ShiftAssignmentRow[];
   /** Phase 26: この時刻以降に退勤する職員のみ候補。"HH:MM"。省略時 "16:31" */
   minEndTime?: string;
-  /** Phase 28: マーク解決に使う児童情報。未指定なら pattern_id / 時刻 fallback のみ。 */
+  /** マーク解決に使う児童情報 */
   children?: ChildRow[];
-  /** Phase 28: テナント pickup_areas。マーク → time/address 解決に使用。 */
+  /** テナント pickup_areas。マーク → time/address 解決に使用。 */
   pickupAreas?: AreaLabel[];
-  /** Phase 28: テナント dropoff_areas。マーク → time/address 解決に使用。 */
+  /** テナント dropoff_areas。マーク → time/address 解決に使用。 */
   dropoffAreas?: AreaLabel[];
   /** Phase 28: 迎え連続担当禁止時間（分）。ある職員が pickup 担当後、この分数内は同職員を候補から除外。
       未指定はデフォルト 45 分。送り側には適用しない。 */
@@ -61,20 +58,13 @@ type GenerateTransportResult = {
 export function generateTransportAssignments(
   input: GenerateTransportInput
 ): GenerateTransportResult {
-  const { tenantId, date, scheduleEntries, patterns, staff, shiftAssignments } = input;
+  const { tenantId, date, scheduleEntries, staff, shiftAssignments } = input;
   const minEndTime = input.minEndTime ?? DEFAULT_TRANSPORT_MIN_END_TIME;
   const children = input.children ?? [];
   const pickupAreas = input.pickupAreas ?? [];
   const dropoffAreas = input.dropoffAreas ?? [];
   const pickupCooldownMin = input.pickupCooldownMinutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES;
   const childById = new Map(children.map((c) => [c.id, c]));
-  /* Phase 28: 児童ごとのパターン事前グルーピング（resolveEntryTransportSpec に渡す） */
-  const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
-  for (const p of patterns) {
-    const list = patternsByChild.get(p.child_id) ?? [];
-    list.push(p);
-    patternsByChild.set(p.child_id, list);
-  }
 
   /* ① 出勤している職員のみ抽出（Phase 26: さらに退勤時刻 >= minEndTime で絞る） */
   const workingStaff = staff.filter((s) => {
@@ -93,10 +83,6 @@ export function generateTransportAssignments(
      クールダウン内の再アサインを防ぐ。送り側には適用しない。 */
   const lastPickupMinByStaff = new Map<string, number>();
 
-  /* パターンをマップ化 */
-  const patternMap = new Map<string, ChildTransportPatternRow>();
-  patterns.forEach((p) => patternMap.set(p.id, p));
-
   const assignments: Omit<TransportAssignmentRow, 'id' | 'created_at'>[] = [];
   let unassignedCount = 0;
 
@@ -113,12 +99,9 @@ export function generateTransportAssignments(
 
   /* 各利用予定に対して担当を割り当て */
   for (const entry of dateEntries) {
-    /* Phase 28: 統一解決ヘルパーでエリア・時刻を決定。
-       pattern_id → mark → 時刻fallback → entry 直入力、の順で解決される */
+    /* マーク × テナント/児童専用エリアで areaLabel / time を解決 */
     const spec = resolveEntryTransportSpec(entry, {
       child: childById.get(entry.child_id),
-      childPatterns: patternsByChild.get(entry.child_id) ?? [],
-      patternById: patternMap,
       pickupAreas,
       dropoffAreas,
     });
@@ -131,7 +114,7 @@ export function generateTransportAssignments(
     const pickupNeedsStaff = entry.pickup_method !== 'self';
     const dropoffNeedsStaff = entry.dropoff_method !== 'self';
 
-    /* Phase 28: エリアが pattern でも mark でも解決できない児童は自動割当しない。
+    /* エリアがマークで解決できない児童は自動割当しない。
        unassigned のまま残して、送迎表で手動割当させる（ユーザー運用）。 */
     const pickupResolvable = pickupNeedsStaff && !!pickupAreaLabel;
     const dropoffResolvable = dropoffNeedsStaff && !!dropoffAreaLabel;
@@ -232,7 +215,7 @@ function selectStaff({
   if (!time) return [];
   const timeMin = normalizeTimeMinutes(time);
 
-  let candidates = workingStaff.filter((s) => {
+  const candidates = workingStaff.filter((s) => {
     const shift = shiftAssignments.find(
       (sa) => sa.staff_id === s.id && sa.date === date
     );

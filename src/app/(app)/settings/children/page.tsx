@@ -8,34 +8,15 @@ import Modal from '@/components/ui/Modal';
 import type {
   GradeType,
   ChildRow,
-  ChildTransportPatternRow,
-  PickupMethod,
-  DropoffMethod,
   TenantSettings,
   AreaLabel,
 } from '@/types';
-import { getDefaultPickupTimeByGrade, GRADE_LABELS } from '@/lib/utils/parseChildName';
+import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 
 /**
  * 児童管理ページ（admin・editor）
- * Supabase 連携 + エリア種類はテナント設定から取得
- *
- * 送迎パターンは迎 / 送 で別エリアを選択可能。
- * エリア選択時にそのエリアの基準時刻が時間欄に自動入力される（編集可）。
+ * 送迎表への反映はテナント共通マーク + この児童専用エリアの選択で完結する。
  */
-
-type PatternItem = {
-  id?: string;
-  pattern_name: string;
-  pickup_location: string;
-  pickup_time: string;
-  pickup_method: PickupMethod;
-  pickup_area_label: string;
-  dropoff_location: string;
-  dropoff_time: string;
-  dropoff_method: DropoffMethod;
-  dropoff_area_label: string;
-};
 
 type EditableChild = {
   id: string;
@@ -44,65 +25,32 @@ type EditableChild = {
   is_active: boolean;
   parent_contact: string | null;
   home_address: string | null;
-  /** Phase 21: 利用可能なお迎えマーク（複数選択）*/
+  /** 利用可能なお迎えマーク（複数選択） */
   pickup_area_labels: string[];
-  /** Phase 27: 送りマーク（複数選択） */
+  /** 利用可能なお送りマーク（複数選択） */
   dropoff_area_labels: string[];
-  /** Phase 28 A案: この児童専用の迎えエリア候補 */
+  /** この児童専用の迎えエリア候補（イレギュラー用） */
   custom_pickup_areas: AreaLabel[];
-  /** Phase 28 A案: この児童専用の送りエリア候補 */
+  /** この児童専用の送りエリア候補（イレギュラー用） */
   custom_dropoff_areas: AreaLabel[];
-  patterns: PatternItem[];
   isNew?: boolean;
 };
 
-/* GRADE_LABELS は @/lib/utils/parseChildName から import（プルダウン順もこの定義順） */
-
-const PICKUP_METHOD_LABELS: Record<PickupMethod, string> = {
-  pickup: 'お迎え',
-  self: '自分で',
-  parent: '保護者',
-};
-const DROPOFF_METHOD_LABELS: Record<DropoffMethod, string> = {
-  dropoff: '送り',
-  self: '自分で帰る',
-  parent: '保護者',
-};
-
-const TIME_STEP_SECONDS = 600; /* 10分ステップ */
-/* 迎/送 行内のレイアウト揃えるための固定幅 */
-const LABEL_WIDTH = '3.5rem';
-const METHOD_SELECT_WIDTH = '6rem';
-
 /**
- * Phase 23: 学年カテゴリ別の行背景（うっすら）
- *   - 児童発達支援: 未就学 → 淡い青 / 年少・年中・年長 → 淡い赤
- *   - 放課後等デイサービス (小1 以降) → 淡い緑
+ * 学年カテゴリ別の行背景（うっすら）
  */
 function getGradeRowBg(grade: GradeType): string {
   switch (grade) {
     case 'preschool':
-      return 'rgba(26,62,184,0.05)'; /* 未就学: 青 */
+      return 'rgba(26,62,184,0.12)';
     case 'nursery_3':
     case 'nursery_4':
     case 'nursery_5':
-      return 'rgba(155,51,51,0.05)'; /* 年少・年中・年長: 赤 */
+      return 'rgba(155,51,51,0.12)';
     default:
-      return 'rgba(42,122,82,0.05)'; /* 小1 以降: 緑 */
+      return 'rgba(42,122,82,0.12)';
   }
 }
-
-const emptyPattern = (grade?: GradeType): PatternItem => ({
-  pattern_name: '',
-  pickup_location: '',
-  pickup_time: grade ? getDefaultPickupTimeByGrade(grade) : '14:00',
-  pickup_method: 'pickup',
-  pickup_area_label: '',
-  dropoff_location: '',
-  dropoff_time: '16:00',
-  dropoff_method: 'dropoff',
-  dropoff_area_label: '',
-});
 
 /** "🐻 幼稚部" 形式の label を返す */
 const formatAreaLabel = (a: AreaLabel): string => `${a.emoji} ${a.name}`;
@@ -112,14 +60,9 @@ export default function ChildrenSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [children, setChildren] = useState<ChildRow[]>([]);
-  const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
-  /* Phase 28: パターン登録セクションの開閉状態。
-     既存パターン有 or URL #pattern-new 時のみ自動で開く（イレギュラー児童用に格下げ） */
-  const [patternSectionOpen, setPatternSectionOpen] = useState(false);
-  /* ドラッグ並び替え用 */
   const [draggingChildIdx, setDraggingChildIdx] = useState<number | null>(null);
   const [dragOverChildIdx, setDragOverChildIdx] = useState<number | null>(null);
 
@@ -133,13 +76,10 @@ export default function ChildrenSettingsPage() {
       if (!cRes.ok) throw new Error('児童の取得に失敗しました');
       const cJson = await cRes.json();
       setChildren(cJson.children ?? []);
-      setPatterns(cJson.patterns ?? []);
       if (tRes.ok) {
         const { tenant } = await tRes.json();
         const s: TenantSettings = tenant?.settings ?? {};
-        /* 迎エリア: pickup_areas 優先、旧 transport_areas にフォールバック */
         setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
-        /* 送エリア: dropoff_areas のみ（旧 transport_areas は迎扱いのため送には使わない） */
         setDropoffAreas(s.dropoff_areas ?? []);
       }
     } catch (e) {
@@ -153,8 +93,7 @@ export default function ChildrenSettingsPage() {
     fetchAll();
   }, [fetchAll]);
 
-  /* Phase 28: /settings/children?child=<id>#pattern-new で来た場合、対象児童を自動で編集モーダルに開く。
-     送迎表 [未登録パターンあり] から誘導される導線用。children/patterns 取得完了後に 1 度だけ実行。 */
+  /* /settings/children?child=<id> で来た場合、対象児童を自動で編集モーダルに開く */
   useEffect(() => {
     if (loading || children.length === 0) return;
     if (typeof window === 'undefined') return;
@@ -164,7 +103,7 @@ export default function ChildrenSettingsPage() {
     const target = children.find((c) => c.id === childParam);
     if (target) handleEdit(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, children, patterns]);
+  }, [loading, children]);
 
 
   const handleAdd = () => {
@@ -179,43 +118,11 @@ export default function ChildrenSettingsPage() {
       dropoff_area_labels: [],
       custom_pickup_areas: [],
       custom_dropoff_areas: [],
-      patterns: [emptyPattern('elementary_1')],
       isNew: true,
     });
-    /* Phase 28: 新規追加時はパターン登録不要（マーク選択のみで十分）→ 閉じる */
-    setPatternSectionOpen(false);
   };
 
   const handleEdit = (child: ChildRow) => {
-    const childPatterns = patterns
-      .filter((p) => p.child_id === child.id)
-      .map<PatternItem>((p) => {
-        /* 旧 area_label は互換のため pickup 側のフォールバックに */
-        const pickupLabel = p.pickup_area_label ?? p.area_label ?? '';
-        const dropoffLabel = p.dropoff_area_label ?? '';
-        /* 個別住所（memo）が未入力の場合、エリア設定の住所を default として表示。
-           保存しても問題なし（個別住所の "既定値" として機能する） */
-        const pickupAreaAddress =
-          pickupAreas.find((a) => formatAreaLabel(a) === pickupLabel)?.address ?? '';
-        const dropoffAreaAddress =
-          dropoffAreas.find((a) => formatAreaLabel(a) === dropoffLabel)?.address ?? '';
-        /* 住所フォールバック優先順位:
-             1. 個別memo (p.pickup_location / p.dropoff_location) が最優先
-             2. エリア設定の住所
-             3. 送り側は児童の自宅住所 (home_address) */
-        return {
-          id: p.id,
-          pattern_name: p.pattern_name,
-          pickup_location: p.pickup_location || pickupAreaAddress,
-          pickup_time: p.pickup_time ?? '14:00',
-          pickup_method: p.pickup_method,
-          pickup_area_label: pickupLabel,
-          dropoff_location: p.dropoff_location || dropoffAreaAddress || (child.home_address ?? ''),
-          dropoff_time: p.dropoff_time ?? '16:00',
-          dropoff_method: p.dropoff_method,
-          dropoff_area_label: dropoffLabel,
-        };
-      });
     setEditing({
       id: child.id,
       name: child.name,
@@ -227,13 +134,7 @@ export default function ChildrenSettingsPage() {
       dropoff_area_labels: child.dropoff_area_labels ?? [],
       custom_pickup_areas: Array.isArray(child.custom_pickup_areas) ? child.custom_pickup_areas : [],
       custom_dropoff_areas: Array.isArray(child.custom_dropoff_areas) ? child.custom_dropoff_areas : [],
-      patterns: childPatterns.length > 0 ? childPatterns : [emptyPattern(child.grade_type)],
     });
-    /* Phase 28: 既存パターンがある児童だけ自動展開。新規児童ではマーク選択のみで OK なので閉じた状態 */
-    const hasDbPatterns = childPatterns.some((p) => !!p.id);
-    const hasHashAnchor =
-      typeof window !== 'undefined' && window.location.hash === '#pattern-new';
-    setPatternSectionOpen(hasDbPatterns || hasHashAnchor);
   };
 
   const handleSave = async () => {
@@ -241,56 +142,32 @@ export default function ChildrenSettingsPage() {
     setSaving(true);
     setError('');
     try {
-      let childId = editing.id;
+      const payload = {
+        name: editing.name,
+        grade_type: editing.grade_type,
+        is_active: editing.is_active,
+        parent_contact: editing.parent_contact,
+        home_address: editing.home_address,
+        pickup_area_labels: editing.pickup_area_labels,
+        dropoff_area_labels: editing.dropoff_area_labels,
+        custom_pickup_areas: editing.custom_pickup_areas,
+        custom_dropoff_areas: editing.custom_dropoff_areas,
+      };
       if (editing.isNew) {
         const res = await fetch('/api/children', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editing.name,
-            grade_type: editing.grade_type,
-            is_active: editing.is_active,
-            parent_contact: editing.parent_contact,
-            home_address: editing.home_address,
-            pickup_area_labels: editing.pickup_area_labels,
-            dropoff_area_labels: editing.dropoff_area_labels,
-            custom_pickup_areas: editing.custom_pickup_areas,
-            custom_dropoff_areas: editing.custom_dropoff_areas,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
-        const { child } = await res.json();
-        childId = child.id;
       } else {
         const res = await fetch(`/api/children/${editing.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editing.name,
-            grade_type: editing.grade_type,
-            is_active: editing.is_active,
-            parent_contact: editing.parent_contact,
-            home_address: editing.home_address,
-            pickup_area_labels: editing.pickup_area_labels,
-            dropoff_area_labels: editing.dropoff_area_labels,
-            custom_pickup_areas: editing.custom_pickup_areas,
-            custom_dropoff_areas: editing.custom_dropoff_areas,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
       }
-
-      /* パターン一括置換: pattern_name は UI で編集しないので index 採番 */
-      const patternsForSave = editing.patterns.map((p, idx) => ({
-        ...p,
-        pattern_name: p.pattern_name?.trim() || `パターン${idx + 1}`,
-      }));
-      const pRes = await fetch(`/api/children/${childId}/patterns`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patterns: patternsForSave }),
-      });
-      if (!pRes.ok) throw new Error((await pRes.json()).error ?? 'パターン保存失敗');
 
       setEditing(null);
       await fetchAll();
@@ -323,7 +200,6 @@ export default function ChildrenSettingsPage() {
     const next = [...children];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
-    /* 楽観更新 */
     setChildren(next);
     try {
       const orders = next.map((c, idx) => ({ id: c.id, display_order: idx }));
@@ -338,68 +214,8 @@ export default function ChildrenSettingsPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '並び替えに失敗しました');
-      /* 失敗時は再取得して元の順序に戻す */
       await fetchAll();
     }
-  };
-
-  const updatePattern = <K extends keyof PatternItem>(
-    index: number,
-    field: K,
-    value: PatternItem[K]
-  ) => {
-    if (!editing) return;
-    const ps = [...editing.patterns];
-    ps[index] = { ...ps[index], [field]: value };
-    setEditing({ ...editing, patterns: ps });
-  };
-
-  /**
-   * エリア選択時: 時間欄に基準時刻を自動入力
-   * ユーザーが後から時間を編集済みの場合は上書きしない（空 or 既定値のときだけ入れる）
-   */
-  const handlePickupAreaChange = (index: number, newLabel: string) => {
-    if (!editing) return;
-    const area = pickupAreas.find((a) => formatAreaLabel(a) === newLabel);
-    const current = editing.patterns[index];
-    const ps = [...editing.patterns];
-    const shouldAutofillTime =
-      !!area?.time &&
-      (!current.pickup_time ||
-        current.pickup_time === '14:00' ||
-        current.pickup_time === getDefaultPickupTimeByGrade(editing.grade_type));
-    /* 住所: 手入力済み(空でない)は尊重、空のときだけエリアの住所で埋める */
-    const shouldAutofillAddress = !!area?.address && !current.pickup_location;
-    ps[index] = {
-      ...current,
-      pickup_area_label: newLabel,
-      pickup_time: shouldAutofillTime ? (area?.time ?? current.pickup_time) : current.pickup_time,
-      pickup_location: shouldAutofillAddress
-        ? (area?.address ?? current.pickup_location)
-        : current.pickup_location,
-    };
-    setEditing({ ...editing, patterns: ps });
-  };
-
-  const handleDropoffAreaChange = (index: number, newLabel: string) => {
-    if (!editing) return;
-    const area = dropoffAreas.find((a) => formatAreaLabel(a) === newLabel);
-    const current = editing.patterns[index];
-    const ps = [...editing.patterns];
-    const shouldAutofillTime =
-      !!area?.time && (!current.dropoff_time || current.dropoff_time === '16:00');
-    /* 住所フォールバック: 個別memo → area.address → child.home_address */
-    let nextLocation = current.dropoff_location;
-    if (!current.dropoff_location) {
-      nextLocation = area?.address || editing.home_address || '';
-    }
-    ps[index] = {
-      ...current,
-      dropoff_area_label: newLabel,
-      dropoff_time: shouldAutofillTime ? (area?.time ?? current.dropoff_time) : current.dropoff_time,
-      dropoff_location: nextLocation,
-    };
-    setEditing({ ...editing, patterns: ps });
   };
 
   const inputStyle: React.CSSProperties = {
@@ -418,9 +234,6 @@ export default function ChildrenSettingsPage() {
   }
 
   const activeCount = children.filter((c) => c.is_active).length;
-  const pickupAreaOptions = pickupAreas.map(formatAreaLabel);
-  const dropoffAreaOptions = dropoffAreas.map(formatAreaLabel);
-  const hasAnyArea = pickupAreas.length > 0 || dropoffAreas.length > 0;
 
   return (
     <>
@@ -462,7 +275,7 @@ export default function ChildrenSettingsPage() {
                 >
                   ↕
                 </th>
-                {['氏名', '学年', 'パターン数', 'ステータス'].map((h) => (
+                {['氏名', '学年', 'マーク', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
@@ -476,7 +289,7 @@ export default function ChildrenSettingsPage() {
                 </tr>
               )}
               {children.map((c, idx) => {
-                const count = patterns.filter((p) => p.child_id === c.id).length;
+                const markCount = (c.pickup_area_labels?.length ?? 0) + (c.dropoff_area_labels?.length ?? 0);
                 const isDragging = draggingChildIdx === idx;
                 const isDropTarget = dragOverChildIdx === idx && draggingChildIdx !== null && draggingChildIdx !== idx;
                 return (
@@ -502,7 +315,12 @@ export default function ChildrenSettingsPage() {
                     className="hover:bg-[var(--accent-pale)] cursor-pointer transition-colors"
                     style={{
                       opacity: isDragging ? 0.4 : 1,
-                      background: isDropTarget ? 'var(--accent-pale)' : getGradeRowBg(c.grade_type),
+                      /* 案A: 学年色 + zebra（奇数行に薄い濃淡を重ねる） */
+                      background: isDropTarget
+                        ? 'var(--accent-pale)'
+                        : idx % 2 === 1
+                          ? `linear-gradient(rgba(0,0,0,0.028), rgba(0,0,0,0.028)), ${getGradeRowBg(c.grade_type)}`
+                          : getGradeRowBg(c.grade_type),
                     }}
                     onClick={() => handleEdit(c)}
                   >
@@ -542,7 +360,7 @@ export default function ChildrenSettingsPage() {
                       <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                      {count}パターン
+                      {markCount === 0 ? '未設定' : `${markCount}件`}
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                       <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '在籍' : '退籍'}</Badge>
@@ -581,18 +399,7 @@ export default function ChildrenSettingsPage() {
                   <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>学年</label>
                   <select
                     value={editing.grade_type}
-                    onChange={(e) => {
-                      const newGrade = e.target.value as GradeType;
-                      const defaultTime = getDefaultPickupTimeByGrade(newGrade);
-                      const oldDefaultTime = getDefaultPickupTimeByGrade(editing.grade_type);
-                      /* 学年依存の既定時間が入っているパターンだけ自動更新 */
-                      const updatedPatterns = editing.patterns.map((p) =>
-                        p.pickup_time === oldDefaultTime || !p.pickup_time
-                          ? { ...p, pickup_time: defaultTime }
-                          : p
-                      );
-                      setEditing({ ...editing, grade_type: newGrade, patterns: updatedPatterns });
-                    }}
+                    onChange={(e) => setEditing({ ...editing, grade_type: e.target.value as GradeType })}
                     className="outline-none"
                     style={inputStyle}
                   >
@@ -634,7 +441,7 @@ export default function ChildrenSettingsPage() {
                 </label>
               </div>
 
-              {/* 自宅住所（Phase 20: 送迎パターンの dropoff default） */}
+              {/* 自宅住所（送り先のデフォルト） */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
                   自宅住所（送り先のデフォルト）
@@ -648,12 +455,11 @@ export default function ChildrenSettingsPage() {
                   placeholder="例）愛知県知多郡東浦町藤江西之宮95"
                 />
                 <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                  送迎パターンの送り先が未入力の場合、ここが自動で使われます（送迎表 → 地図で開く）
+                  送りマークに住所が未設定の場合、ここが自動で使われます（送迎表 → 地図で開く）
                 </p>
               </div>
 
-              {/* Phase 27: 迎/送 の 2 カラム並列。職員管理と同レイアウト。
-                  テナント設定のマーク・時間がそのまま候補として並び、選択したら送迎表で自動使用。 */}
+              {/* 迎/送 マーク選択（テナント共通 + この児童専用をマージ表示） */}
               <div className="flex items-center justify-end">
                 <a
                   href="/settings/tenant"
@@ -675,7 +481,6 @@ export default function ChildrenSettingsPage() {
                   const tenantAreasDir = direction === 'pickup' ? pickupAreas : dropoffAreas;
                   const customAreas = editing[customKey];
                   const selected = editing[key];
-                  /* Phase 28 A案: 共通 + 児童専用 をマージ表示（重複は custom 優先で 1 件に統合） */
                   type AreaRow = { area: AreaLabel; source: 'tenant' | 'custom'; label: string };
                   const merged: AreaRow[] = [];
                   const seen = new Set<string>();
@@ -782,108 +587,12 @@ export default function ChildrenSettingsPage() {
                 })}
               </div>
 
-              {/* Phase 28 A案: この児童専用エリア（イレギュラー用） */}
+              {/* この児童専用エリア（イレギュラー用） */}
               <CustomAreasEditor
                 editing={editing}
                 setEditing={setEditing}
                 inputStyle={inputStyle}
               />
-            </section>
-
-            {/* 送迎パターン（Phase 28: イレギュラー児童専用セクションに格下げ。
-                既存パターン有 or URL #pattern-new で自動展開、それ以外は閉じた状態がデフォルト） */}
-            <section className="flex flex-col gap-3" id="pattern-new">
-              <button
-                type="button"
-                onClick={() => setPatternSectionOpen((v) => !v)}
-                className="flex items-center justify-between w-full px-3 py-2 rounded-md transition-colors text-left"
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--rule)',
-                  color: 'var(--ink)',
-                }}
-                aria-expanded={patternSectionOpen}
-                aria-controls="pattern-section-body"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-semibold">
-                    <span aria-hidden style={{ marginRight: 8 }}>{patternSectionOpen ? '▼' : '▶'}</span>
-                    送迎パターン登録（イレギュラー児童用）
-                  </span>
-                  <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                    通常はお迎え/お送りマークの選択だけで送迎表に自動反映されます。
-                    曜日や時間帯で例外がある児童だけ、ここで個別パターンを登録してください。
-                    {editing.patterns.some((p) => !!p.id) && (
-                      <span style={{ color: 'var(--accent)', marginLeft: 4, fontWeight: 600 }}>
-                        （登録済み {editing.patterns.filter((p) => !!p.id).length} 件）
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <span className="text-xs shrink-0 ml-3" style={{ color: 'var(--ink-3)' }}>最大5件</span>
-              </button>
-
-              {patternSectionOpen && (
-                <div id="pattern-section-body" className="flex flex-col gap-3">
-              {!hasAnyArea && (
-                <p className="text-xs px-3 py-2 rounded" style={{ background: 'var(--gold-pale, #fdf6e3)', color: 'var(--gold, #b8860b)' }}>
-                  迎/送エリアが未設定です。テナント設定でマーク・エリア名・時間を登録してから利用してください。
-                </p>
-              )}
-
-              {editing.patterns.map((p, i) => (
-                <div
-                  key={i}
-                  className="p-3 flex flex-col gap-2"
-                  style={{ background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--rule)' }}
-                >
-                  {/* パターン番号 + 削除 */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
-                      パターン {i + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setEditing({ ...editing, patterns: editing.patterns.filter((_, j) => j !== i) })}
-                      className="text-xs px-2 py-1 rounded transition-colors hover:bg-[var(--red-pale)]"
-                      style={{ color: 'var(--red)' }}
-                      aria-label="このパターンを削除"
-                    >
-                      🗑 削除
-                    </button>
-                  </div>
-
-                  {/* 迎 行 */}
-                  <PickupRow
-                    pattern={p}
-                    areaOptions={pickupAreaOptions}
-                    onMethodChange={(v) => updatePattern(i, 'pickup_method', v)}
-                    onAreaChange={(v) => handlePickupAreaChange(i, v)}
-                    onTimeChange={(v) => updatePattern(i, 'pickup_time', v)}
-                    onLocationChange={(v) => updatePattern(i, 'pickup_location', v)}
-                  />
-                  {/* 送 行 */}
-                  <DropoffRow
-                    pattern={p}
-                    areaOptions={dropoffAreaOptions}
-                    onMethodChange={(v) => updatePattern(i, 'dropoff_method', v)}
-                    onAreaChange={(v) => handleDropoffAreaChange(i, v)}
-                    onTimeChange={(v) => updatePattern(i, 'dropoff_time', v)}
-                    onLocationChange={(v) => updatePattern(i, 'dropoff_location', v)}
-                  />
-                </div>
-              ))}
-
-              {editing.patterns.length < 5 && (
-                <Button
-                  variant="secondary"
-                  onClick={() => setEditing({ ...editing, patterns: [...editing.patterns, emptyPattern(editing.grade_type)] })}
-                >
-                  + パターン追加
-                </Button>
-              )}
-                </div>
-              )}
             </section>
 
             {/* フッター */}
@@ -909,218 +618,9 @@ export default function ChildrenSettingsPage() {
   );
 }
 
-/* ---------- 迎 行 ---------- */
-type PickupRowProps = {
-  pattern: PatternItem;
-  areaOptions: string[];
-  onMethodChange: (v: PickupMethod) => void;
-  onAreaChange: (v: string) => void;
-  onTimeChange: (v: string) => void;
-  onLocationChange: (v: string) => void;
-};
-
-function PickupRow({
-  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange, onLocationChange,
-}: PickupRowProps) {
-  return (
-    <div
-      className="flex flex-col gap-1.5 px-2.5 py-2"
-      style={{
-        background: 'var(--accent-pale)',
-        border: '1px solid rgba(26,62,184,0.15)',
-        borderRadius: '8px',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
-          style={{ color: 'var(--accent)', width: LABEL_WIDTH }}
-        >
-          迎 🚗←
-        </span>
-        <select
-          value={pattern.pickup_method}
-          onChange={(e) => onMethodChange(e.target.value as PickupMethod)}
-          className="outline-none text-xs font-medium shrink-0"
-          style={methodSelectStyle('var(--accent)')}
-        >
-          {Object.entries(PICKUP_METHOD_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          value={pattern.pickup_area_label}
-          onChange={(e) => onAreaChange(e.target.value)}
-          className="outline-none text-xs flex-1 min-w-0"
-          style={areaSelectStyle()}
-          aria-label="迎のエリア"
-        >
-          <option value="">エリア選択</option>
-          {areaOptions.map((a, idx) => (<option key={`${idx}-${a}`} value={a}>{a}</option>))}
-        </select>
-        <input
-          type="time"
-          step={TIME_STEP_SECONDS}
-          value={pattern.pickup_time}
-          onChange={(e) => onTimeChange(e.target.value)}
-          className="outline-none text-xs shrink-0"
-          style={timeInputStyle()}
-          aria-label="迎の時間"
-        />
-      </div>
-      <MemoInput
-        icon="📍"
-        value={pattern.pickup_location}
-        onChange={onLocationChange}
-        placeholder="住所・目印（Mapsで開く）例: 大府市吉田町123"
-        ariaLabel="迎の住所メモ"
-      />
-    </div>
-  );
-}
-
-/* ---------- 送 行 ---------- */
-type DropoffRowProps = {
-  pattern: PatternItem;
-  areaOptions: string[];
-  onMethodChange: (v: DropoffMethod) => void;
-  onAreaChange: (v: string) => void;
-  onTimeChange: (v: string) => void;
-  onLocationChange: (v: string) => void;
-};
-
-function DropoffRow({
-  pattern, areaOptions, onMethodChange, onAreaChange, onTimeChange, onLocationChange,
-}: DropoffRowProps) {
-  return (
-    <div
-      className="flex flex-col gap-1.5 px-2.5 py-2"
-      style={{
-        background: 'var(--green-pale)',
-        border: '1px solid rgba(42,122,82,0.15)',
-        borderRadius: '8px',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className="text-xs font-bold shrink-0 whitespace-nowrap text-center"
-          style={{ color: 'var(--green)', width: LABEL_WIDTH }}
-        >
-          送 🚗→
-        </span>
-        <select
-          value={pattern.dropoff_method}
-          onChange={(e) => onMethodChange(e.target.value as DropoffMethod)}
-          className="outline-none text-xs font-medium shrink-0"
-          style={methodSelectStyle('var(--green)')}
-        >
-          {Object.entries(DROPOFF_METHOD_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          value={pattern.dropoff_area_label}
-          onChange={(e) => onAreaChange(e.target.value)}
-          className="outline-none text-xs flex-1 min-w-0"
-          style={areaSelectStyle()}
-          aria-label="送のエリア"
-        >
-          <option value="">エリア選択</option>
-          {areaOptions.map((a, idx) => (<option key={`${idx}-${a}`} value={a}>{a}</option>))}
-        </select>
-        <input
-          type="time"
-          step={TIME_STEP_SECONDS}
-          value={pattern.dropoff_time}
-          onChange={(e) => onTimeChange(e.target.value)}
-          className="outline-none text-xs shrink-0"
-          style={timeInputStyle()}
-          aria-label="送の時間"
-        />
-      </div>
-      <MemoInput
-        icon="📍"
-        value={pattern.dropoff_location}
-        onChange={onLocationChange}
-        placeholder="住所・目印（Mapsで開く）例: 自宅 玄関前"
-        ariaLabel="送の住所メモ"
-      />
-    </div>
-  );
-}
-
-/* ---------- 住所メモ入力（Phase 14: 送迎表で Google Maps 起動に使用） ---------- */
-type MemoInputProps = {
-  icon: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-};
-
-function MemoInput({ icon, value, onChange, placeholder, ariaLabel }: MemoInputProps) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs shrink-0" style={{ color: 'var(--ink-3)', width: LABEL_WIDTH, textAlign: 'center' }}>
-        {icon}
-      </span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        className="outline-none text-xs flex-1 min-w-0"
-        style={{
-          background: 'var(--surface)',
-          color: 'var(--ink)',
-          border: '1px solid var(--rule)',
-          borderRadius: '6px',
-          padding: '6px 10px',
-        }}
-      />
-    </div>
-  );
-}
-
-/* ---------- 共通スタイル ---------- */
-function methodSelectStyle(accentColor: string): React.CSSProperties {
-  return {
-    background: 'var(--surface)',
-    color: accentColor,
-    border: '1px solid var(--rule)',
-    borderRadius: '6px',
-    padding: '6px 8px',
-    width: METHOD_SELECT_WIDTH,
-  };
-}
-
-function areaSelectStyle(): React.CSSProperties {
-  return {
-    background: 'var(--surface)',
-    color: 'var(--ink)',
-    border: '1px solid var(--rule)',
-    borderRadius: '6px',
-    padding: '6px 8px',
-  };
-}
-
-function timeInputStyle(): React.CSSProperties {
-  return {
-    background: 'var(--surface)',
-    color: 'var(--ink)',
-    border: '1px solid var(--rule)',
-    borderRadius: '6px',
-    padding: '6px 8px',
-    width: '6.5rem',
-  };
-}
-
 /**
- * Phase 28 A案: この児童専用エリアの編集 UI。
+ * この児童専用エリアの編集 UI。
  * テナント共通では扱えないイレギュラー時刻/場所を、児童ごとに追加できる。
- * フィールドは tenant 設定の AreaLabel 編集と同じ（絵文字 / 名前 / 時刻 / 住所 / 削除）。
- * ドラッグ並び替えは不要（件数が少ない想定）。
  */
 function CustomAreasEditor({
   editing,

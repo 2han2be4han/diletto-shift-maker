@@ -1,50 +1,33 @@
 'use client';
 
-import type { ChildRow, ChildTransportPatternRow, ParsedScheduleEntry, AreaLabel } from '@/types';
+import type { ChildRow, ParsedScheduleEntry, AreaLabel } from '@/types';
 
 /**
  * PDF解析結果の確認テーブル
  * - 解析結果を一覧表示
- * - 各行を編集可能（時間の修正、行の削除、Phase 27-A-1: パターン切替）
+ * - 各行を編集可能（時間の修正、行の削除、迎/送マークの切替）
  * - 確認後に親コンポーネントへ渡す
- *
- * Phase 27-A-1: パターン列を追加。児童名横に 🔗 (紐付け済) / ⚠ (該当なし) マーク。
- * 時刻完全一致 or 過去最頻 or 最初の 1 件 で初期選択済み（親から渡される pattern_id）。
  */
 
 type PdfConfirmTableProps = {
   entries: ParsedScheduleEntry[];
   onEntriesChange: (entries: ParsedScheduleEntry[]) => void;
   childList: ChildRow[];
-  patterns: ChildTransportPatternRow[];
   /** Phase 28: マーク選択肢の母集団（テナント pickup_areas / dropoff_areas） */
   pickupAreas?: AreaLabel[];
   dropoffAreas?: AreaLabel[];
 };
 
-function fmtTime(t: string | null | undefined): string {
-  if (!t) return '--:--';
-  return t.length >= 5 ? t.slice(0, 5) : t;
-}
-
 export default function PdfConfirmTable({
   entries,
   onEntriesChange,
   childList,
-  patterns,
   pickupAreas = [],
   dropoffAreas = [],
 }: PdfConfirmTableProps) {
   /* 児童名でグループ化 */
   const childNames = [...new Set(entries.map((e) => e.child_name))];
-  const nameToChildId = new Map(childList.map((c) => [c.name, c.id]));
-  const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
-  for (const p of patterns) {
-    const list = patternsByChild.get(p.child_id) ?? [];
-    list.push(p);
-    patternsByChild.set(p.child_id, list);
-  }
-  const patternById = new Map(patterns.map((p) => [p.id, p]));
+  const childByName = new Map(childList.map((c) => [c.name, c]));
 
   const handleDelete = (index: number) => {
     const updated = entries.filter((_, i) => i !== index);
@@ -62,14 +45,6 @@ export default function PdfConfirmTable({
     onEntriesChange(updated);
   };
 
-  const handlePatternChange = (index: number, patternId: string) => {
-    const updated = entries.map((entry, i) =>
-      i === index ? { ...entry, pattern_id: patternId === '' ? null : patternId } : entry
-    );
-    onEntriesChange(updated);
-  };
-
-  /** Phase 28: 迎/送 マーク変更 */
   const handleMarkChange = (
     index: number,
     field: 'pickup_mark' | 'dropoff_mark',
@@ -81,10 +56,7 @@ export default function PdfConfirmTable({
     onEntriesChange(updated);
   };
 
-  /** child ごとのマーク候補。テナント全量ではなく児童管理で選んだもののみ */
-  const childByName = new Map(childList.map((c) => [c.name, c]));
-
-  const unlinkedCount = entries.filter((e) => !e.pattern_id && !e.pickup_mark && !e.dropoff_mark).length;
+  const unlinkedCount = entries.filter((e) => !e.pickup_mark && !e.dropoff_mark).length;
 
   return (
     <div
@@ -94,7 +66,7 @@ export default function PdfConfirmTable({
       <table className="w-full border-collapse" style={{ fontSize: '0.8rem' }}>
         <thead>
           <tr>
-            {['児童名', '日付', '迎え', '送り', '迎マーク', '送マーク', 'パターン', '削除'].map((h, i) => (
+            {['児童名', '日付', '迎え', '送り', '迎マーク', '送マーク', '削除'].map((h, i) => (
               <th
                 key={h}
                 className="sticky top-0 px-3 py-2 font-semibold"
@@ -115,21 +87,14 @@ export default function PdfConfirmTable({
           {entries.map((entry, index) => {
             const isFirstOfChild =
               index === 0 || entries[index - 1].child_name !== entry.child_name;
-            const childId = nameToChildId.get(entry.child_name);
-            const childPatterns = childId ? patternsByChild.get(childId) ?? [] : [];
-            /* Phase 28: 児童のマーク候補（児童管理で選択したもの） */
             const child = childByName.get(entry.child_name);
             const childPickupMarks = child?.pickup_area_labels ?? [];
             const childDropoffMarks = child?.dropoff_area_labels ?? [];
-            /* Phase 28 A案: 児童専用エリアが存在するなら「テナント未設定」警告は抑制 */
             const hasAnyPickupSource = pickupAreas.length > 0 || (child?.custom_pickup_areas?.length ?? 0) > 0;
             const hasAnyDropoffSource = dropoffAreas.length > 0 || (child?.custom_dropoff_areas?.length ?? 0) > 0;
-            const hasPattern = Boolean(entry.pattern_id);
             const hasAnyMark = Boolean(entry.pickup_mark) || Boolean(entry.dropoff_mark);
-            /* 行インジケータ: パターン or マーク いずれか解決できていれば 🔗、なければ ⚠ */
-            const resolved = hasPattern || hasAnyMark;
-            const rowMark = resolved ? '🔗' : '⚠';
-            const markColor = resolved ? 'var(--green)' : 'var(--gold)';
+            const rowMark = hasAnyMark ? '🔗' : '⚠';
+            const markColor = hasAnyMark ? 'var(--green)' : 'var(--gold)';
             return (
               <tr
                 key={`${entry.child_name}_${entry.date}_${index}`}
@@ -146,7 +111,7 @@ export default function PdfConfirmTable({
                 >
                   {isFirstOfChild ? (
                     <span className="inline-flex items-center gap-1">
-                      <span style={{ color: markColor }} title={resolved ? 'マーク or パターンで解決済' : 'マーク・パターンどちらも未設定'}>{rowMark}</span>
+                      <span style={{ color: markColor }} title={hasAnyMark ? 'マークで解決済' : 'マーク未設定'}>{rowMark}</span>
                       {entry.child_name}
                     </span>
                   ) : (
@@ -198,7 +163,7 @@ export default function PdfConfirmTable({
                   />
                 </td>
 
-                {/* Phase 28: 迎マーク選択 */}
+                {/* 迎マーク選択 */}
                 <td
                   className="px-2 py-1.5"
                   style={{ borderBottom: '1px solid var(--rule)' }}
@@ -213,7 +178,7 @@ export default function PdfConfirmTable({
                       onChange={(e) => handleMarkChange(index, 'pickup_mark', e.target.value)}
                       className="w-full px-1 py-1 text-xs outline-none"
                       style={{
-                        border: `1px solid ${entry.pickup_mark ? 'var(--rule)' : 'var(--rule)'}`,
+                        border: '1px solid var(--rule)',
                         borderRadius: '4px',
                         background: entry.pickup_mark ? 'var(--white)' : 'var(--bg)',
                         color: 'var(--ink)',
@@ -227,7 +192,7 @@ export default function PdfConfirmTable({
                   )}
                 </td>
 
-                {/* Phase 28: 送マーク選択 */}
+                {/* 送マーク選択 */}
                 <td
                   className="px-2 py-1.5"
                   style={{ borderBottom: '1px solid var(--rule)' }}
@@ -242,7 +207,7 @@ export default function PdfConfirmTable({
                       onChange={(e) => handleMarkChange(index, 'dropoff_mark', e.target.value)}
                       className="w-full px-1 py-1 text-xs outline-none"
                       style={{
-                        border: `1px solid ${entry.dropoff_mark ? 'var(--rule)' : 'var(--rule)'}`,
+                        border: '1px solid var(--rule)',
                         borderRadius: '4px',
                         background: entry.dropoff_mark ? 'var(--white)' : 'var(--bg)',
                         color: 'var(--ink)',
@@ -254,51 +219,6 @@ export default function PdfConfirmTable({
                       ))}
                     </select>
                   )}
-                </td>
-
-                {/* パターン選択（Phase 28: イレギュラー児童用に格下げ。表示は残すがマーク選択が優先） */}
-                <td
-                  className="px-2 py-1.5"
-                  style={{ borderBottom: '1px solid var(--rule)' }}
-                >
-                  {childPatterns.length === 0 ? (
-                    <span className="text-xs" style={{ color: 'var(--ink-3)' }}>（パターン未登録）</span>
-                  ) : (
-                    <select
-                      value={entry.pattern_id ?? ''}
-                      onChange={(e) => handlePatternChange(index, e.target.value)}
-                      className="w-full px-1.5 py-1 text-xs outline-none"
-                      style={{
-                        border: `1px solid ${hasPattern ? 'var(--rule)' : 'var(--gold)'}`,
-                        borderRadius: '4px',
-                        background: hasPattern ? 'var(--white)' : 'var(--gold-pale)',
-                        color: 'var(--ink)',
-                      }}
-                    >
-                      <option value="">（該当なし）</option>
-                      {childPatterns.map((p) => {
-                        const pt = fmtTime(p.pickup_time);
-                        const dt = fmtTime(p.dropoff_time);
-                        const area = p.pickup_area_label ?? p.dropoff_area_label ?? p.area_label ?? '';
-                        return (
-                          <option key={p.id} value={p.id}>
-                            {p.pattern_name} {area ? `[${area}]` : ''} 迎{pt}/送{dt}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  )}
-                  {entry.pattern_id && patternById.get(entry.pattern_id) && (() => {
-                    const p = patternById.get(entry.pattern_id)!;
-                    const autoMatch = fmtTime(p.pickup_time) === fmtTime(entry.pickup_time)
-                      && fmtTime(p.dropoff_time) === fmtTime(entry.dropoff_time);
-                    if (autoMatch) return null;
-                    return (
-                      <div className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-                        ※ パターンの時刻と差異あり（{fmtTime(p.pickup_time)}/{fmtTime(p.dropoff_time)}）
-                      </div>
-                    );
-                  })()}
                 </td>
 
                 {/* 削除ボタン */}
@@ -330,7 +250,7 @@ export default function PdfConfirmTable({
         <span>レコード数: {entries.length}件</span>
         {unlinkedCount > 0 && (
           <span style={{ color: 'var(--gold)' }}>
-            ⚠ マーク・パターンどちらも未解決: {unlinkedCount}件（このままでも登録できますが /transport で場所が空欄になります）
+            ⚠ マーク未解決: {unlinkedCount}件（このままでも登録できますが /transport で場所が空欄になります）
           </span>
         )}
       </div>

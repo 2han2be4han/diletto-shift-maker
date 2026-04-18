@@ -35,8 +35,8 @@ type TransportChild = {
   /** Phase 26: 'self' なら保護者送迎（担当不要） */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
-  /** Phase 27: この送迎予定の pickup/dropoff 時刻組合せが児童の登録パターンに存在するか */
-  isPatternRegistered: boolean;
+  /** Phase 29+: 児童専用エリアの登録対象として参照する child.id */
+  childId: string;
 };
 
 type TransportStaff = {
@@ -63,12 +63,20 @@ type TransportDayViewProps = {
     field: 'pickup' | 'dropoff',
     staffIds: string[]
   ) => void;
-  onAddPattern?: (childName: string, pickupTime: string | null, dropoffTime: string | null) => void;
   disabled?: boolean;
   /** Phase 28: 列の並び順（児童名は常に先頭固定なので含めない）。未指定は DEFAULT_TRANSPORT_COLUMN_ORDER */
   columnOrder?: TransportColumnKey[];
   /** Phase 28: 列を並び替えたときに呼ばれる。テナント設定へ保存する親側で処理 */
   onColumnReorder?: (order: TransportColumnKey[]) => void;
+  /**
+   * Phase 29+: 送迎表から「この児童専用エリア」を直接登録するコールバック。
+   * 未指定（viewer など権限なし）の場合は登録ボタン自体を出さない。
+   */
+  onAddCustomArea?: (
+    childId: string,
+    direction: 'pickup' | 'dropoff',
+    area: { emoji: string; name: string; time: string; address: string },
+  ) => Promise<void>;
 };
 
 /** "HH:MM" または "HH:MM:SS" 形式 → 分数 */
@@ -102,10 +110,10 @@ export default function TransportDayView({
   availableStaff,
   transportMinEndTime,
   onStaffChange,
-  onAddPattern,
   disabled = false,
   columnOrder,
   onColumnReorder,
+  onAddCustomArea,
 }: TransportDayViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /* Phase 28: 列並び替え DnD 用のドラッグ中インデックス（columnOrder 上の位置） */
@@ -440,7 +448,7 @@ export default function TransportDayView({
                   ))}
                 </tr>
 
-                {/* 展開: 送迎場所リスト + 未登録パターン時の登録ボタン */}
+                {/* 展開: 送迎場所リスト */}
                 {isExpanded && (
                   <tr style={{ background: 'var(--bg)' }}>
                     <td
@@ -448,34 +456,7 @@ export default function TransportDayView({
                       className="px-4 py-3"
                       style={{ borderBottom: '1px solid var(--rule)' }}
                     >
-                      <LocationDetails child={child} />
-                      {onAddPattern && !child.isPatternRegistered && (
-                        <div
-                          className="mt-3 pt-3 flex items-center justify-between flex-wrap gap-2"
-                          style={{ borderTop: '1px dashed var(--rule)' }}
-                        >
-                          <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                            この時刻の組み合わせは、まだ {child.name} さんのパターンに登録されていません。
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onAddPattern(child.name, child.pickupTime, child.dropoffTime)
-                            }
-                            className="rounded-md transition-colors hover:bg-[var(--accent-pale)]"
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              color: 'var(--accent)',
-                              border: '1px solid var(--accent)',
-                              background: 'var(--white)',
-                            }}
-                          >
-                            ＋ このパターンを登録する
-                          </button>
-                        </div>
-                      )}
+                      <LocationDetails child={child} onAddCustomArea={onAddCustomArea} />
                     </td>
                   </tr>
                 )}
@@ -616,34 +597,210 @@ function SelfTransportBadge() {
  * 児童の迎/送場所を並べて表示するパネル（Phase 17）
  * 各場所カードをクリック → Google Maps で開く
  */
-function LocationDetails({ child }: { child: TransportChild }) {
+function LocationDetails({
+  child,
+  onAddCustomArea,
+}: {
+  child: TransportChild;
+  onAddCustomArea?: TransportDayViewProps['onAddCustomArea'];
+}) {
   const pickupEmpty = !child.pickupLocation && !child.pickupAreaLabel;
   const dropoffEmpty = !child.dropoffLocation && !child.dropoffAreaLabel;
-  if (pickupEmpty && dropoffEmpty) {
-    return (
-      <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-        場所が登録されていません。児童管理から送迎パターンを設定してください。
-      </p>
-    );
-  }
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <LocationCard
-        label="迎"
-        time={child.pickupTime}
-        area={child.pickupAreaLabel}
-        address={child.pickupLocation}
-        color="var(--accent)"
-        bg="var(--accent-pale)"
-      />
-      <LocationCard
-        label="送"
-        time={child.dropoffTime}
-        area={child.dropoffAreaLabel}
-        address={child.dropoffLocation}
-        color="var(--green)"
-        bg="var(--green-pale)"
-      />
+      {pickupEmpty ? (
+        <EmptyLocationCard
+          label="迎"
+          direction="pickup"
+          time={child.pickupTime}
+          color="var(--accent)"
+          bg="var(--accent-pale)"
+          childId={child.childId}
+          childName={child.name}
+          onAddCustomArea={onAddCustomArea}
+        />
+      ) : (
+        <LocationCard
+          label="迎"
+          time={child.pickupTime}
+          area={child.pickupAreaLabel}
+          address={child.pickupLocation}
+          color="var(--accent)"
+          bg="var(--accent-pale)"
+        />
+      )}
+      {dropoffEmpty ? (
+        <EmptyLocationCard
+          label="送"
+          direction="dropoff"
+          time={child.dropoffTime}
+          color="var(--green)"
+          bg="var(--green-pale)"
+          childId={child.childId}
+          childName={child.name}
+          onAddCustomArea={onAddCustomArea}
+        />
+      ) : (
+        <LocationCard
+          label="送"
+          time={child.dropoffTime}
+          area={child.dropoffAreaLabel}
+          address={child.dropoffLocation}
+          color="var(--green)"
+          bg="var(--green-pale)"
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 29+: 場所未登録の方向カード。
+ * 権限があれば「＋ この児童の {迎|送} エリアを登録」ボタン → インラインフォーム。
+ * 保存すると children.custom_{pickup|dropoff}_areas に追記 + 該当 mark label を選択状態に。
+ * その児童の次回以降の送迎にも自動反映される（一度設定すれば常用される ④ の登録フロー）。
+ */
+function EmptyLocationCard({
+  label,
+  direction,
+  time,
+  color,
+  bg,
+  childId,
+  childName,
+  onAddCustomArea,
+}: {
+  label: string;
+  direction: 'pickup' | 'dropoff';
+  time: string | null;
+  color: string;
+  bg: string;
+  childId: string;
+  childName: string;
+  onAddCustomArea?: TransportDayViewProps['onAddCustomArea'];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [emoji, setEmoji] = useState(direction === 'pickup' ? '🏠' : '🏠');
+  const [name, setName] = useState('');
+  const [timeStr, setTimeStr] = useState(formatHourMinute(time) !== '-' ? formatHourMinute(time) : '');
+  const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      setError('エリア名は必須です');
+      return;
+    }
+    if (!onAddCustomArea) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onAddCustomArea(childId, direction, {
+        emoji: emoji.trim() || '📍',
+        name: name.trim(),
+        time: timeStr.trim(),
+        address: address.trim(),
+      });
+      setEditing(false);
+      setName('');
+      setAddress('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '登録失敗');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="p-3 rounded-lg flex flex-col gap-1.5"
+      style={{ background: bg, border: `1px solid ${color}33` }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold" style={{ color }}>{label} 🚗</span>
+        <span className="text-sm font-medium" style={{ color }}>{formatHourMinute(time)}</span>
+        <span className="text-xs" style={{ color: 'var(--ink-3)' }}>場所未登録</span>
+      </div>
+
+      {!editing && onAddCustomArea && (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="mt-1 self-start inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md transition-colors hover:opacity-85"
+          style={{ color: '#fff', background: color }}
+        >
+          ＋ {childName} の {direction === 'pickup' ? '迎' : '送'} エリアを登録
+        </button>
+      )}
+
+      {!editing && !onAddCustomArea && (
+        <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
+          児童管理から送迎エリアを設定してください
+        </div>
+      )}
+
+      {editing && (
+        <div className="flex flex-col gap-1.5 mt-1" style={{ background: 'var(--white)', border: '1px solid var(--rule)', borderRadius: 6, padding: 8 }}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <input
+              type="text"
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+              maxLength={2}
+              aria-label="絵文字"
+              style={{ width: '2.5rem', textAlign: 'center', padding: '4px', fontSize: '0.9rem', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--bg)' }}
+            />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="エリア名（例: おばあちゃん家）"
+              aria-label="エリア名"
+              style={{ flex: 1, minWidth: '7rem', padding: '4px 8px', fontSize: '0.8rem', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--bg)' }}
+            />
+            <input
+              type="time"
+              value={timeStr}
+              onChange={(e) => setTimeStr(e.target.value)}
+              step={600}
+              aria-label="基準時刻"
+              style={{ width: '6rem', padding: '4px 6px', fontSize: '0.8rem', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--bg)' }}
+            />
+          </div>
+          <input
+            type="text"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="住所（任意）"
+            aria-label="住所"
+            style={{ padding: '4px 8px', fontSize: '0.8rem', border: '1px solid var(--rule)', borderRadius: 4, background: 'var(--bg)' }}
+          />
+          {error && (
+            <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={busy}
+              className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors hover:opacity-85"
+              style={{ color: '#fff', background: color, opacity: busy ? 0.6 : 1 }}
+            >
+              {busy ? '保存中...' : '登録'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEditing(false); setError(''); }}
+              disabled={busy}
+              className="text-xs font-medium px-2.5 py-1 rounded-md transition-colors hover:bg-[var(--bg)]"
+              style={{ color: 'var(--ink-3)', border: '1px solid var(--rule)', background: 'var(--white)' }}
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

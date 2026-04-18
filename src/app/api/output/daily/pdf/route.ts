@@ -5,12 +5,14 @@ import { createClient } from '@/lib/supabase/server';
 import { requireAuthenticated } from '@/lib/auth/requireRole';
 import type {
   ChildRow,
-  ChildTransportPatternRow,
   ScheduleEntryRow,
   ShiftAssignmentRow,
   StaffRow,
   TransportAssignmentRow,
+  TenantSettings,
+  AreaLabel,
 } from '@/types';
+import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,29 +105,30 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const [sRes, cRes, pRes, eRes, aRes, tRes] = await Promise.all([
+  const [sRes, cRes, eRes, aRes, tRes, tenantRes] = await Promise.all([
     supabase.from('staff').select('*').eq('is_active', true),
     supabase.from('children').select('*'),
-    supabase.from('child_transport_patterns').select('*'),
     supabase.from('schedule_entries').select('*').eq('date', date),
     supabase.from('shift_assignments').select('*').eq('date', date),
     supabase
       .from('transport_assignments')
       .select('*, schedule_entries!inner(date)')
       .eq('schedule_entries.date', date),
+    supabase.from('tenants').select('settings').eq('id', gate.staff.tenant_id).maybeSingle(),
   ]);
 
   const staff = (sRes.data as StaffRow[]) ?? [];
   const children = (cRes.data as ChildRow[]) ?? [];
-  const patterns = (pRes.data as ChildTransportPatternRow[]) ?? [];
   const entries = (eRes.data as ScheduleEntryRow[]) ?? [];
   const shifts = (aRes.data as ShiftAssignmentRow[]) ?? [];
   const transportAssignments =
     (tRes.data as (TransportAssignmentRow & { schedule_entries?: unknown })[]) ?? [];
+  const tenantSettings = ((tenantRes.data?.settings ?? {}) as TenantSettings) ?? {};
+  const pickupAreas: AreaLabel[] = tenantSettings.pickup_areas ?? tenantSettings.transport_areas ?? [];
+  const dropoffAreas: AreaLabel[] = tenantSettings.dropoff_areas ?? [];
 
   const childById = new Map(children.map((c) => [c.id, c]));
   const entryById = new Map(entries.map((e) => [e.id, e]));
-  const patternById = new Map(patterns.map((p) => [p.id, p]));
   const staffNameById = new Map(staff.map((s) => [s.id, s.name]));
 
   /* スロット組み立て */
@@ -135,14 +138,14 @@ export async function GET(request: NextRequest) {
     if (!entry || entry.attendance_status === 'absent') continue;
     const child = childById.get(entry.child_id);
     if (!child) continue;
-    const pattern = entry.pattern_id ? patternById.get(entry.pattern_id) : null;
+    const spec = resolveEntryTransportSpec(entry, { child, pickupAreas, dropoffAreas });
 
     if (entry.pickup_time && entry.pickup_method === 'pickup') {
       rawSlots.push({
         time: fmtTime(entry.pickup_time),
         direction: 'pickup',
-        areaLabel: pattern?.pickup_area_label ?? null,
-        location: pattern?.pickup_location ?? null,
+        areaLabel: spec.pickup.areaLabel,
+        location: spec.pickup.location,
         childNames: [child.name],
         staffNames: ta.pickup_staff_ids.map((id) => staffNameById.get(id) ?? '?'),
         isUnassigned: ta.is_unassigned || ta.pickup_staff_ids.length === 0,
@@ -152,8 +155,8 @@ export async function GET(request: NextRequest) {
       rawSlots.push({
         time: fmtTime(entry.dropoff_time),
         direction: 'dropoff',
-        areaLabel: pattern?.dropoff_area_label ?? null,
-        location: pattern?.dropoff_location ?? child.home_address,
+        areaLabel: spec.dropoff.areaLabel,
+        location: spec.dropoff.location,
         childNames: [child.name],
         staffNames: ta.dropoff_staff_ids.map((id) => staffNameById.get(id) ?? '?'),
         isUnassigned: ta.is_unassigned || ta.dropoff_staff_ids.length === 0,

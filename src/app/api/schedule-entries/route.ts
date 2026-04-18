@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
     dropoff_time: (e.dropoff_time as string) ?? null,
     pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
     dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
-    pattern_id: (e.pattern_id as string) ?? null,
     /* Phase 28: マーク（emoji+name 形式。テナント pickup_areas / dropoff_areas の選択肢） */
     pickup_mark: typeof e.pickup_mark === 'string' ? e.pickup_mark : null,
     dropoff_mark: typeof e.dropoff_mark === 'string' ? e.dropoff_mark : null,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateTransportAssignments } from '@/lib/logic/generateTransport';
 import { requireRole } from '@/lib/auth/requireRole';
-import type { StaffRow, ShiftAssignmentRow, ScheduleEntryRow, ChildTransportPatternRow, ChildRow, AreaLabel } from '@/types';
+import type { StaffRow, ShiftAssignmentRow, ScheduleEntryRow, ChildRow, AreaLabel } from '@/types';
 
 /**
  * POST /api/transport/generate
@@ -16,10 +16,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { date, scheduleEntries, patterns, staff, shiftAssignments, minEndTime, children, pickupAreas, dropoffAreas, pickupCooldownMinutes } = body as {
+    const { date, scheduleEntries, staff, shiftAssignments, minEndTime, children, pickupAreas, dropoffAreas, pickupCooldownMinutes } = body as {
       date: string;
       scheduleEntries: ScheduleEntryRow[];
-      patterns: ChildTransportPatternRow[];
       staff: StaffRow[];
       shiftAssignments: ShiftAssignmentRow[];
       /** Phase 26: 送迎候補の最低退勤時間 "HH:MM" */
@@ -40,7 +39,6 @@ export async function POST(request: NextRequest) {
       tenantId: gate.staff.tenant_id,
       date,
       scheduleEntries: scheduleEntries || [],
-      patterns: patterns || [],
       staff: staff || [],
       shiftAssignments: shiftAssignments || [],
       minEndTime,

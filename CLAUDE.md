@@ -284,7 +284,7 @@ shift-puzzle/
 | 関数名 | camelCase | `generateShiftAssignment`, `parsePdfToJson` |
 | 型名 | PascalCase + 用途suffix | `StaffRow`, `ChildPattern`, `TransportAssignment` |
 | 定数 | SCREAMING_SNAKE_CASE | `MAX_STAFF_PER_TRANSPORT`, `DEFAULT_MIN_QUALIFIED_STAFF` |
-| DBテーブル | snake_case・複数形 | `shift_requests`, `transport_assignments`, `child_transport_patterns` |
+| DBテーブル | snake_case・複数形 | `shift_requests`, `transport_assignments`, `schedule_entries` |
 | DBカラム | snake_case | `tenant_id`, `is_confirmed`, `pickup_time` |
 | APIルート | kebab-case | `/api/transport/generate`, `/api/import/pdf` |
 | 環境変数 | SCREAMING_SNAKE_CASE | `NEXT_PUBLIC_SUPABASE_URL`, `ANTHROPIC_API_KEY` |

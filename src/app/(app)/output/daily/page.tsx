@@ -12,11 +12,11 @@ import type {
   ChildRow,
   ScheduleEntryRow,
   ShiftAssignmentRow,
-  ChildTransportPatternRow,
   TransportAssignmentRow,
   AreaLabel,
   TenantSettings,
 } from '@/types';
+import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 
 /**
  * Phase 25-D: 日次出力ページ
@@ -69,7 +69,6 @@ export default function DailyOutputPage() {
 
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [children, setChildren] = useState<ChildRow[]>([]);
-  const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
   const [entries, setEntries] = useState<ScheduleEntryRow[]>([]);
   const [shifts, setShifts] = useState<ShiftAssignmentRow[]>([]);
   const [transportAssignments, setTransportAssignments] = useState<TransportAssignmentRow[]>([]);
@@ -89,7 +88,7 @@ export default function DailyOutputPage() {
         fetch('/api/tenant'),
       ]);
       const sJson = sRes.ok ? await sRes.json() : { staff: [] };
-      const cJson = cRes.ok ? await cRes.json() : { children: [], patterns: [] };
+      const cJson = cRes.ok ? await cRes.json() : { children: [] };
       const eJson = eRes.ok ? await eRes.json() : { entries: [] };
       const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
       const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
@@ -97,7 +96,6 @@ export default function DailyOutputPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      setPatterns(cJson.patterns ?? []);
       setEntries(eJson.entries ?? []);
       setShifts(aJson.assignments ?? []);
       setTransportAssignments(tJson.assignments ?? []);
@@ -119,7 +117,6 @@ export default function DailyOutputPage() {
   const slots: TransportSlot[] = useMemo(() => {
     const childById = new Map(children.map((c) => [c.id, c]));
     const entryById = new Map(entries.map((e) => [e.id, e]));
-    const patternById = new Map(patterns.map((p) => [p.id, p]));
 
     const list: TransportSlot[] = [];
 
@@ -131,20 +128,25 @@ export default function DailyOutputPage() {
 
       const child = childById.get(entry.child_id);
       if (!child) continue;
-      const pattern = entry.pattern_id ? patternById.get(entry.pattern_id) : null;
+      /* マーク × テナント/児童専用エリアで areaLabel / location を解決 */
+      const spec = resolveEntryTransportSpec(entry, {
+        child,
+        pickupAreas,
+        dropoffAreas,
+      });
 
       /* 迎（来所） */
       if (entry.pickup_time && entry.pickup_method === 'pickup') {
         list.push({
           time: fmtTime(entry.pickup_time),
           direction: 'pickup',
-          areaLabel: pattern?.pickup_area_label ?? null,
-          location: pattern?.pickup_location ?? null,
+          areaLabel: spec.pickup.areaLabel,
+          location: spec.pickup.location,
           children: [
             {
               name: child.name,
               isNew: isNewChild(child),
-              areaLabel: pattern?.pickup_area_label ?? null,
+              areaLabel: spec.pickup.areaLabel,
             },
           ],
           staffIds: ta.pickup_staff_ids,
@@ -160,13 +162,13 @@ export default function DailyOutputPage() {
         list.push({
           time: fmtTime(entry.dropoff_time),
           direction: 'dropoff',
-          areaLabel: pattern?.dropoff_area_label ?? null,
-          location: pattern?.dropoff_location ?? child.home_address,
+          areaLabel: spec.dropoff.areaLabel,
+          location: spec.dropoff.location,
           children: [
             {
               name: child.name,
               isNew: isNewChild(child),
-              areaLabel: pattern?.dropoff_area_label ?? null,
+              areaLabel: spec.dropoff.areaLabel,
             },
           ],
           staffIds: ta.dropoff_staff_ids,
@@ -195,7 +197,7 @@ export default function DailyOutputPage() {
     const result = Array.from(grouped.values());
     result.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.direction === 'pickup' ? -1 : 1));
     return result;
-  }, [children, entries, patterns, transportAssignments]);
+  }, [children, entries, transportAssignments, pickupAreas, dropoffAreas]);
 
   /* ---- 出勤者一覧 ---- */
   const onDuty: OnDutyStaff[] = useMemo(() => {

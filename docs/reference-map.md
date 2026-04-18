@@ -58,20 +58,7 @@
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
-| カラム | 型 | 参照ファイル |
-|---|---|---|
-| id | uuid | `src/types/index.ts` (ChildTransportPatternRow) |
-| child_id | uuid | `src/types/index.ts` (ChildTransportPatternRow) |
-| tenant_id | uuid | `src/types/index.ts` (ChildTransportPatternRow) |
-| pattern_name | text | `src/types/index.ts` (ChildTransportPatternRow) |
-| pickup_location | text | `src/types/index.ts` (ChildTransportPatternRow) |
-| pickup_time | time | `src/types/index.ts` (ChildTransportPatternRow) |
-| dropoff_location | text | `src/types/index.ts` (ChildTransportPatternRow) |
-| dropoff_time | time | `src/types/index.ts` (ChildTransportPatternRow) |
-| area_label | text | `src/types/index.ts` (ChildTransportPatternRow)。旧：パターン全体に 1 つのエリア。後方互換のため残置 |
-| pickup_area_label | text | `src/types/index.ts`, `src/app/(app)/settings/children/page.tsx`, `src/app/api/children/[id]/patterns/route.ts` — 迎のエリア |
-| dropoff_area_label | text | `src/types/index.ts`, `src/app/(app)/settings/children/page.tsx`, `src/app/api/children/[id]/patterns/route.ts` — 送のエリア |
-| created_at | timestamptz | `src/types/index.ts` (ChildTransportPatternRow) |
+**Phase 29 で完全撤去**。送迎表への反映はテナント共通マーク + 児童専用 custom_pickup_areas / custom_dropoff_areas に一本化。migration 0031 で DROP 済み。
 
 ### schedule_entries
 | カラム | 型 | 参照ファイル |
@@ -82,7 +69,6 @@
 | date | date | （未実装） |
 | pickup_time | time | （未実装） |
 | dropoff_time | time | （未実装） |
-| pattern_id | uuid | （未実装） |
 | is_confirmed | boolean | （未実装） |
 | created_at | timestamptz | （未実装） |
 
@@ -157,7 +143,6 @@
 | `EmploymentType` | `src/types/index.ts` | （未実装） |
 | `ChildRow` | `src/types/index.ts` | （未実装） |
 | `GradeType` | `src/types/index.ts` | （未実装） |
-| `ChildTransportPatternRow` | `src/types/index.ts` | （未実装） |
 
 ---
 

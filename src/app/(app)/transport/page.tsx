@@ -13,7 +13,6 @@ import type {
   ChildRow,
   ScheduleEntryRow,
   ShiftAssignmentRow,
-  ChildTransportPatternRow,
   TransportAssignmentRow,
   AreaLabel,
   TenantSettings,
@@ -36,16 +35,9 @@ function defaultNextMonthStr(): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** "HH:MM:SS" → "HH:MM" */
-function normTime(t: string | null | undefined): string | null {
-  if (!t) return null;
-  return t.length >= 5 ? t.slice(0, 5) : t;
-}
-
-/* Phase 28: 旧 resolvePattern は resolveEntryTransportSpec に一本化済み（lib/logic/resolveTransportSpec.ts）。 */
-
 type UiTransportEntry = {
   scheduleEntryId: string;
+  childId: string;
   childName: string;
   pickupTime: string | null;
   dropoffTime: string | null;
@@ -60,8 +52,6 @@ type UiTransportEntry = {
   /** Phase 26: schedule_entries.pickup_method / dropoff_method ('self'=保護者送迎) */
   pickupMethod: 'pickup' | 'self';
   dropoffMethod: 'dropoff' | 'self';
-  /** Phase 27: pickup_time / dropoff_time の組合せが児童の登録パターンに存在するか */
-  isPatternRegistered: boolean;
 };
 
 /** Phase 26: ローカル編集用 pending state の単位 */
@@ -83,7 +73,6 @@ export default function TransportPage() {
 
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [children, setChildren] = useState<ChildRow[]>([]);
-  const [patterns, setPatterns] = useState<ChildTransportPatternRow[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntryRow[]>([]);
   const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignmentRow[]>([]);
   const [transportAssignments, setTransportAssignments] = useState<TransportAssignmentRow[]>([]);
@@ -140,7 +129,7 @@ export default function TransportPage() {
         fetch('/api/tenant'),
       ]);
       const sJson = sRes.ok ? await sRes.json() : { staff: [] };
-      const cJson = cRes.ok ? await cRes.json() : { children: [], patterns: [] };
+      const cJson = cRes.ok ? await cRes.json() : { children: [] };
       const eJson = eRes.ok ? await eRes.json() : { entries: [] };
       const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
       const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
@@ -148,7 +137,6 @@ export default function TransportPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      setPatterns(cJson.patterns ?? []);
       setScheduleEntries(eJson.entries ?? []);
       setShiftAssignments(aJson.assignments ?? []);
       setTransportAssignments(tJson.assignments ?? []);
@@ -200,28 +188,15 @@ export default function TransportPage() {
     const scheduleIds = scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id);
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
-    const patternById = new Map(patterns.map((p) => [p.id, p]));
     const childById = new Map(children.map((c) => [c.id, c]));
-    /* Phase 28: 児童管理の並び順（children.display_order）を正として各 entry に採番。
-       API 側で order 済みの children 配列の index をそのまま順位として使う。 */
+    /* 児童管理の並び順（children.display_order）を正として各 entry に採番 */
     const childOrderById = new Map(children.map((c, idx) => [c.id, idx]));
-    /* Phase 28: 児童ごとにパターンをグルーピング（resolveEntryTransportSpec に渡す） */
-    const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
-    for (const p of patterns) {
-      const list = patternsByChild.get(p.child_id) ?? [];
-      list.push(p);
-      patternsByChild.set(p.child_id, list);
-    }
     const rows = scheduleIds.map((sid) => {
       const e = entryById.get(sid)!;
       const t = assignByEntry.get(sid);
-      /* Phase 28: 統一解決ヘルパー。pattern_id → mark → 時刻fallback → entry 直入力 の順で
-         エリア/時刻/住所を一括解決する。既存 entries（mark 未設定）でも児童マーク × 時刻で推論され、
-         テナント pickup_areas/dropoff_areas から time/address を拾える。 */
+      /* マーク × テナント/児童専用エリアで areaLabel / time / location を解決 */
       const spec = resolveEntryTransportSpec(e, {
         child: childById.get(e.child_id),
-        childPatterns: patternsByChild.get(e.child_id) ?? [],
-        patternById,
         pickupAreas,
         dropoffAreas,
       });
@@ -238,17 +213,9 @@ export default function TransportPage() {
       const dropoffEmpty = dropoffNeedsStaff && dropoffStaffIds.length === 0;
       const isUnassigned = pickupEmpty || dropoffEmpty;
 
-      /* Phase 27: pickup_time / dropoff_time の組合せが児童のパターンに登録済みか判定
-         （イレギュラー児童用の pattern 登録誘導バナー出し分けに使う） */
-      const childPatterns = patternsByChild.get(e.child_id) ?? [];
-      const pt = normTime(e.pickup_time);
-      const dt = normTime(e.dropoff_time);
-      const isPatternRegistered = childPatterns.some(
-        (p) => normTime(p.pickup_time) === pt && normTime(p.dropoff_time) === dt,
-      );
-
       return {
         scheduleEntryId: sid,
+        childId: e.child_id,
         childName: childNameMap.get(e.child_id) ?? '(不明)',
         pickupTime: spec.pickup.time ?? e.pickup_time,
         dropoffTime: spec.dropoff.time ?? e.dropoff_time,
@@ -262,7 +229,6 @@ export default function TransportPage() {
         isConfirmed: t?.is_confirmed ?? false,
         pickupMethod: e.pickup_method,
         dropoffMethod: e.dropoff_method,
-        isPatternRegistered,
       };
     });
     /* Phase 28: 児童管理の並び順（children.display_order）を最優先。
@@ -281,7 +247,7 @@ export default function TransportPage() {
       return a.childName.localeCompare(b.childName, 'ja');
     });
     return rows;
-  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, children, patterns, pickupAreas, dropoffAreas, pendingChanges]);
+  }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, children, pickupAreas, dropoffAreas, pendingChanges]);
 
   /**
    * Phase 28 修正: 未割当は「現在の状態」から都度計算する。
@@ -328,14 +294,7 @@ export default function TransportPage() {
     const pickupResult = new Map<string, string[]>();
     const dropoffResult = new Map<string, string[]>();
     const dayEntries = scheduleEntries.filter((e) => e.date === selectedDate);
-    const patternById = new Map(patterns.map((p) => [p.id, p]));
     const childById = new Map(children.map((c) => [c.id, c]));
-    const patternsByChild = new Map<string, ChildTransportPatternRow[]>();
-    for (const p of patterns) {
-      const list = patternsByChild.get(p.child_id) ?? [];
-      list.push(p);
-      patternsByChild.set(p.child_id, list);
-    }
 
     const addMark = (target: Map<string, string[]>, staffId: string, mark: string | null) => {
       if (!staffId || !mark) return;
@@ -345,11 +304,8 @@ export default function TransportPage() {
     };
 
     for (const entry of dayEntries) {
-      /* Phase 28: areaLabel 解決は統一ヘルパーで（mark → pattern → fallback の順） */
       const spec = resolveEntryTransportSpec(entry, {
         child: childById.get(entry.child_id),
-        childPatterns: patternsByChild.get(entry.child_id) ?? [],
-        patternById,
         pickupAreas,
         dropoffAreas,
       });
@@ -371,7 +327,7 @@ export default function TransportPage() {
       }
     }
     return { pickup: pickupResult, dropoff: dropoffResult };
-  }, [scheduleEntries, selectedDate, patterns, children, pickupAreas, dropoffAreas, pendingChanges, transportAssignments]);
+  }, [scheduleEntries, selectedDate, children, pickupAreas, dropoffAreas, pendingChanges, transportAssignments]);
 
   /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す */
   const availableStaffForDay = useMemo(() => {
@@ -411,15 +367,14 @@ export default function TransportPage() {
           body: JSON.stringify({
             date,
             scheduleEntries: entriesForDate,
-            patterns,
             staff,
             shiftAssignments: shiftAssignments.filter((a) => a.date === date),
             minEndTime: transportMinEndTime,
-            /* Phase 28: マーク解決に必要な児童・テナントエリア */
+            /* マーク解決に必要な児童・テナントエリア */
             children,
             pickupAreas,
             dropoffAreas,
-            /* Phase 28: 迎のクールダウン（分） */
+            /* 迎のクールダウン（分） */
             pickupCooldownMinutes,
           }),
         });
@@ -593,6 +548,51 @@ export default function TransportPage() {
     return c;
   }, [pendingChanges, scheduleEntries, selectedDate]);
 
+  /**
+   * 送迎表から直接「この児童の専用エリア」を登録する。
+   * - children.custom_pickup_areas / custom_dropoff_areas に追加
+   * - pickup_area_labels / dropoff_area_labels にも選択状態で追加（自動的にマーク解決が効く）
+   * - admin / editor のみ実行可能
+   */
+  const handleAddCustomArea = async (
+    childId: string,
+    direction: 'pickup' | 'dropoff',
+    area: { emoji: string; name: string; time: string; address: string },
+  ) => {
+    if (myRole !== 'admin' && myRole !== 'editor') {
+      throw new Error('この操作には編集権限が必要です');
+    }
+    const child = children.find((c) => c.id === childId);
+    if (!child) throw new Error('児童が見つかりません');
+
+    const customKey = direction === 'pickup' ? 'custom_pickup_areas' : 'custom_dropoff_areas';
+    const labelKey = direction === 'pickup' ? 'pickup_area_labels' : 'dropoff_area_labels';
+    const label = `${area.emoji} ${area.name}`;
+
+    const nextCustom = [
+      ...(child[customKey] ?? []),
+      {
+        emoji: area.emoji,
+        name: area.name,
+        ...(area.time ? { time: area.time } : {}),
+        ...(area.address ? { address: area.address } : {}),
+      },
+    ];
+    const currentLabels = child[labelKey] ?? [];
+    const nextLabels = currentLabels.includes(label) ? currentLabels : [...currentLabels, label];
+
+    const res = await fetch(`/api/children/${childId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [customKey]: nextCustom, [labelKey]: nextLabels }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error ?? '登録に失敗しました');
+    }
+    await fetchAll();
+  };
+
   /** 日付切替時のガード */
   const handleSelectDate = (date: string) => {
     if (pendingCountForDay > 0) {
@@ -732,6 +732,7 @@ export default function TransportPage() {
               children={currentDayEntries.map((e) => ({
                 id: e.scheduleEntryId,
                 scheduleEntryId: e.scheduleEntryId,
+                childId: e.childId,
                 name: e.childName,
                 pickupTime: e.pickupTime,
                 dropoffTime: e.dropoffTime,
@@ -744,26 +745,19 @@ export default function TransportPage() {
                 isUnassigned: e.isUnassigned,
                 pickupMethod: e.pickupMethod,
                 dropoffMethod: e.dropoffMethod,
-                isPatternRegistered: e.isPatternRegistered,
               }))}
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
-              onAddPattern={(childName) => {
-                /* Phase 27: 児童管理ページへ遷移してそのままパターン登録できるようにする
-                   （名前で child_id を逆引き、anchor #pattern-new で該当パネルへスクロール） */
-                const target = children.find((c) => c.name === childName);
-                if (target) {
-                  window.location.href = `/settings/children?child=${target.id}#pattern-new`;
-                } else {
-                  window.location.href = '/settings/children';
-                }
-              }}
               disabled={confirmed}
               /* Phase 28: 列の並び順（テナント設定） + 並び替え保存コールバック */
               columnOrder={columnOrder}
               onColumnReorder={
                 myRole === 'admin' || myRole === 'editor' ? handleColumnReorder : undefined
+              }
+              /* Phase 29+: 送迎表からその場で児童専用エリアを登録（admin/editor のみ） */
+              onAddCustomArea={
+                myRole === 'admin' || myRole === 'editor' ? handleAddCustomArea : undefined
               }
             />
 
