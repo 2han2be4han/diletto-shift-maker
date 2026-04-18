@@ -314,6 +314,22 @@ export default function DailyOutputPage() {
                    PC は通常これ以上の幅があるため no-op。 */
                 min-width: 1100px !important;
               }
+              /* AppShell 外周 (flex h-screen overflow-hidden) を印刷時に解放。
+                 モバイル印刷では 100vh で下がクリップされ、flex 構造で幅も圧縮されるため
+                 display: block + 幅/高さ解放に切り替える。PC でもサイドバーは aside で
+                 非表示なので block 化しても副作用なし。 */
+              body > div {
+                display: block !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                min-width: 1100px !important;
+              }
+              main {
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
               /* AppShell や layout が灰色 (var(--bg)) を当てている要素をすべて白に強制 */
               [style*="var(--bg)"],
               main {
