@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/requireRole';
+/** Phase 28 F案: 表示名は長さ制限なし（UI 側で目安 3 文字を案内）。空・非文字列は null に正規化 */
+function sanitizeDisplayName(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t ? t : null;
+}
 
 /**
  * GET /api/staff     - 同テナントの職員一覧
@@ -57,6 +63,7 @@ export async function POST(request: NextRequest) {
       dropoff_transport_areas: body.dropoff_transport_areas ?? body.transport_areas ?? [],
       qualifications: body.qualifications ?? [],
       is_qualified: body.is_qualified ?? false,
+      display_name: sanitizeDisplayName(body.display_name),
     })
     .select()
     .single();

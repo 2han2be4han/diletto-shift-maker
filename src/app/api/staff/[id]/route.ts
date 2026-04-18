@@ -27,9 +27,21 @@ export async function PATCH(
     'transport_areas', 'pickup_transport_areas', 'dropoff_transport_areas',
     'qualifications', 'is_qualified',
     'is_active',
+    'display_name',
   ] as const;
   const payload: Record<string, unknown> = {};
   for (const k of allowed) if (k in body) payload[k] = body[k];
+
+  /* Phase 28 F案: display_name は長さ制限なし。空・非文字列は null に正規化 */
+  if ('display_name' in payload) {
+    const v = payload.display_name;
+    if (typeof v === 'string') {
+      const t = v.trim();
+      payload.display_name = t || null;
+    } else {
+      payload.display_name = null;
+    }
+  }
 
   /* is_active 切替時に retired_at を自動設定/解除 */
   if ('is_active' in payload) {

@@ -99,6 +99,9 @@ export type StaffRow = {
   is_active: boolean;
   /** Phase 25: 退職日時。is_active=false 時に設定 */
   retired_at: string | null;
+  /** Phase 28 F案: 送迎表の担当セル用の短縮表示名（最大3文字、app バリデーション）。
+      未登録時は name の先頭2文字にフォールバック（staffDisplayName 経由）。 */
+  display_name: string | null;
   created_at: string;
 };
 

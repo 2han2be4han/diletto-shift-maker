@@ -385,6 +385,8 @@ export default function TransportPage() {
       return {
         id: s.id,
         name: s.name,
+        /* Phase 28 F案: 送迎 select の短縮表示に使う */
+        display_name: s.display_name ?? null,
         endTime: shift?.end_time ?? null,
         pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
         dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],

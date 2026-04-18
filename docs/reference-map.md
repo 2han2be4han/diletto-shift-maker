@@ -50,6 +50,11 @@
 | dropoff_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx`, `src/lib/logic/resolveTransportSpec.ts`, Phase 27 追加 |
 | custom_pickup_areas | jsonb (AreaLabel[]) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` + `[id]/route.ts` (sanitize), `src/lib/logic/resolveTransportSpec.ts` (mergeAreas), `src/components/schedule/PdfImportModal.tsx` (assignMarks マージ), `src/components/schedule/PdfConfirmTable.tsx` (警告抑制), `src/app/(app)/settings/children/page.tsx` (CustomAreasEditor), Phase 28 A案 追加 (migration 0029) |
 | custom_dropoff_areas | jsonb (AreaLabel[]) | 上記 custom_pickup_areas と同じ参照セット。送り側用。Phase 28 A案 追加 (migration 0029) |
+
+### staff.display_name（Phase 28 F案 追加 / migration 0030）
+| カラム | 型 | 参照ファイル |
+|---|---|---|
+| display_name | text (nullable) | `src/types/index.ts` (StaffRow), `src/lib/utils/displayName.ts` (staffDisplayName + STAFF_DISPLAY_NAME_MAX), `src/app/api/staff/route.ts` + `[id]/route.ts` (sanitize), `src/app/(app)/settings/staff/page.tsx` (入力 UI, emptyStaff, handleEdit, handleSave), `src/components/transport/TransportDayView.tsx` (StaffSelect の option 表示 + select title), `src/app/(app)/transport/page.tsx` (TransportStaff に渡す) |
 | created_at | timestamptz | `src/types/index.ts` (ChildRow) |
 
 ### child_transport_patterns
@@ -231,6 +236,7 @@
 | 2026-04-17 | Phase 23: 児童一覧の行背景を学年カテゴリでうっすら色分け（未就学=青/年少-年長=赤/小1以降=緑） |
 | 2026-04-17 | Phase 25: 職員退職(ソフト削除)・児童出欠+履歴・シフト変更申請・日次出力 |
 | 2026-04-18 | Phase 28 A案: children.custom_pickup_areas / custom_dropoff_areas jsonb 追加（Migration 0029）。児童ごとのイレギュラーエリアをマークとしてテナント共通と合流。resolveTransportSpec.mergeAreas / PdfImportModal / PdfConfirmTable / settings/children の CustomAreasEditor で参照 |
+| 2026-04-18 | Phase 28 F案: staff.display_name text 追加（Migration 0030）。送迎表 select の短縮表示用（3文字上限・app バリデーション）。未登録は name の空白除去 → 先頭3文字。src/lib/utils/displayName.ts の staffDisplayName に集約。TransportDayView.StaffSelect 幅 104→60px、マーク slot 2.3em→4.5em、担当列 minWidth 260→220px。settings/staff に入力 UI |
 
 ---
 

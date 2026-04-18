@@ -205,6 +205,7 @@ const emptyStaff = (): EditableStaff => ({
   display_order: null,
   is_active: true,
   retired_at: null,
+  display_name: null,
   isNew: true,
 });
 
@@ -302,6 +303,7 @@ export default function StaffSettingsPage() {
       display_order: s.display_order,
       is_active: s.is_active,
       retired_at: s.retired_at,
+      display_name: s.display_name ?? null,
     });
   };
 
@@ -329,6 +331,7 @@ export default function StaffSettingsPage() {
             dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
+            display_name: editing.display_name,
           }),
         });
         const json = await res.json();
@@ -352,6 +355,7 @@ export default function StaffSettingsPage() {
             dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
+            display_name: editing.display_name,
           }),
         });
         if (!res.ok) {
@@ -768,6 +772,26 @@ export default function StaffSettingsPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>氏名</label>
                 <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="outline-none" style={inputStyle} />
+              </div>
+              {/* Phase 28 F案: 送迎表の担当セル用・短縮表示名（目安 3 文字） */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                  表示名 <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>（送迎表用・短めがおすすめ・任意）</span>
+                </label>
+                <input
+                  type="text"
+                  value={editing.display_name ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditing({ ...editing, display_name: v.trim() ? v : null });
+                  }}
+                  className="outline-none"
+                  style={inputStyle}
+                  placeholder={editing.name ? editing.name.replace(/\s+/g, '').slice(0, 3) : '例）濱田亜'}
+                />
+                <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                  未入力なら氏名の先頭3文字を自動で使います。送迎表のセルは 3 文字程度が読みやすいですが、長くても入力は可能（超過分は送迎表で省略表示されます）。
+                </p>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>メール</label>

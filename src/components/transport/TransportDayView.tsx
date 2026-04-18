@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { openInGoogleMaps } from '@/lib/utils/googleMaps';
 import type { TransportColumnKey } from '@/types';
 import { DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
+import { staffDisplayName } from '@/lib/utils/displayName';
 
 /**
  * 日別送迎表ビュー
@@ -41,6 +42,8 @@ type TransportChild = {
 type TransportStaff = {
   id: string;
   name: string;
+  /** Phase 28 F案: 送迎表 select の短縮表示名（最大3文字）。未登録なら name の先頭3文字 */
+  display_name?: string | null;
   /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
   endTime: string | null;
   /** Phase 27: 迎で担当しているエリア絵文字。重複なし */
@@ -207,7 +210,7 @@ export default function TransportDayView({
     },
     pickup_staff: {
       header: <SectionLabel color={PICK_ACCENT}>迎 担当</SectionLabel>,
-      minWidth: '260px',
+      minWidth: '220px',
       textAlign: 'left',
       accent: PICK_ACCENT,
       renderCell: (child, isExpanded) => (
@@ -257,7 +260,7 @@ export default function TransportDayView({
     },
     dropoff_staff: {
       header: <SectionLabel color={DROP_ACCENT}>送 担当</SectionLabel>,
-      minWidth: '260px',
+      minWidth: '220px',
       textAlign: 'left',
       accent: DROP_ACCENT,
       renderCell: (child, isExpanded) => (
@@ -317,11 +320,13 @@ export default function TransportDayView({
               return (
                 <th
                   key={key}
-                  className={m.textAlign === 'center' ? 'text-center' : 'text-left'}
+                  className="text-center"
                   style={{
                     ...headerBase,
                     minWidth: m.minWidth,
-                    color: m.accent,
+                    /* Phase 28 fix: アクセント色だと ink 背景で読みにくい行があったため、
+                       ヘッダー文字は白に統一。方向の区別はラベル先頭のドットで行う */
+                    color: '#fff',
                     cursor: draggable ? 'grab' : 'default',
                     opacity: isDragging ? 0.4 : 1,
                     /* Phase 28: ドロップ先にわかりやすいインジケータ線を出す */
@@ -736,9 +741,9 @@ function StaffSelect({
      絵文字マーク + 氏名ドロップダウンを inline-flex で横に並べ、
      2 人目追加ボタンも横にインラインで配置する。行数を 1 行に抑えるのが目的。
      マークは担当者全員分のユニオンを先頭に 1 回だけ表示（Excel の "🚂🍇 金田・加藤" 準拠）
-     SELECT_WIDTH: 日本語氏名（4〜5 文字 + 姓名スペース）が欠けず読めることを優先。
-     2 担当 + マーク 1 行の場合は担当列 minWidth を合計幅に合わせて広げる */
-  const SELECT_WIDTH = 104;
+     Phase 28 F案: staff.display_name（3 文字上限）で表示するため select 幅を大幅縮小。
+     フルネームは option 側で残すので同姓の区別は候補選択時に可能。 */
+  const SELECT_WIDTH = 60;
 
   /* 全担当者のマークを集約（重複排除、表示順保持） */
   const aggregatedMarks = (() => {
@@ -755,9 +760,9 @@ function StaffSelect({
     return out;
   })();
 
-  /* Phase 28: マーク幅を固定化し、0〜3 マークでも名前の開始 x 位置が揃うようにする。
-     サイドバー展開時も 1 行に収めるため slot は 2 マーク幅 + はみ出し許容とする */
-  const MARK_SLOT_WIDTH = '2.3em';
+  /* Phase 28 F案: select 幅を 60px まで縮めた分、マーク slot を 4.5em まで拡張。
+     4〜5 マークまで欠けずに表示でき、それ以上は先頭 4 個だけ見せて tooltip で全件確認 */
+  const MARK_SLOT_WIDTH = '4.5em';
   return (
     /* Phase 28: flex-wrap を禁止。担当セルは常に 1 行で、幅が足りなければテーブル側で横スクロール */
     <div className="flex flex-nowrap items-center gap-1.5">
@@ -777,7 +782,7 @@ function StaffSelect({
         aria-label={aggregatedMarks.length > 0 ? `担当エリア ${aggregatedMarks.join(' ')}` : undefined}
         aria-hidden={aggregatedMarks.length === 0}
       >
-        {aggregatedMarks.slice(0, 3).join('')}
+        {aggregatedMarks.slice(0, 4).join('')}
       </span>
       {staffIds.map((id, i) => {
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
@@ -801,24 +806,36 @@ function StaffSelect({
                 borderRadius: '6px',
                 color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
                 background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
+                /* Phase 28 F案: 表示名が SELECT_WIDTH を超える場合は省略（native select の text-overflow） */
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
               }}
-              title={
-                isMissing
-                  ? 'この職員は当日の送迎候補外です（勤務時間を確認してください）'
-                  : aggregatedMarks.length > 0
-                  ? `この日の担当エリア: ${aggregatedMarks.join(' ')}`
-                  : undefined
-              }
+              title={(() => {
+                /* Phase 28 F案: 選択中の職員のフルネームを tooltip に出す（表示名 3 文字だけでは
+                   同姓判別できないことがあるため）。さらに当日の担当エリア情報も併記 */
+                if (isMissing) return 'この職員は当日の送迎候補外です（勤務時間を確認してください）';
+                const selected = availableStaff.find((s) => s.id === id);
+                const parts: string[] = [];
+                if (selected) parts.push(selected.name);
+                if (aggregatedMarks.length > 0) parts.push(`この日の担当エリア: ${aggregatedMarks.join(' ')}`);
+                return parts.length > 0 ? parts.join('\n') : undefined;
+              })()}
             >
               <option value="">未選択</option>
               {isMissing && <option value={id}>（候補外）</option>}
               {availableStaff
                 .filter((s) => !takenByOthers.has(s.id))
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                .map((s) => {
+                  /* Phase 28 F案: セル幅 60px に収めるため option 表示は短縮名のみ。
+                     同姓判別はフルネームを title（hover）で確認する運用 */
+                  const short = staffDisplayName(s);
+                  return (
+                    <option key={s.id} value={s.id} title={s.name}>
+                      {short || s.name}
+                    </option>
+                  );
+                })}
             </select>
           </div>
         );
