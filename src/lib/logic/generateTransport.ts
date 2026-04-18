@@ -105,8 +105,8 @@ export function generateTransportAssignments(
       pickupAreas,
       dropoffAreas,
     });
-    const pickupAreaLabel = spec.pickup.areaLabel;
-    const dropoffAreaLabel = spec.dropoff.areaLabel;
+    const pickupAreaId = spec.pickup.areaId;
+    const dropoffAreaId = spec.dropoff.areaId;
     const pickupTime = spec.pickup.time;
     const dropoffTime = spec.dropoff.time;
 
@@ -116,8 +116,8 @@ export function generateTransportAssignments(
 
     /* エリアがマークで解決できない児童は自動割当しない。
        unassigned のまま残して、送迎表で手動割当させる（ユーザー運用）。 */
-    const pickupResolvable = pickupNeedsStaff && !!pickupAreaLabel;
-    const dropoffResolvable = dropoffNeedsStaff && !!dropoffAreaLabel;
+    const pickupResolvable = pickupNeedsStaff && !!pickupAreaId;
+    const dropoffResolvable = dropoffNeedsStaff && !!dropoffAreaId;
 
     /* 迎え担当を選定（保護者送迎なら空 / エリア未解決なら空） */
     const pickupStaff = pickupResolvable
@@ -126,7 +126,7 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: pickupTime,
-          areaLabel: pickupAreaLabel,
+          areaId: pickupAreaId,
           direction: 'pickup',
           staffAssignCount,
           /* Phase 28: 自動割当は 1 名固定。2 名目は手動で追加する運用に統一。 */
@@ -146,7 +146,7 @@ export function generateTransportAssignments(
           shiftAssignments,
           date,
           time: dropoffTime,
-          areaLabel: dropoffAreaLabel,
+          areaId: dropoffAreaId,
           direction: 'dropoff',
           staffAssignCount,
           maxStaff: AUTO_ASSIGN_STAFF_COUNT,
@@ -191,7 +191,7 @@ function selectStaff({
   shiftAssignments,
   date,
   time,
-  areaLabel,
+  areaId,
   direction,
   staffAssignCount,
   maxStaff,
@@ -201,7 +201,8 @@ function selectStaff({
   shiftAssignments: ShiftAssignmentRow[];
   date: string;
   time: string | null;
-  areaLabel: string | null;
+  /** Phase 30: AreaLabel.id（職員 transport_areas との比較キー） */
+  areaId: string | null;
   /** Phase 27-D: 迎=pickup, 送=dropoff。エリアフィルタに使う職員側カラムを切替 */
   direction: 'pickup' | 'dropoff';
   staffAssignCount: Map<string, number>;
@@ -228,13 +229,13 @@ function selectStaff({
        Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。
        両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。
        Phase 27 fix: 空エリア = 「対応不可（候補から除外）」として扱う。
-       未対応エリアに職員を送り込まない運用ルールをロジックで担保する。 */
-    if (areaLabel) {
+       Phase 30: 比較キーは AreaLabel.id（テナント設定上の uuid）。 */
+    if (areaId) {
       const directionAreas =
         direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
       const effective =
         (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
-      if (!effective.includes(areaLabel)) return false;
+      if (!effective.includes(areaId)) return false;
     }
 
     /* Phase 28: 迎のクールダウンチェック。直近 pickup_time + cooldown 以降でなければ候補外。 */

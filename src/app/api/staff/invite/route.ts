@@ -64,10 +64,15 @@ export async function POST(request: NextRequest) {
       is_qualified: body.is_qualified ?? false,
       default_start_time: body.default_start_time ?? null,
       default_end_time: body.default_end_time ?? null,
-      transport_areas: body.transport_areas ?? [],
+      /* Phase 30: AreaLabel.id 配列として受け入れ（重複排除はクライアント側で実施済み想定） */
+      transport_areas: Array.isArray(body.transport_areas) ? body.transport_areas : [],
       /* Phase 27-D: 未指定時は transport_areas にフォールバック */
-      pickup_transport_areas: body.pickup_transport_areas ?? body.transport_areas ?? [],
-      dropoff_transport_areas: body.dropoff_transport_areas ?? body.transport_areas ?? [],
+      pickup_transport_areas: Array.isArray(body.pickup_transport_areas)
+        ? body.pickup_transport_areas
+        : (Array.isArray(body.transport_areas) ? body.transport_areas : []),
+      dropoff_transport_areas: Array.isArray(body.dropoff_transport_areas)
+        ? body.dropoff_transport_areas
+        : (Array.isArray(body.transport_areas) ? body.transport_areas : []),
       qualifications: body.qualifications ?? [],
     })
     .select()

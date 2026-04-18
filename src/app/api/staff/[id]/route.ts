@@ -24,13 +24,25 @@ export async function PATCH(
   const allowed = [
     'name', 'email', 'role', 'employment_type',
     'default_start_time', 'default_end_time',
-    'transport_areas', 'pickup_transport_areas', 'dropoff_transport_areas',
     'qualifications', 'is_qualified',
     'is_active',
     'display_name',
   ] as const;
   const payload: Record<string, unknown> = {};
   for (const k of allowed) if (k in body) payload[k] = body[k];
+
+  /* Phase 30: 対応エリア id 配列は sanitize（重複排除・空文字排除） */
+  const sanitizeIdArray = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    const seen = new Set<string>();
+    for (const v of input) {
+      if (typeof v === 'string' && v.length > 0 && !seen.has(v)) seen.add(v);
+    }
+    return Array.from(seen);
+  };
+  if ('transport_areas' in body) payload.transport_areas = sanitizeIdArray(body.transport_areas);
+  if ('pickup_transport_areas' in body) payload.pickup_transport_areas = sanitizeIdArray(body.pickup_transport_areas);
+  if ('dropoff_transport_areas' in body) payload.dropoff_transport_areas = sanitizeIdArray(body.dropoff_transport_areas);
 
   /* Phase 28 F案: display_name は長さ制限なし。空・非文字列は null に正規化 */
   if ('display_name' in payload) {

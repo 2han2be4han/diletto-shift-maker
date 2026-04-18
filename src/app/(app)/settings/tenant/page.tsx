@@ -12,14 +12,23 @@ import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES } from 
  * - 事業所名 + settings(JSONB) の CRUD
  * - エリアは迎用 (pickup_areas) と 送用 (dropoff_areas) を別管理（Phase 13）
  * - 旧 transport_areas は後方互換のため読み取り時のみ pickup_areas にフォールバック
+ * - Phase 30: 各 AreaLabel に id（uuid）を付与。新規追加時 crypto.randomUUID() で採番、
+ *   既存データに id が無い場合は読込時に補完。
  */
 
-const DEFAULT_PICKUP_AREAS: AreaLabel[] = [
-  { emoji: '🍇', name: '藤江', time: '' },
-  { emoji: '🌳', name: '豊明', time: '' },
-  { emoji: '🏭', name: '大府', time: '' },
-  { emoji: '✈', name: '常滑', time: '' },
-  { emoji: '🍶', name: '学童エリア', time: '' },
+/** id 未付与の AreaLabel に id を付与（読込時の defensive backfill） */
+const ensureAreaIds = (areas: AreaLabel[] | undefined | null): AreaLabel[] => {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((a) => (a.id ? a : { ...a, id: crypto.randomUUID() }));
+};
+
+/** Phase 30: id 付きデフォルトを毎回採番（lazy init から呼ぶ） */
+const makeDefaultPickupAreas = (): AreaLabel[] => [
+  { id: crypto.randomUUID(), emoji: '🍇', name: '藤江', time: '' },
+  { id: crypto.randomUUID(), emoji: '🌳', name: '豊明', time: '' },
+  { id: crypto.randomUUID(), emoji: '🏭', name: '大府', time: '' },
+  { id: crypto.randomUUID(), emoji: '✈', name: '常滑', time: '' },
+  { id: crypto.randomUUID(), emoji: '🍶', name: '学童エリア', time: '' },
 ];
 const DEFAULT_DROPOFF_AREAS: AreaLabel[] = [];
 
@@ -42,7 +51,7 @@ export default function TenantSettingsPage() {
   const [saved, setSaved] = useState(false);
 
   const [tenantName, setTenantName] = useState('');
-  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>(DEFAULT_PICKUP_AREAS);
+  const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>(() => makeDefaultPickupAreas());
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>(DEFAULT_DROPOFF_AREAS);
   const [qualifications, setQualifications] = useState<QualificationType[]>(DEFAULT_QUALIFICATIONS);
   const [minQualified, setMinQualified] = useState(2);
@@ -61,17 +70,18 @@ export default function TenantSettingsPage() {
         const s: TenantSettings = tenant?.settings ?? {};
         setTenantName(tenant?.name ?? '');
 
-        /* 迎エリア: pickup_areas 優先、なければ旧 transport_areas を流用（初回自動移行） */
+        /* 迎エリア: pickup_areas 優先、なければ旧 transport_areas を流用（初回自動移行）。
+           Phase 30: 既存データに id が無い場合は ensureAreaIds で defensive 補完。 */
         const pickup =
           (s.pickup_areas && s.pickup_areas.length > 0)
             ? s.pickup_areas
             : (s.transport_areas && s.transport_areas.length > 0)
               ? s.transport_areas
-              : DEFAULT_PICKUP_AREAS;
-        setPickupAreas(pickup);
+              : makeDefaultPickupAreas();
+        setPickupAreas(ensureAreaIds(pickup));
 
         /* 送エリア: dropoff_areas 優先、なければ空（ユーザーが追加） */
-        setDropoffAreas(s.dropoff_areas ?? DEFAULT_DROPOFF_AREAS);
+        setDropoffAreas(ensureAreaIds(s.dropoff_areas ?? DEFAULT_DROPOFF_AREAS));
 
         setQualifications(
           s.qualification_types && s.qualification_types.length > 0
@@ -101,7 +111,7 @@ export default function TenantSettingsPage() {
 
   /* --- 迎エリア操作 --- */
   const handleAddPickupArea = () =>
-    setPickupAreas([...pickupAreas, { emoji: '📍', name: '', time: '', address: '' }]);
+    setPickupAreas([...pickupAreas, { id: crypto.randomUUID(), emoji: '📍', name: '', time: '', address: '' }]);
   const handleRemovePickupArea = (i: number) =>
     setPickupAreas(pickupAreas.filter((_, idx) => idx !== i));
   const handlePickupAreaChange = (i: number, field: keyof AreaLabel, value: string) =>
@@ -111,7 +121,7 @@ export default function TenantSettingsPage() {
 
   /* --- 送エリア操作 --- */
   const handleAddDropoffArea = () =>
-    setDropoffAreas([...dropoffAreas, { emoji: '🏠', name: '', time: '', address: '' }]);
+    setDropoffAreas([...dropoffAreas, { id: crypto.randomUUID(), emoji: '🏠', name: '', time: '', address: '' }]);
   const handleRemoveDropoffArea = (i: number) =>
     setDropoffAreas(dropoffAreas.filter((_, idx) => idx !== i));
   const handleDropoffAreaChange = (i: number, field: keyof AreaLabel, value: string) =>

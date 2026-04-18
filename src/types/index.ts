@@ -8,8 +8,12 @@
 /**
  * エリアラベル。time はそのエリアの基準時刻（迎 or 送の時）、address はそのエリアの住所（Google Maps検索・住所メモ自動入力用）。
  * マーク（emoji）と時間・住所はセットで扱い、児童の送迎パターンでエリアを選ぶと time / address が自動入力される（編集可）。
+ *
+ * Phase 30: id（uuid 文字列）必須化。テナント設定からマークを削除しても、児童側に
+ * 残った id が単に「未解決」になるだけで、emoji+name 文字列マッチに依存しなくなった。
+ * 新規エリア追加時は crypto.randomUUID() で採番し、既存データは migration 0032 で補完済み。
  */
-export type AreaLabel = { emoji: string; name: string; time?: string; address?: string };
+export type AreaLabel = { id: string; emoji: string; name: string; time?: string; address?: string };
 export type QualificationType = { name: string; countable: boolean };
 
 export type TenantSettings = {
@@ -85,11 +89,13 @@ export type StaffRow = {
   employment_type: EmploymentType;
   default_start_time: string | null;
   default_end_time: string | null;
+  /** 旧: 迎/送 共通の対応エリア。Phase 27-D 以降は pickup_/dropoff_ を使用するが、
+      互換のため空配列フォールバック先として残置。Phase 30: 中身は AreaLabel.id の配列。 */
   transport_areas: string[];
-  /** Phase 27-D: 迎対応エリア。migration 0026 適用前の古いレコードでは空配列。
-   *  旧 transport_areas を読む側は、空配列の場合 transport_areas へフォールバックして扱うこと。 */
+  /** Phase 27-D: 迎対応エリア（AreaLabel.id 配列）。migration 0026 適用前の古いレコードでは
+   *  空配列で、その場合は transport_areas へフォールバックして扱う。Phase 30: id 配列に移行。 */
   pickup_transport_areas: string[];
-  /** Phase 27-D: 送り対応エリア。上と同様のフォールバック運用。 */
+  /** Phase 27-D: 送り対応エリア（AreaLabel.id 配列）。上と同様のフォールバック運用。 */
   dropoff_transport_areas: string[];
   qualifications: string[];
   is_qualified: boolean;
@@ -136,11 +142,14 @@ export type ChildRow = {
   display_order: number | null;
   /** 自宅住所。送迎パターンの dropoff_location 未入力時の default 値 */
   home_address: string | null;
-  /** お迎えマーク（複数選択）。emoji+name 形式。テナント pickup_areas の選択肢から選ぶ。
-      Phase 21: 送迎パターンを個別登録せずに、マーク選択だけで時間が決まるド王仕様 */
+  /** お迎えマーク（複数選択）。AreaLabel.id 配列。テナント pickup_areas または
+      この児童の custom_pickup_areas に存在する id を参照する。
+      Phase 21: マーク選択で時間が決まるド王仕様 / Phase 30: emoji+name → id に移行。
+      テナント側で削除されたマークは「幽霊 id」として残るが、解決時に lookup に失敗するため
+      実害はない（一覧の件数表示と編集モーダルは現存 id のみに絞って表示する）。 */
   pickup_area_labels: string[];
-  /** 送りマーク（複数選択）。emoji+name 形式。テナント dropoff_areas の選択肢から選ぶ。
-      Phase 27 追加: 児童に送り側マークを持たせて送迎表で自動反映。 */
+  /** 送りマーク（複数選択）。AreaLabel.id 配列。テナント dropoff_areas または
+      custom_dropoff_areas に存在する id を参照する。Phase 27 追加 / Phase 30 で id 化。 */
   dropoff_area_labels: string[];
   /** 児童専用の迎えエリア候補（AreaLabel[]）。tenant pickup_areas とマージしてマーク解決に使う。
       Phase 28 A案: イレギュラー児童をパターン登録せずマーク運用するためのソース。 */

@@ -605,6 +605,34 @@
         <strong>データ移行</strong>: ユーザー自身で 19 名の旧③登録を④に手動移行（軽微な件数のため確認も兼ねる）。
     </p>
 
+    <div class="phase-head">Phase 30: エリアマーク ID ベース移行（2026-04-18 着手）</div>
+    <p>幽霊マーク（テナント設定で削除されたマークが児童データに残り「マーク件数」が実表示と合わない）の根治。エリアラベルを「emoji+name 文字列」識別から「id」識別に切替。同時に児童一覧の「マーク」列を「迎 / 送」2 列に分割。</p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>30-1</td><td>migration 0032: tenant pickup/dropoff_areas / children custom_areas に id 付与、children labels と schedule_entries marks と staff transport_areas を id に変換、ghost を drop</td><td>supabase/migrations/0032_area_id_migration.sql</td><td class="status-done">完了</td><td>100%</td><td>PL/pgSQL ヘルパー関数 4 つ + DO ブロック。冪等（再実行可）</td></tr>
+            <tr><td>30-2</td><td>AreaLabel 型に id 必須追加 / TransportSpec に areaId 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td>areaLabel は表示用に残置</td></tr>
+            <tr><td>30-3</td><td>resolveTransportSpec: id ベース検索（findArea, mergeAreas, inferMarkFromTime）</td><td>src/lib/logic/resolveTransportSpec.ts</td><td class="status-done">完了</td><td>100%</td><td>戻り値に areaId 追加 + formatAreaLabel export</td></tr>
+            <tr><td>30-4</td><td>generateTransport: staff transport_areas を id でマッチング</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>areaLabel→areaId に切替</td></tr>
+            <tr><td>30-5</td><td>tenant 設定: 新規エリア追加時 crypto.randomUUID で id 採番、既存 areas の id 補完</td><td>src/app/(app)/settings/tenant/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ensureAreaIds で読込時に補完</td></tr>
+            <tr><td>30-6</td><td>児童管理: マーク選択 UI を id ベースに、custom_area 追加時 id 採番、一覧の「マーク」列を「迎件数 / 送件数」2 列に分割（幽霊フィルタ込み）</td><td>src/app/(app)/settings/children/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>filterValidLabels で現存マークのみカウント</td></tr>
+            <tr><td>30-7</td><td>職員管理: 対応エリア選択 UI を id ベースに（labels で表示）</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>resolveAreas で id→AreaLabel 解決、Popover を AreaLabel[] 受取に</td></tr>
+            <tr><td>30-8</td><td>送迎ページ: handleAddCustomArea で id 採番</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>新規 id を custom_areas と labels の両方に push</td></tr>
+            <tr><td>30-9</td><td>PDF インポート/確認: マーク選択肢 value を id に</td><td>src/components/schedule/PdfImportModal.tsx, PdfConfirmTable.tsx</td><td class="status-done">完了</td><td>100%</td><td>option key/value=id、表示=emoji+name。inferMarkFromTime は id を返す</td></tr>
+            <tr><td>30-10</td><td>API ルート: children/staff/schedule-entries で id sanitize と幽霊フィルタ</td><td>src/app/api/children/route.ts, [id]/route.ts, src/app/api/staff/*, src/app/api/tenant/route.ts</td><td class="status-done">完了</td><td>100%</td><td>sanitizeIdArray + sanitizeAreaLabelsWithId で defensive。schedule-entries は型変更なしで既存仕様のまま</td></tr>
+            <tr><td>30-11</td><td>reference-map.md 更新</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td>tenants.settings.* / schedule_entries.*_mark / staff.*_transport_areas を id 化として記載</td></tr>
+            <tr><td>30-12</td><td>typecheck / lint / build / dev 動作確認</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td>tsc OK / next build OK / dev で全主要ページ 307 (auth リダイレクト = 描画 OK)</td></tr>
+        </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+        <strong>整合性チェック</strong>: (1) migration 後に既存テナント全件で id が付与され、(2) 児童 labels の幽霊が消え、(3) /transport の表示と staff 候補絞り込みが従来通り動作し、(4) 児童一覧の「迎/送」列が正しい件数を出すか。
+    </p>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+        <strong>データ整合性</strong>: マイグレーションは破壊的（emoji+name 文字列を id に置換、マッチしないものは drop）。本番反映前にバックアップ確認推奨。
+    </p>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

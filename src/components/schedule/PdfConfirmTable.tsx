@@ -1,12 +1,15 @@
 'use client';
 
 import type { ChildRow, ParsedScheduleEntry, AreaLabel } from '@/types';
+import { mergeAreas } from '@/lib/logic/resolveTransportSpec';
 
 /**
  * PDF解析結果の確認テーブル
  * - 解析結果を一覧表示
  * - 各行を編集可能（時間の修正、行の削除、迎/送マークの切替）
  * - 確認後に親コンポーネントへ渡す
+ *
+ * Phase 30: マークは AreaLabel.id ベース（select の value = id、表示は emoji+name）。
  */
 
 type PdfConfirmTableProps = {
@@ -88,8 +91,14 @@ export default function PdfConfirmTable({
             const isFirstOfChild =
               index === 0 || entries[index - 1].child_name !== entry.child_name;
             const child = childByName.get(entry.child_name);
-            const childPickupMarks = child?.pickup_area_labels ?? [];
-            const childDropoffMarks = child?.dropoff_area_labels ?? [];
+            /* Phase 30: 児童に登録されたマーク id × 現存するエリア（tenant + custom）でドロップダウン候補を絞る。
+               幽霊 id（テナントから削除されたマーク）は自動的に消える。 */
+            const mergedPickupAreas = mergeAreas(pickupAreas, child?.custom_pickup_areas);
+            const mergedDropoffAreas = mergeAreas(dropoffAreas, child?.custom_dropoff_areas);
+            const childPickupIds = new Set(child?.pickup_area_labels ?? []);
+            const childDropoffIds = new Set(child?.dropoff_area_labels ?? []);
+            const pickupOptions: AreaLabel[] = mergedPickupAreas.filter((a) => childPickupIds.has(a.id));
+            const dropoffOptions: AreaLabel[] = mergedDropoffAreas.filter((a) => childDropoffIds.has(a.id));
             const hasAnyPickupSource = pickupAreas.length > 0 || (child?.custom_pickup_areas?.length ?? 0) > 0;
             const hasAnyDropoffSource = dropoffAreas.length > 0 || (child?.custom_dropoff_areas?.length ?? 0) > 0;
             const hasAnyMark = Boolean(entry.pickup_mark) || Boolean(entry.dropoff_mark);
@@ -168,7 +177,7 @@ export default function PdfConfirmTable({
                   className="px-2 py-1.5"
                   style={{ borderBottom: '1px solid var(--rule)' }}
                 >
-                  {childPickupMarks.length === 0 ? (
+                  {pickupOptions.length === 0 ? (
                     <span className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
                       {!hasAnyPickupSource ? '（テナント未設定）' : '（児童に未登録）'}
                     </span>
@@ -185,8 +194,8 @@ export default function PdfConfirmTable({
                       }}
                     >
                       <option value="">—</option>
-                      {childPickupMarks.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                      {pickupOptions.map((a) => (
+                        <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>
                       ))}
                     </select>
                   )}
@@ -197,7 +206,7 @@ export default function PdfConfirmTable({
                   className="px-2 py-1.5"
                   style={{ borderBottom: '1px solid var(--rule)' }}
                 >
-                  {childDropoffMarks.length === 0 ? (
+                  {dropoffOptions.length === 0 ? (
                     <span className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
                       {!hasAnyDropoffSource ? '（テナント未設定）' : '（児童に未登録）'}
                     </span>
@@ -214,8 +223,8 @@ export default function PdfConfirmTable({
                       }}
                     >
                       <option value="">—</option>
-                      {childDropoffMarks.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                      {dropoffOptions.map((a) => (
+                        <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>
                       ))}
                     </select>
                   )}

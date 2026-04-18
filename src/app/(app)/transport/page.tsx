@@ -550,8 +550,8 @@ export default function TransportPage() {
 
   /**
    * 送迎表から直接「この児童の専用エリア」を登録する。
-   * - children.custom_pickup_areas / custom_dropoff_areas に追加
-   * - pickup_area_labels / dropoff_area_labels にも選択状態で追加（自動的にマーク解決が効く）
+   * - children.custom_pickup_areas / custom_dropoff_areas に id 付きで追加（Phase 30）
+   * - pickup_area_labels / dropoff_area_labels にも id を選択状態で追加（自動的にマーク解決が効く）
    * - admin / editor のみ実行可能
    */
   const handleAddCustomArea = async (
@@ -567,11 +567,12 @@ export default function TransportPage() {
 
     const customKey = direction === 'pickup' ? 'custom_pickup_areas' : 'custom_dropoff_areas';
     const labelKey = direction === 'pickup' ? 'pickup_area_labels' : 'dropoff_area_labels';
-    const label = `${area.emoji} ${area.name}`;
+    const newId = crypto.randomUUID();
 
     const nextCustom = [
       ...(child[customKey] ?? []),
       {
+        id: newId,
         emoji: area.emoji,
         name: area.name,
         ...(area.time ? { time: area.time } : {}),
@@ -579,7 +580,7 @@ export default function TransportPage() {
       },
     ];
     const currentLabels = child[labelKey] ?? [];
-    const nextLabels = currentLabels.includes(label) ? currentLabels : [...currentLabels, label];
+    const nextLabels = [...currentLabels, newId];
 
     const res = await fetch(`/api/children/${childId}`, {
       method: 'PATCH',

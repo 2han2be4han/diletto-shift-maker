@@ -30,8 +30,9 @@ function TransportAreasPopover({
   pickup,
   dropoff,
 }: {
-  pickup: string[];
-  dropoff: string[];
+  /** Phase 30: 表示用 AreaLabel オブジェクト配列（id→label 解決済み） */
+  pickup: AreaLabel[];
+  dropoff: AreaLabel[];
 }) {
   const [open, setOpen] = useState(false);
   /* Phase 28 fix: 親の overflow:auto に切られないよう position:fixed で描画。
@@ -83,7 +84,7 @@ function TransportAreasPopover({
   }
 
   /** 編集モーダルと同じ「方向別パネル（パレ背景 + 縦積みボタン風セル）」デザイン */
-  const renderSection = (direction: 'pickup' | 'dropoff', items: string[]) => {
+  const renderSection = (direction: 'pickup' | 'dropoff', items: AreaLabel[]) => {
     if (items.length === 0) return null;
     const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
     const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
@@ -95,9 +96,9 @@ function TransportAreasPopover({
       >
         <span className="text-[0.65rem] font-bold" style={{ color: accentVar }}>{label}</span>
         <div className="flex flex-col gap-1">
-          {items.map((a, idx) => (
+          {items.map((a) => (
             <span
-              key={`${direction}-${idx}-${a}`}
+              key={`${direction}-${a.id}`}
               className="rounded-md"
               style={{
                 padding: '5px 10px',
@@ -108,7 +109,7 @@ function TransportAreasPopover({
                 border: `1px solid ${accentVar}`,
               }}
             >
-              {a}
+              {a.emoji} {a.name}
             </span>
           ))}
         </div>
@@ -281,8 +282,15 @@ export default function StaffSettingsPage() {
   }, [fetchAll]);
 
   const countable = qualificationTypes.filter((q) => q.countable).map((q) => q.name);
-  const pickupAreaLabels = pickupAreas.map((a) => `${a.emoji} ${a.name}`);
-  const dropoffAreaLabels = dropoffAreas.map((a) => `${a.emoji} ${a.name}`);
+  /* Phase 30: 表示時に id → AreaLabel を解決するルックアップ。
+     一覧ポップオーバーと editor 表示で共用する。 */
+  const pickupById = new Map(pickupAreas.map((a) => [a.id, a]));
+  const dropoffById = new Map(dropoffAreas.map((a) => [a.id, a]));
+  const resolveAreas = (ids: string[] | null | undefined, src: 'pickup' | 'dropoff'): AreaLabel[] => {
+    const lookup = src === 'pickup' ? pickupById : dropoffById;
+    if (!Array.isArray(ids)) return [];
+    return ids.map((id) => lookup.get(id)).filter((a): a is AreaLabel => !!a);
+  };
 
   const handleAdd = () => setEditing(emptyStaff());
   const handleEdit = (s: StaffRow) => {
@@ -630,12 +638,13 @@ export default function StaffSettingsPage() {
                     {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
                   </td>
                   {/* Phase 28: チップ全展開を辞め、サマリー + ホバーでポップオーバー詳細に変更。
-                      旧 transport_areas は新カラム空時のフォールバックとして使用 */}
+                      旧 transport_areas は新カラム空時のフォールバックとして使用。
+                      Phase 30: id 配列を AreaLabel[] に解決して渡す。 */}
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                     {(() => {
-                      const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
-                      const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
-                      return <TransportAreasPopover pickup={pickup} dropoff={dropoff} />;
+                      const pickupIds = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
+                      const dropoffIds = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
+                      return <TransportAreasPopover pickup={resolveAreas(pickupIds, 'pickup')} dropoff={resolveAreas(dropoffIds, 'dropoff')} />;
                     })()}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
@@ -727,14 +736,17 @@ export default function StaffSettingsPage() {
                 {s.default_start_time ?? '-'}〜{s.default_end_time ?? '-'}
               </div>
 
-              {/* Phase 28: モバイルも共通ポップオーバー UI に統一 */}
+              {/* Phase 28: モバイルも共通ポップオーバー UI に統一 / Phase 30: id→AreaLabel 解決 */}
               {(() => {
-                const pickup = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
-                const dropoff = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
-                if (pickup.length === 0 && dropoff.length === 0) return null;
+                const pickupIds = s.pickup_transport_areas && s.pickup_transport_areas.length > 0 ? s.pickup_transport_areas : s.transport_areas;
+                const dropoffIds = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
+                if (pickupIds.length === 0 && dropoffIds.length === 0) return null;
                 return (
                   <div className="mb-1">
-                    <TransportAreasPopover pickup={pickup} dropoff={dropoff} />
+                    <TransportAreasPopover
+                      pickup={resolveAreas(pickupIds, 'pickup')}
+                      dropoff={resolveAreas(dropoffIds, 'dropoff')}
+                    />
                   </div>
                 );
               })()}
@@ -857,7 +869,8 @@ export default function StaffSettingsPage() {
                 const label = direction === 'pickup' ? '迎対応' : '送り対応';
                 const accentVar = direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
                 const palVar = direction === 'pickup' ? 'var(--accent-pale)' : 'var(--green-pale)';
-                const labels = direction === 'pickup' ? pickupAreaLabels : dropoffAreaLabels;
+                /* Phase 30: AreaLabel オブジェクトを直接列挙し、id を選択値として保持。 */
+                const areas = direction === 'pickup' ? pickupAreas : dropoffAreas;
                 const selected = editing[key];
                 return (
                   <div
@@ -867,11 +880,11 @@ export default function StaffSettingsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold" style={{ color: accentVar }}>{label}エリア</label>
-                      {labels.length > 0 && (
+                      {areas.length > 0 && (
                         <div className="flex items-center gap-2 text-xs">
                           <button
                             type="button"
-                            onClick={() => setEditing({ ...editing, [key]: [...labels] })}
+                            onClick={() => setEditing({ ...editing, [key]: areas.map((a) => a.id) })}
                             style={{ color: accentVar, textDecoration: 'underline' }}
                           >
                             全選択
@@ -887,19 +900,19 @@ export default function StaffSettingsPage() {
                         </div>
                       )}
                     </div>
-                    {labels.length === 0 ? (
+                    {areas.length === 0 ? (
                       <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
                         （テナント設定で{label}エリアを追加してください）
                       </p>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {labels.map((area, idx) => {
-                          const on = selected.includes(area);
+                        {areas.map((area) => {
+                          const on = selected.includes(area.id);
                           return (
                             <button
-                              key={`${idx}-${area}`}
+                              key={area.id}
                               type="button"
-                              onClick={() => handleAreaToggle(direction, area)}
+                              onClick={() => handleAreaToggle(direction, area.id)}
                               className="rounded-md transition-all text-left"
                               style={{
                                 padding: '5px 10px',
@@ -910,7 +923,7 @@ export default function StaffSettingsPage() {
                                 border: `1px solid ${on ? accentVar : 'var(--rule)'}`,
                               }}
                             >
-                              {on ? '✓ ' : ''}{area}
+                              {on ? '✓ ' : ''}{area.emoji} {area.name}
                             </button>
                           );
                         })}

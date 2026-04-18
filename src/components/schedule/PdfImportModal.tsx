@@ -27,8 +27,8 @@ type PdfImportModalProps = {
 
 /**
  * 解析結果にマーク（pickup_mark / dropoff_mark）を付与。
- * 児童の pickup_area_labels / dropoff_area_labels 候補 × 解析時刻から、
- * テナント pickup_areas / dropoff_areas の time と一致するマークを推論する。
+ * 児童の pickup_area_labels / dropoff_area_labels 候補（AreaLabel.id 配列） × 解析時刻から、
+ * テナント pickup_areas / dropoff_areas の time と一致するマーク id を推論する（Phase 30）。
  */
 function assignMarks(
   entries: ParsedScheduleEntry[],

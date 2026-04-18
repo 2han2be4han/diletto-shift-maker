@@ -29,9 +29,9 @@
 | employment_type | text | `src/types/index.ts` (StaffRow, EmploymentType) |
 | default_start_time | time | `src/types/index.ts` (StaffRow) |
 | default_end_time | time | `src/types/index.ts` (StaffRow) |
-| transport_areas | text[] | `src/types/index.ts` (StaffRow)。**旧・後方互換**（Phase 27-D 以降は pickup_/dropoff_ を使用） |
-| pickup_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（迎担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
-| dropoff_transport_areas | text[] | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（送担当フィルタ）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ） |
+| transport_areas | text[] (AreaLabel.id 配列) | `src/types/index.ts` (StaffRow)。**旧・後方互換**（Phase 27-D 以降は pickup_/dropoff_ を使用 / Phase 30 で id 配列に移行） |
+| pickup_transport_areas | text[] (AreaLabel.id 配列) | Phase 27-D 追加。`src/types/index.ts` (StaffRow), `src/lib/logic/generateTransport.ts`（迎担当フィルタ、areaId 比較）, `src/app/api/staff/*`（POST/PATCH/invite で受け入れ + sanitizeIdArray）, `src/app/(app)/settings/staff/page.tsx`（id ベース UI）/ Phase 30 で id 配列に移行 |
+| dropoff_transport_areas | text[] (AreaLabel.id 配列) | Phase 27-D 追加。同上の参照セット。送り側用 / Phase 30 で id 配列に移行 |
 | is_qualified | boolean | `src/types/index.ts` (StaffRow) |
 | created_at | timestamptz | `src/types/index.ts` (StaffRow) |
 | last_invited_at | timestamptz | `src/app/api/staff/invite/route.ts`, `src/app/api/staff/[id]/resend-invite/route.ts`（招待クールダウン判定） |
@@ -46,10 +46,23 @@
 | is_active | boolean | `src/types/index.ts` (ChildRow) |
 | display_order | integer | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (ORDER BY), `src/app/api/children/reorder/route.ts`, `src/app/(app)/settings/children/page.tsx` (DnD 並び替え) |
 | home_address | text | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` (POST), `[id]/route.ts` (PATCH), `src/app/(app)/settings/children/page.tsx` (入力UI + 送り住所fallback), `src/app/(app)/transport/page.tsx` (送迎表表示時fallback) |
-| pickup_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx` (マーク複数選択 UI), Phase 21 ド王仕様 |
-| dropoff_area_labels | text[] | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts`, `src/app/(app)/settings/children/page.tsx`, `src/lib/logic/resolveTransportSpec.ts`, Phase 27 追加 |
-| custom_pickup_areas | jsonb (AreaLabel[]) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` + `[id]/route.ts` (sanitize), `src/lib/logic/resolveTransportSpec.ts` (mergeAreas), `src/components/schedule/PdfImportModal.tsx` (assignMarks マージ), `src/components/schedule/PdfConfirmTable.tsx` (警告抑制), `src/app/(app)/settings/children/page.tsx` (CustomAreasEditor), Phase 28 A案 追加 (migration 0029) |
-| custom_dropoff_areas | jsonb (AreaLabel[]) | 上記 custom_pickup_areas と同じ参照セット。送り側用。Phase 28 A案 追加 (migration 0029) |
+| pickup_area_labels | text[] (AreaLabel.id 配列) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts` (sanitizeIdArray), `src/app/(app)/settings/children/page.tsx` (id ベースのマーク選択 UI + 件数フィルタ), Phase 21 ド王仕様 / **Phase 30 で id 配列に移行 (migration 0032)** |
+| dropoff_area_labels | text[] (AreaLabel.id 配列) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts`, `[id]/route.ts` (sanitizeIdArray), `src/app/(app)/settings/children/page.tsx`, `src/lib/logic/resolveTransportSpec.ts` (id 解決), Phase 27 追加 / **Phase 30 で id 配列に移行 (migration 0032)** |
+| custom_pickup_areas | jsonb (AreaLabel[]、要 id) | `src/types/index.ts` (ChildRow), `src/app/api/children/route.ts` + `[id]/route.ts` (sanitizeAreaLabels で id 補完), `src/lib/logic/resolveTransportSpec.ts` (mergeAreas, id キー), `src/components/schedule/PdfImportModal.tsx` (assignMarks マージ), `src/components/schedule/PdfConfirmTable.tsx` (id ベース option), `src/app/(app)/settings/children/page.tsx` (CustomAreasEditor で id 採番), `src/app/(app)/transport/page.tsx` (handleAddCustomArea で id 採番), Phase 28 A案 (migration 0029) / Phase 30 で id 必須化 (migration 0032) |
+| custom_dropoff_areas | jsonb (AreaLabel[]、要 id) | 上記 custom_pickup_areas と同じ参照セット。送り側用。Phase 28 A案 (migration 0029) / Phase 30 で id 必須化 (migration 0032) |
+
+### tenants.settings.pickup_areas / dropoff_areas / transport_areas（Phase 30 で AreaLabel.id 必須化 / migration 0032）
+| キー | 型 | 参照ファイル |
+|---|---|---|
+| pickup_areas | jsonb (AreaLabel[]、id 必須) | `src/types/index.ts` (TenantSettings), `src/app/api/tenant/route.ts` (sanitizeAreaLabelsWithId), `src/app/(app)/settings/tenant/page.tsx` (id 採番 + ensureAreaIds), `src/lib/logic/resolveTransportSpec.ts` (findAreaById), `src/lib/logic/generateTransport.ts` (areaId フィルタ), `src/app/(app)/transport/page.tsx`, `src/app/(app)/output/daily/page.tsx`, `src/app/api/output/daily/pdf/route.ts`, `src/components/schedule/PdfImportModal.tsx`, `src/components/schedule/PdfConfirmTable.tsx` |
+| dropoff_areas | jsonb (AreaLabel[]、id 必須) | 同上 |
+| transport_areas | jsonb (AreaLabel[]、id 必須) | 旧（互換）。Phase 13 以降 pickup_areas のミラー。`src/app/(app)/settings/tenant/page.tsx` で書込時に同期 |
+
+### schedule_entries.pickup_mark / dropoff_mark（Phase 30 で AreaLabel.id 化 / migration 0032）
+| カラム | 型 | 参照ファイル |
+|---|---|---|
+| pickup_mark | text (AreaLabel.id) | `src/types/index.ts` (ScheduleEntryRow), `src/app/api/schedule-entries/route.ts`, `src/lib/logic/resolveTransportSpec.ts` (resolveEntryTransportSpec), `src/components/schedule/PdfConfirmTable.tsx` (select value=id) |
+| dropoff_mark | text (AreaLabel.id) | 同上 |
 
 ### staff.display_name（Phase 28 F案 追加 / migration 0030）
 | カラム | 型 | 参照ファイル |

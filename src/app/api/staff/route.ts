@@ -8,6 +8,16 @@ function sanitizeDisplayName(v: unknown): string | null {
   return t ? t : null;
 }
 
+/** Phase 30: 対応エリア id 配列の sanitize（重複排除・空文字排除） */
+function sanitizeIdArray(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  for (const v of input) {
+    if (typeof v === 'string' && v.length > 0 && !seen.has(v)) seen.add(v);
+  }
+  return Array.from(seen);
+}
+
 /**
  * GET /api/staff     - 同テナントの職員一覧
  * POST /api/staff    - 新規職員作成（招待は /api/staff/invite 推奨）
@@ -57,10 +67,11 @@ export async function POST(request: NextRequest) {
       employment_type: body.employment_type ?? 'part_time',
       default_start_time: body.default_start_time ?? null,
       default_end_time: body.default_end_time ?? null,
-      transport_areas: body.transport_areas ?? [],
+      /* Phase 30: AreaLabel.id 配列として sanitize（重複排除・空文字排除） */
+      transport_areas: sanitizeIdArray(body.transport_areas),
       /* Phase 27-D: 未指定時は transport_areas にフォールバック（互換維持） */
-      pickup_transport_areas: body.pickup_transport_areas ?? body.transport_areas ?? [],
-      dropoff_transport_areas: body.dropoff_transport_areas ?? body.transport_areas ?? [],
+      pickup_transport_areas: sanitizeIdArray(body.pickup_transport_areas ?? body.transport_areas),
+      dropoff_transport_areas: sanitizeIdArray(body.dropoff_transport_areas ?? body.transport_areas),
       qualifications: body.qualifications ?? [],
       is_qualified: body.is_qualified ?? false,
       display_name: sanitizeDisplayName(body.display_name),

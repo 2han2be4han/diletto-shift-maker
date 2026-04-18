@@ -52,8 +52,18 @@ function getGradeRowBg(grade: GradeType): string {
   }
 }
 
-/** "🐻 幼稚部" 形式の label を返す */
+/** "🐻 幼稚部" 形式の表示ラベルを返す */
 const formatAreaLabel = (a: AreaLabel): string => `${a.emoji} ${a.name}`;
+
+/**
+ * Phase 30: 児童の labels（id 配列）から「現存するエリア」のみを抽出。
+ * テナント設定 + 児童 custom_areas に存在しない id（幽霊マーク）は無視する。
+ */
+const filterValidLabels = (labels: string[] | null | undefined, areas: AreaLabel[]): string[] => {
+  if (!Array.isArray(labels) || labels.length === 0) return [];
+  const ids = new Set(areas.map((a) => a.id));
+  return labels.filter((id) => ids.has(id));
+};
 
 export default function ChildrenSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -275,7 +285,7 @@ export default function ChildrenSettingsPage() {
                 >
                   ↕
                 </th>
-                {['氏名', '学年', 'マーク', 'ステータス'].map((h) => (
+                {['氏名', '学年', '迎マーク', '送マーク', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
@@ -283,13 +293,19 @@ export default function ChildrenSettingsPage() {
             <tbody>
               {children.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  <td colSpan={6} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                     児童が登録されていません
                   </td>
                 </tr>
               )}
               {children.map((c, idx) => {
-                const markCount = (c.pickup_area_labels?.length ?? 0) + (c.dropoff_area_labels?.length ?? 0);
+                /* Phase 30: 件数は「現存するマーク」だけを数える。
+                   テナント設定で削除されたマーク id（幽霊）は除外。
+                   custom_*_areas は児童ごとに固有なので、そのまま id プールに合算。 */
+                const childPickupAreas = [...pickupAreas, ...(c.custom_pickup_areas ?? [])];
+                const childDropoffAreas = [...dropoffAreas, ...(c.custom_dropoff_areas ?? [])];
+                const pickupCount = filterValidLabels(c.pickup_area_labels, childPickupAreas).length;
+                const dropoffCount = filterValidLabels(c.dropoff_area_labels, childDropoffAreas).length;
                 const isDragging = draggingChildIdx === idx;
                 const isDropTarget = dragOverChildIdx === idx && draggingChildIdx !== null && draggingChildIdx !== idx;
                 return (
@@ -359,8 +375,11 @@ export default function ChildrenSettingsPage() {
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                       <Badge variant="info">{GRADE_LABELS[c.grade_type]}</Badge>
                     </td>
-                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-2)' }}>
-                      {markCount === 0 ? '未設定' : `${markCount}件`}
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: pickupCount > 0 ? 'var(--accent)' : 'var(--ink-3)' }}>
+                      {pickupCount === 0 ? '—' : `${pickupCount}件`}
+                    </td>
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: dropoffCount > 0 ? 'var(--green)' : 'var(--ink-3)' }}>
+                      {dropoffCount === 0 ? '—' : `${dropoffCount}件`}
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                       <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '在籍' : '退籍'}</Badge>
@@ -481,25 +500,24 @@ export default function ChildrenSettingsPage() {
                   const tenantAreasDir = direction === 'pickup' ? pickupAreas : dropoffAreas;
                   const customAreas = editing[customKey];
                   const selected = editing[key];
+                  /* Phase 30: id ベースでマージ。同 id がテナントと custom の両方にあれば custom を優先（override） */
                   type AreaRow = { area: AreaLabel; source: 'tenant' | 'custom'; label: string };
                   const merged: AreaRow[] = [];
-                  const seen = new Set<string>();
+                  const seenIds = new Set<string>();
                   for (const a of tenantAreasDir) {
-                    const l = formatAreaLabel(a);
-                    seen.add(l);
-                    const overrideIdx = customAreas.findIndex((c) => formatAreaLabel(c) === l);
+                    seenIds.add(a.id);
+                    const override = customAreas.find((c) => c.id === a.id);
                     merged.push(
-                      overrideIdx >= 0
-                        ? { area: customAreas[overrideIdx], source: 'custom', label: l }
-                        : { area: a, source: 'tenant', label: l },
+                      override
+                        ? { area: override, source: 'custom', label: formatAreaLabel(override) }
+                        : { area: a, source: 'tenant', label: formatAreaLabel(a) },
                     );
                   }
                   for (const c of customAreas) {
-                    const l = formatAreaLabel(c);
-                    if (seen.has(l)) continue;
-                    merged.push({ area: c, source: 'custom', label: l });
+                    if (seenIds.has(c.id)) continue;
+                    merged.push({ area: c, source: 'custom', label: formatAreaLabel(c) });
                   }
-                  const allLabels = merged.map((r) => r.label);
+                  const allIds = merged.map((r) => r.area.id);
                   return (
                     <div
                       key={direction}
@@ -514,7 +532,7 @@ export default function ChildrenSettingsPage() {
                           <div className="flex items-center gap-2 text-xs">
                             <button
                               type="button"
-                              onClick={() => setEditing({ ...editing, [key]: allLabels })}
+                              onClick={() => setEditing({ ...editing, [key]: allIds })}
                               style={{ color: accentVar, textDecoration: 'underline' }}
                             >
                               全選択
@@ -545,15 +563,15 @@ export default function ChildrenSettingsPage() {
                                   {src === 'tenant' ? '【テナント共通】' : '【この児童専用】'}
                                 </span>
                                 {rows.map(({ area: a, label: ll }, idx) => {
-                                  const checked = selected.includes(ll);
+                                  const checked = selected.includes(a.id);
                                   return (
                                     <button
                                       type="button"
-                                      key={`${src}-${idx}-${ll}`}
+                                      key={`${src}-${idx}-${a.id}`}
                                       onClick={() => {
                                         const next = checked
-                                          ? selected.filter((l) => l !== ll)
-                                          : [...selected, ll];
+                                          ? selected.filter((id) => id !== a.id)
+                                          : [...selected, a.id];
                                         setEditing({ ...editing, [key]: next });
                                       }}
                                       className="rounded-md transition-all text-left"
@@ -646,7 +664,8 @@ function CustomAreasEditor({
     setEditing({ ...editing, [key]: next });
   };
   const addArea = (key: 'custom_pickup_areas' | 'custom_dropoff_areas') => {
-    setEditing({ ...editing, [key]: [...editing[key], { emoji: '🏠', name: '' }] });
+    /* Phase 30: 児童専用エリアにも id を採番。送迎表マーク解決のキーになる。 */
+    setEditing({ ...editing, [key]: [...editing[key], { id: crypto.randomUUID(), emoji: '🏠', name: '' }] });
   };
   const removeArea = (key: 'custom_pickup_areas' | 'custom_dropoff_areas', i: number) => {
     setEditing({ ...editing, [key]: editing[key].filter((_, idx) => idx !== i) });

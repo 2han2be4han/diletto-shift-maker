@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { requireRole } from '@/lib/auth/requireRole';
 import type { AreaLabel } from '@/types';
 
-/** Phase 28: 児童専用エリア（AreaLabel[]）の緩い sanitize。emoji と name は必須、time/address は任意。 */
+/** Phase 28: 児童専用エリア（AreaLabel[]）の緩い sanitize。
+ *  Phase 30: id 必須化。クライアントが id を渡してきたら尊重、無ければサーバー側で採番。 */
 function sanitizeAreaLabels(input: unknown): AreaLabel[] {
   if (!Array.isArray(input)) return [];
   const out: AreaLabel[] = [];
@@ -13,12 +15,24 @@ function sanitizeAreaLabels(input: unknown): AreaLabel[] {
     const emoji = typeof r.emoji === 'string' ? r.emoji.trim() : '';
     const name = typeof r.name === 'string' ? r.name.trim() : '';
     if (!emoji && !name) continue;
-    const item: AreaLabel = { emoji, name };
+    const id = typeof r.id === 'string' && r.id.length > 0 ? r.id : randomUUID();
+    const item: AreaLabel = { id, emoji, name };
     if (typeof r.time === 'string' && r.time.trim()) item.time = r.time.trim();
     if (typeof r.address === 'string' && r.address.trim()) item.address = r.address.trim();
     out.push(item);
   }
   return out;
+}
+
+/** Phase 30: pickup_area_labels / dropoff_area_labels（id 配列）の sanitize。
+ *  非文字列・空文字を除外し、重複を排除する。 */
+function sanitizeIdArray(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  for (const v of input) {
+    if (typeof v === 'string' && v.length > 0 && !seen.has(v)) seen.add(v);
+  }
+  return Array.from(seen);
 }
 
 export async function GET() {
@@ -56,9 +70,10 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active ?? true,
       parent_contact: body.parent_contact ?? null,
       home_address: body.home_address ?? null,
-      pickup_area_labels: Array.isArray(body.pickup_area_labels) ? body.pickup_area_labels : [],
+      /* Phase 30: id 配列として sanitize（重複排除・空文字排除） */
+      pickup_area_labels: sanitizeIdArray(body.pickup_area_labels),
       /* Phase 27: 送り対応エリアも受け入れ */
-      dropoff_area_labels: Array.isArray(body.dropoff_area_labels) ? body.dropoff_area_labels : [],
+      dropoff_area_labels: sanitizeIdArray(body.dropoff_area_labels),
       /* Phase 28 A案: 児童専用エリア（イレギュラー用） */
       custom_pickup_areas: sanitizeAreaLabels(body.custom_pickup_areas),
       custom_dropoff_areas: sanitizeAreaLabels(body.custom_dropoff_areas),
