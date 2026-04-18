@@ -363,6 +363,20 @@ export default function DailyOutputPage() {
                 print-color-adjust: exact !important;
               }
             }
+
+            /* モバイル画面 (<1024px) のみ縦積みに切り替え。
+               @media screen スコープなので @media print には一切影響しない。
+               元の 2-col レイアウト (minmax(0,1fr) 320px) は PC 画面/印刷で維持される。 */
+            @media screen and (max-width: 1023px) {
+              .whiteboard-grid {
+                grid-template-columns: 1fr !important;
+                gap: 1.25rem !important;
+              }
+              /* 2-col 前提の横並びヘッダーがモバイルでつぶれないよう余白を調整 */
+              .whiteboard-frame {
+                padding: 1rem !important;
+              }
+            }
           `,
         }}
       />
@@ -435,7 +449,7 @@ export default function DailyOutputPage() {
               maxWidth: '1100px',
             }}
           >
-            <div className="grid gap-5 lg:gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
+            <div className="grid gap-5 lg:gap-6 whiteboard-grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
               {/* 左カラム: 日付カード + 送迎タイムライン */}
               <div>
                 <div className="flex items-center gap-4 mb-4 flex-wrap">
