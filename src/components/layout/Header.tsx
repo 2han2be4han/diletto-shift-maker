@@ -26,17 +26,17 @@ export default function Header({ title, onMenuToggle, actions, showMonthSelector
 
   return (
     <header
-      className="sticky top-0 z-30 flex items-center justify-between gap-4 px-6 py-3 shrink-0"
+      className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 lg:px-6 py-3 shrink-0"
       style={{
         borderBottom: '1px solid var(--rule)',
         background: 'var(--white)',
       }}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 min-w-0">
         {/* ハンバーガー（タブレット以下のみ表示） */}
         <button
           onClick={handleToggle}
-          className="flex flex-col justify-center items-center w-8 h-8 gap-1.5 hover:opacity-70 transition-opacity"
+          className="flex flex-col justify-center items-center w-8 h-8 gap-1.5 hover:opacity-70 transition-opacity shrink-0"
           aria-label="メニューを切替"
         >
           <span className="block w-5 h-0.5" style={{ background: 'var(--ink)' }} />
@@ -45,14 +45,14 @@ export default function Header({ title, onMenuToggle, actions, showMonthSelector
         </button>
 
         <h1
-          className="text-lg font-bold"
+          className="text-base lg:text-lg font-bold whitespace-nowrap"
           style={{ color: 'var(--ink)' }}
         >
           {title}
         </h1>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center flex-wrap gap-2 min-w-0">
         {showMonthSelector && <MonthSelector />}
         {actions}
         <NotificationBell />

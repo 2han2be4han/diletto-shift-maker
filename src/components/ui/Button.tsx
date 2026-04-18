@@ -60,7 +60,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`text-sm font-semibold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${className}`}
+      className={`text-sm font-semibold whitespace-nowrap transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${className}`}
       style={variantStyles[variant]}
       disabled={disabled}
       {...props}

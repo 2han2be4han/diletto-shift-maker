@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { format, addDays, subDays } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { addDays, subDays } from 'date-fns';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -15,26 +14,54 @@ import type {
   TransportAssignmentRow,
   AreaLabel,
   TenantSettings,
+  GradeType,
 } from '@/types';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
+import { staffDisplayName } from '@/lib/utils/displayName';
+
+/** 児童名をマーク円内で 2 行表示するために分割。
+    空白区切りがあればそこで分ける。無ければ文字列中央で分ける。2 文字以下は 1 行のまま。 */
+function splitChildName(name: string): string[] {
+  const t = (name ?? '').trim();
+  const parts = t.split(/\s+/);
+  if (parts.length >= 2) return [parts[0], parts.slice(1).join('')];
+  if (t.length <= 2) return [t];
+  const mid = Math.ceil(t.length / 2);
+  return [t.slice(0, mid), t.slice(mid)];
+}
+
+/** 児童管理 (settings/children) の getGradeRowBg と揃えた色分け。
+    bg/border/text を返す。preschool=青系 / nursery=赤系 / 他=緑系。 */
+function getGradeColors(grade: GradeType): { bg: string; border: string; text: string } {
+  switch (grade) {
+    case 'preschool':
+      return { bg: 'rgba(26,62,184,0.14)', border: 'rgba(26,62,184,0.75)', text: 'rgb(16,40,120)' };
+    case 'nursery_3':
+    case 'nursery_4':
+    case 'nursery_5':
+      return { bg: 'rgba(155,51,51,0.14)', border: 'rgba(155,51,51,0.75)', text: 'rgb(120,35,35)' };
+    default:
+      return { bg: 'rgba(42,122,82,0.14)', border: 'rgba(42,122,82,0.75)', text: 'rgb(28,90,60)' };
+  }
+}
 
 /**
- * Phase 25-D: 日次出力ページ
+ * Phase 31: 日次出力ページ（ホワイトボード風）
  *
- * 当日（または土日アクセス時は翌月曜）の送迎表と出勤職員をホワイトボード風に
- * 一枚のビューで出力。全ログイン済み職員がアクセス可能。PDF ダウンロード対応。
- * attendance_status='absent' の児童は送迎表示から除外する（欠席連動）。
+ * 事業所のアナログ送迎ボード（時刻発ブロック + 児童マーク + 担当職員ボックス +
+ * 右サイドの勤務時間表 + 休憩セクション）に寄せたレイアウト。
+ * attendance_status='absent' の児童は送迎表示から除外（欠席連動）。
  */
 
 type TransportSlot = {
   time: string;
   direction: 'pickup' | 'dropoff';
-  areaLabel: string | null;
-  location: string | null;
+  /** 同一担当者にまとめた結果、複数エリアを跨ぐ場合に備えて配列で保持 */
+  areaLabels: string[];
   children: Array<{
     name: string;
-    isNew: boolean;
-    areaLabel: string | null;
+    areaEmoji: string | null;
+    grade: GradeType;
   }>;
   staffIds: string[];
   isUnassigned: boolean;
@@ -48,14 +75,6 @@ type OnDutyStaff = {
   end: string;
 };
 
-/** 新規利用児童: 直近7日以内に created_at があるもの */
-function isNewChild(child: ChildRow): boolean {
-  const created = new Date(child.created_at);
-  const diff = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-  return diff <= 7;
-}
-
-/** HH:MM:SS → HH:MM */
 function fmtTime(t: string | null): string {
   if (!t) return '';
   return t.length >= 5 ? t.slice(0, 5) : t;
@@ -65,7 +84,6 @@ export default function DailyOutputPage() {
   const [date, setDate] = useState(defaultOutputDate());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [downloadBusy, setDownloadBusy] = useState(false);
 
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [children, setChildren] = useState<ChildRow[]>([]);
@@ -113,6 +131,20 @@ export default function DailyOutputPage() {
     void fetchAll();
   }, [fetchAll]);
 
+  /* AreaLabel → emoji 引き */
+  const allAreas = useMemo(
+    () => [...pickupAreas, ...dropoffAreas],
+    [pickupAreas, dropoffAreas],
+  );
+  const areaEmojiByLabel = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of allAreas) {
+      m.set(`${a.emoji} ${a.name}`, a.emoji);
+      m.set(a.name, a.emoji);
+    }
+    return m;
+  }, [allAreas]);
+
   /* ---- 送迎スロットをタイムライン順に組み立て ---- */
   const slots: TransportSlot[] = useMemo(() => {
     const childById = new Map(children.map((c) => [c.id, c]));
@@ -123,32 +155,25 @@ export default function DailyOutputPage() {
     for (const ta of transportAssignments) {
       const entry = entryById.get(ta.schedule_entry_id);
       if (!entry) continue;
-      /* 欠席児童は除外 */
       if (entry.attendance_status === 'absent') continue;
 
       const child = childById.get(entry.child_id);
       if (!child) continue;
-      /* マーク × テナント/児童専用エリアで areaLabel / location を解決 */
       const spec = resolveEntryTransportSpec(entry, {
         child,
         pickupAreas,
         dropoffAreas,
       });
 
-      /* 迎（来所） */
       if (entry.pickup_time && entry.pickup_method === 'pickup') {
+        const emoji = spec.pickup.areaLabel
+          ? areaEmojiByLabel.get(spec.pickup.areaLabel) ?? null
+          : null;
         list.push({
           time: fmtTime(entry.pickup_time),
           direction: 'pickup',
-          areaLabel: spec.pickup.areaLabel,
-          location: spec.pickup.location,
-          children: [
-            {
-              name: child.name,
-              isNew: isNewChild(child),
-              areaLabel: spec.pickup.areaLabel,
-            },
-          ],
+          areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
+          children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
           staffIds: ta.pickup_staff_ids,
           isUnassigned:
             ta.is_unassigned ||
@@ -157,20 +182,15 @@ export default function DailyOutputPage() {
         });
       }
 
-      /* 送（退所） */
       if (entry.dropoff_time && entry.dropoff_method === 'dropoff') {
+        const emoji = spec.dropoff.areaLabel
+          ? areaEmojiByLabel.get(spec.dropoff.areaLabel) ?? null
+          : null;
         list.push({
           time: fmtTime(entry.dropoff_time),
           direction: 'dropoff',
-          areaLabel: spec.dropoff.areaLabel,
-          location: spec.dropoff.location,
-          children: [
-            {
-              name: child.name,
-              isNew: isNewChild(child),
-              areaLabel: spec.dropoff.areaLabel,
-            },
-          ],
+          areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
+          children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
           staffIds: ta.dropoff_staff_ids,
           isUnassigned:
             ta.is_unassigned ||
@@ -180,85 +200,154 @@ export default function DailyOutputPage() {
       }
     }
 
-    /* 同時刻 + 同方向 + 同エリアの児童をグルーピング */
+    /* グルーピング:
+       - 担当者が割り当てられている slot: 同時刻+同方向+同じ担当者集合 でまとめる
+         （エリア違いでも同じ担当者なら 1 ブロックに統合。areaLabels は配列で保持）
+       - 未割当 slot: 同時刻+同方向+同エリア でまとめる（担当者が無いので area ベース） */
     const grouped = new Map<string, TransportSlot>();
     for (const s of list) {
-      const key = `${s.time}|${s.direction}|${s.areaLabel ?? ''}|${s.location ?? ''}`;
+      const hasStaff = s.staffIds.length > 0;
+      const staffKey = hasStaff
+        ? `S:${[...s.staffIds].sort().join(',')}`
+        : `U:${s.areaLabels.join('|')}`;
+      const key = `${s.time}|${s.direction}|${staffKey}`;
       const existing = grouped.get(key);
       if (existing) {
         existing.children.push(...s.children);
         existing.staffIds = Array.from(new Set([...existing.staffIds, ...s.staffIds]));
+        /* エリア違いの slot がマージされたら areaLabels に追加 */
+        for (const al of s.areaLabels) {
+          if (al && !existing.areaLabels.includes(al)) existing.areaLabels.push(al);
+        }
         existing.isUnassigned = existing.isUnassigned || s.isUnassigned;
       } else {
-        grouped.set(key, { ...s, children: [...s.children] });
+        grouped.set(key, {
+          ...s,
+          children: [...s.children],
+          areaLabels: [...s.areaLabels],
+        });
       }
     }
 
     const result = Array.from(grouped.values());
-    result.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.direction === 'pickup' ? -1 : 1));
+    result.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
     return result;
-  }, [children, entries, transportAssignments, pickupAreas, dropoffAreas]);
+  }, [children, entries, transportAssignments, pickupAreas, dropoffAreas, areaEmojiByLabel]);
 
-  /* ---- 出勤者一覧 ---- */
+  const pickupSlots = useMemo(() => slots.filter((s) => s.direction === 'pickup'), [slots]);
+  const dropoffSlots = useMemo(() => slots.filter((s) => s.direction === 'dropoff'), [slots]);
+
+  /* ---- 出勤者一覧: 職員管理と同じ並び（staff API が display_order ASC NULLS LAST, name でソート済） ---- */
   const onDuty: OnDutyStaff[] = useMemo(() => {
-    const staffById = new Map(staff.map((s) => [s.id, s]));
-    return shifts
-      .filter((sa) => sa.assignment_type === 'normal' && sa.start_time && sa.end_time)
-      .map((sa) => {
-        const s = staffById.get(sa.staff_id);
+    const shiftByStaffId = new Map(
+      shifts
+        .filter((sa) => sa.assignment_type === 'normal' && sa.start_time && sa.end_time)
+        .map((sa) => [sa.staff_id, sa] as const),
+    );
+    /* staff 配列の順序をそのまま使う（職員管理の並びと一致） */
+    return staff
+      .filter((s) => shiftByStaffId.has(s.id))
+      .map((s) => {
+        const sa = shiftByStaffId.get(s.id)!;
         return {
-          id: sa.staff_id,
-          name: s?.name ?? '(不明)',
+          id: s.id,
+          name: staffDisplayName(s),
           start: fmtTime(sa.start_time),
           end: fmtTime(sa.end_time),
         };
-      })
-      .sort((a, b) => (a.start < b.start ? -1 : 1));
+      });
   }, [shifts, staff]);
 
   const unassignedCount = slots.filter((s) => s.isUnassigned).length;
+  /* 職員マーク内は表示名（短縮）。display_name 未登録時は staffDisplayName のフォールバック（姓+名頭文字など） */
   const staffNameById = useMemo(
-    () => new Map(staff.map((s) => [s.id, s.name])),
+    () => new Map(staff.map((s) => [s.id, staffDisplayName(s)])),
     [staff],
   );
 
-  const allAreas = useMemo(
-    () => [...pickupAreas, ...dropoffAreas],
-    [pickupAreas, dropoffAreas],
-  );
-
-  const areaEmojiByLabel = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of allAreas) {
-      m.set(`${a.emoji} ${a.name}`, a.emoji);
-      m.set(a.name, a.emoji);
+  /* 利用児童数: 当日 entries のうち欠席でないユニーク child_id 数 */
+  const activeChildCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of entries) {
+      if (e.attendance_status === 'absent') continue;
+      ids.add(e.child_id);
     }
-    return m;
-  }, [allAreas]);
+    return ids.size;
+  }, [entries]);
 
-  const handleDownload = async () => {
-    setDownloadBusy(true);
-    try {
-      const res = await fetch(`/api/output/daily/pdf?date=${date}`);
-      if (!res.ok) throw new Error('PDF生成に失敗しました');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `daily_${date}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'ダウンロード失敗');
-    } finally {
-      setDownloadBusy(false);
-    }
+  /**
+   * ブラウザ標準の印刷ダイアログを起動。
+   * ユーザーはここから「PDF として保存」を選ぶ（全ブラウザ共通）。
+   * 日本語・絵文字はブラウザ標準フォントで確実に描画される。
+   * document.title をファイル名ヒントとして一時的に書き換える。
+   */
+  const handlePrint = () => {
+    const original = document.title;
+    document.title = `日次出力_${date}`;
+    /* タイトル反映直後に印刷を呼ぶ。afterprint で元タイトルに戻す。 */
+    const restore = () => {
+      document.title = original;
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    window.print();
   };
 
+  const dateObj = new Date(date);
+  const monthLabel = `${dateObj.getMonth() + 1}月`;
+  const dayLabel = `${dateObj.getDate()}`;
+  const weekLabel = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden daily-output-root">
+      {/* 印刷用 CSS: 印刷時はサイドバー・ヘッダー・ナビボタン非表示、A4縦に最適化 */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page { size: A3 portrait; margin: 10mm; }
+              html, body {
+                background: #fff !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              /* AppShell や layout が灰色 (var(--bg)) を当てている要素をすべて白に強制 */
+              [style*="var(--bg)"],
+              main {
+                background: #fff !important;
+                background-color: #fff !important;
+              }
+              /* アプリシェルの付帯UIを完全非表示 */
+              aside, header, .print-hide {
+                display: none !important;
+              }
+              /* メインコンテナを紙面に馴染ませる */
+              .daily-output-root,
+              .daily-output-root > div {
+                height: auto !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                background: #fff !important;
+              }
+              .whiteboard-frame {
+                box-shadow: none !important;
+                max-width: none !important;
+                margin: 0 !important;
+              }
+              .transport-block {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              /* 色を残す */
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+          `,
+        }}
+      />
+
       <Header
         title="日次出力"
         actions={
@@ -288,14 +377,14 @@ export default function DailyOutputPage() {
             >
               今日/翌営業日
             </Button>
-            <Button variant="primary" onClick={handleDownload} disabled={downloadBusy}>
-              {downloadBusy ? '生成中...' : '📄 PDF出力'}
+            <Button variant="primary" onClick={handlePrint}>
+              🖨 印刷 / PDF保存
             </Button>
           </>
         }
       />
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-3 lg:p-6" style={{ background: 'var(--white)' }}>
         {error && (
           <div
             className="mb-2 px-4 py-2 rounded"
@@ -305,151 +394,394 @@ export default function DailyOutputPage() {
           </div>
         )}
 
-        {/* サマリー */}
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <h2 className="text-xl font-bold" style={{ color: 'var(--ink)' }}>
-            {format(new Date(date), 'yyyy年M月d日(E)', { locale: ja })}
-          </h2>
-          <Badge variant="info">送迎 {slots.length}便</Badge>
-          <Badge variant="info">出勤 {onDuty.length}名</Badge>
-          {unassignedCount > 0 && <Badge variant="error">未割当 {unassignedCount}件</Badge>}
-        </div>
+        {/* 未割当があるときだけ画面上に警告を出す（日付はボード内カードに表示） */}
+        {unassignedCount > 0 && (
+          <div className="mb-3 flex items-center gap-2 flex-wrap print-hide">
+            <Badge variant="error">未割当 {unassignedCount}件</Badge>
+          </div>
+        )}
 
         {loading ? (
           <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
             読み込み中...
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr,280px] gap-6">
-            {/* 左: 送迎カードリスト */}
-            <div>
-              <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--ink-2)' }}>
-                送迎予定
-              </h3>
-              {slots.length === 0 ? (
-                <div
-                  className="p-4 rounded text-sm"
-                  style={{ background: 'var(--white)', border: '1px solid var(--rule)', color: 'var(--ink-3)' }}
-                >
-                  この日の送迎予定はありません
-                </div>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {slots.map((s, i) => (
-                    <li
-                      key={`${s.time}-${s.direction}-${i}`}
-                      className="p-3 rounded"
-                      style={{
-                        background: s.isUnassigned ? 'var(--red-pale)' : 'var(--white)',
-                        border: `1px solid ${s.isUnassigned ? 'var(--red)' : 'var(--rule)'}`,
-                      }}
+          /* ホワイトボード本体: A3 縦に合わせた最大幅。常時 2-col（左=送迎, 右=勤務+休憩） */
+          <div
+            className="rounded-lg p-4 lg:p-6 whiteboard-frame mx-auto"
+            style={{
+              background: 'var(--white)',
+              border: '2px solid var(--ink-2)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              maxWidth: '1100px',
+            }}
+          >
+            <div className="grid gap-5 lg:gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
+              {/* 左カラム: 日付カード + 送迎タイムライン */}
+              <div>
+                <div className="flex items-center gap-4 mb-4 flex-wrap">
+                  {/* 日付カード（横並び: 4月20日(月) を 1 行で） */}
+                  <div
+                    className="shrink-0"
+                    style={{
+                      border: '2px solid var(--ink)',
+                      borderRadius: '6px',
+                      padding: '10px 18px',
+                    }}
+                  >
+                    <span
+                      className="text-2xl font-black whitespace-nowrap"
+                      style={{ color: 'var(--ink)' }}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex flex-col items-center shrink-0" style={{ minWidth: '72px' }}>
-                          <span
-                            className="text-lg font-bold"
-                            style={{ color: s.direction === 'pickup' ? 'var(--accent)' : 'var(--green)' }}
-                          >
-                            {s.time}
-                          </span>
-                          <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-3)' }}>
-                            {s.direction === 'pickup' ? '迎' : '送'}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            {s.areaLabel && (
-                              <span
-                                className="text-xs px-2 py-0.5 rounded font-semibold"
-                                style={{ background: 'var(--bg)', color: 'var(--ink-2)' }}
-                              >
-                                {s.areaLabel}
-                              </span>
-                            )}
-                            {s.location && (
-                              <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                                {s.location}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {s.children.map((c, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold"
-                                style={{
-                                  background: 'var(--green-pale)',
-                                  color: 'var(--green)',
-                                }}
-                              >
-                                {c.areaLabel && areaEmojiByLabel.get(c.areaLabel)} {c.name}
-                                {c.isNew && (
-                                  <span
-                                    className="text-[9px] px-1 rounded"
-                                    style={{ background: 'var(--accent)', color: '#fff' }}
-                                  >
-                                    NEW
-                                  </span>
-                                )}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div
-                          className="shrink-0 text-right text-xs"
-                          style={{ color: s.isUnassigned ? 'var(--red)' : 'var(--ink-2)' }}
-                        >
-                          {s.isUnassigned ? (
-                            <span className="font-bold">⚠ 未割当</span>
-                          ) : (
-                            <span>
-                              担当:{' '}
-                              {s.staffIds.length === 0
-                                ? '—'
-                                : s.staffIds.map((id) => staffNameById.get(id) ?? id).join(' / ')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                      {monthLabel}{dayLabel}日({weekLabel})
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-base font-black" style={{ color: 'var(--ink-2)' }}>
+                      予定ホワイトボード
+                    </div>
+                    <div className="text-base font-bold mt-1" style={{ color: 'var(--ink)' }}>
+                      出勤者 {onDuty.length}名・利用児童 {activeChildCount}名
+                    </div>
+                  </div>
+                </div>
 
-            {/* 右: 出勤者 */}
-            <div>
-              <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--ink-2)' }}>
-                本日の出勤
-              </h3>
-              <div
-                className="p-3 rounded"
-                style={{ background: 'var(--white)', border: '1px solid var(--rule)' }}
-              >
-                {onDuty.length === 0 ? (
-                  <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                    出勤者はいません
+                {slots.length === 0 ? (
+                  <div
+                    className="p-6 rounded text-sm text-center"
+                    style={{ border: '1px dashed var(--rule)', color: 'var(--ink-3)' }}
+                  >
+                    この日の送迎予定はありません
                   </div>
                 ) : (
-                  <ul className="flex flex-col gap-1">
-                    {onDuty.map((s) => (
-                      <li
-                        key={s.id}
-                        className="flex items-center justify-between text-sm py-1"
-                        style={{ borderBottom: '1px dashed var(--rule)' }}
-                      >
-                        <span className="font-semibold">{s.name}</span>
-                        <span style={{ color: 'var(--ink-3)' }}>
-                          {s.start}〜{s.end}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    {/* 迎セクション: 上下に太線。3 列レイアウト (col1=1件, col2=2件まで, col3=5件まで) */}
+                    <DirectionSection
+                      heading="迎（来所）"
+                      count={pickupSlots.length}
+                      accent="var(--accent)"
+                    >
+                      {pickupSlots.length === 0 ? (
+                        <EmptyDirection label="迎" />
+                      ) : (
+                        <ThreeColGrid
+                          slots={pickupSlots}
+                          staffNameById={staffNameById}
+                          keyPrefix="p"
+                          direction="pickup"
+                        />
+                      )}
+                    </DirectionSection>
+
+                    {/* 送セクション: 上下に太線。3 列レイアウト (同上) */}
+                    <DirectionSection
+                      heading="送（退所）"
+                      count={dropoffSlots.length}
+                      accent="var(--green)"
+                    >
+                      {dropoffSlots.length === 0 ? (
+                        <EmptyDirection label="送" />
+                      ) : (
+                        <ThreeColGrid
+                          slots={dropoffSlots}
+                          staffNameById={staffNameById}
+                          keyPrefix="d"
+                          direction="dropoff"
+                        />
+                      )}
+                    </DirectionSection>
+                  </>
                 )}
+              </div>
+
+              {/* 右カラム: 本日の出勤 + 休憩セクション */}
+              <div className="flex flex-col gap-4">
+                <section>
+                  <h3
+                    className="text-base font-black pb-1 mb-2"
+                    style={{ color: 'var(--ink)', borderBottom: '2.5px solid var(--ink)' }}
+                  >
+                    本日の出勤
+                  </h3>
+                  {onDuty.length === 0 ? (
+                    <div className="text-sm" style={{ color: 'var(--ink-3)' }}>
+                      出勤者はいません
+                    </div>
+                  ) : (
+                    <ul className="flex flex-col">
+                      {onDuty.map((s) => (
+                        <li
+                          key={s.id}
+                          className="flex items-center justify-between gap-3 py-1.5"
+                          style={{ borderBottom: '1px dashed var(--rule)' }}
+                        >
+                          <span
+                            className="text-base font-black whitespace-nowrap"
+                            style={{ color: 'var(--ink)' }}
+                          >
+                            {s.name}
+                          </span>
+                          <span
+                            className="text-sm font-bold tracking-tight whitespace-nowrap"
+                            style={{ color: 'var(--ink-2)' }}
+                          >
+                            {s.start}〜{s.end}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section>
+                  <h3
+                    className="text-base font-black pb-1 mb-2"
+                    style={{ color: 'var(--ink)', borderBottom: '2.5px solid var(--ink)' }}
+                  >
+                    休憩
+                  </h3>
+                  <div
+                    className="p-3 rounded text-sm font-semibold"
+                    style={{
+                      border: '1px dashed var(--rule)',
+                      color: 'var(--ink-2)',
+                      minHeight: '70px',
+                      lineHeight: '1.5',
+                    }}
+                  >
+                    休憩時間をずらす
+                  </div>
+                </section>
               </div>
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ===== 迎/送セクション: 上下に太線を引いて完全分離 ===== */
+function DirectionSection({
+  heading,
+  count,
+  accent,
+  children,
+}: {
+  heading: string;
+  count: number;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-5 direction-section">
+      {/* 太い上線 + 見出し */}
+      <div
+        className="flex items-baseline gap-2 px-2 py-1.5 direction-section-header"
+        style={{
+          borderTop: `6px solid ${accent}`,
+          borderBottom: `2px solid ${accent}`,
+          marginBottom: '10px',
+        }}
+      >
+        <span className="text-xl font-black" style={{ color: accent }}>
+          {heading}
+        </span>
+        <span className="text-sm font-bold" style={{ color: 'var(--ink-3)' }}>
+          {count}便
+        </span>
+      </div>
+      {children}
+      {/* 太い下線で締める */}
+      <div
+        className="direction-section-footer"
+        style={{
+          borderBottom: `6px solid ${accent}`,
+          marginTop: '10px',
+        }}
+      />
+    </div>
+  );
+}
+
+function EmptyDirection({ label }: { label: string }) {
+  return (
+    <div
+      className="p-4 rounded text-xs text-center"
+      style={{ border: '1px dashed var(--rule)', color: 'var(--ink-3)' }}
+    >
+      {label}の便はありません
+    </div>
+  );
+}
+
+/** 方向別のブロック配置ルール:
+ *   迎え: 1 / 1 / 2 / 3 / 3 / 3... （1 行目 1件、2 行目 1件、3 行目 2件、4 行目以降 3件ずつ）
+ *   送り: 2 / 3 / 3 / 3...         （1 行目 2件、2 行目以降 3件ずつ） */
+function slotCell(i: number, direction: 'pickup' | 'dropoff'): { col: number; row: number } {
+  if (direction === 'pickup') {
+    if (i === 0) return { col: 1, row: 1 };
+    if (i === 1) return { col: 1, row: 2 };
+    if (i === 2) return { col: 1, row: 3 };
+    if (i === 3) return { col: 2, row: 3 };
+    /* i >= 4: row 4 から 3列ずつ */
+    const r = 4 + Math.floor((i - 4) / 3);
+    const c = ((i - 4) % 3) + 1;
+    return { col: c, row: r };
+  }
+  /* dropoff */
+  if (i === 0) return { col: 1, row: 1 };
+  if (i === 1) return { col: 2, row: 1 };
+  /* i >= 2: row 2 から 3列ずつ */
+  const r = 2 + Math.floor((i - 2) / 3);
+  const c = ((i - 2) % 3) + 1;
+  return { col: c, row: r };
+}
+
+function ThreeColGrid({
+  slots,
+  staffNameById,
+  keyPrefix,
+  direction,
+}: {
+  slots: TransportSlot[];
+  staffNameById: Map<string, string>;
+  keyPrefix: string;
+  direction: 'pickup' | 'dropoff';
+}) {
+  return (
+    <div
+      className="grid gap-x-6 gap-y-5"
+      style={{
+        gridTemplateColumns: 'repeat(3, max-content)',
+        gridAutoRows: 'min-content',
+        justifyContent: 'start',
+      }}
+    >
+      {slots.map((s, i) => {
+        const pos = slotCell(i, direction);
+        return (
+          <div
+            key={`${keyPrefix}-${s.time}-${s.areaLabels.join(',')}-${i}`}
+            style={{ gridColumn: pos.col, gridRow: pos.row }}
+          >
+            <TransportBlock slot={s} staffNameById={staffNameById} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ===== 時刻ブロック: 画像の罫線で囲まれた一枠に相当 ===== */
+function TransportBlock({
+  slot,
+  staffNameById,
+}: {
+  slot: TransportSlot;
+  staffNameById: Map<string, string>;
+}) {
+  const headerColor = slot.direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+  return (
+    <div
+      className="flex flex-col transport-block"
+      style={{
+        border: `2px solid ${slot.isUnassigned ? 'var(--red)' : 'var(--ink-2)'}`,
+        background: slot.isUnassigned ? 'var(--red-pale)' : 'var(--white)',
+        borderRadius: '6px',
+        /* 内容に応じて自然幅。児童 1 名でも詰めて表示、多い便だけ横に広がる。 */
+        flex: '0 0 auto',
+        minWidth: 0,
+        maxWidth: '380px',
+      }}
+    >
+      {/* ヘッダー: 13:10発  榎江保育園(小)  / 大府緑公園  (複数エリア対応) */}
+      <div
+        className="px-3 py-2 flex items-baseline gap-2 flex-wrap"
+        style={{ borderBottom: '1.5px solid var(--ink-2)' }}
+      >
+        <span className="text-2xl font-black leading-none" style={{ color: headerColor }}>
+          {slot.time}
+        </span>
+        <span className="text-base font-black" style={{ color: headerColor }}>
+          発
+        </span>
+        {slot.areaLabels.length > 0 && (
+          <span className="text-base font-black" style={{ color: 'var(--ink)' }}>
+            {slot.areaLabels.join(' / ')}
+          </span>
+        )}
+      </div>
+
+      {/* 本体: 児童マーク + 担当職員 */}
+      <div className="p-3 flex flex-col gap-2">
+        {/* 児童マーク行 */}
+        <div className="flex flex-wrap gap-1.5">
+          {slot.children.map((c, idx) => {
+            const col = getGradeColors(c.grade);
+            const nameLines = splitChildName(c.name);
+            return (
+              <div
+                key={idx}
+                className="flex flex-col items-center justify-center child-mark"
+                style={{
+                  background: col.bg,
+                  border: `2px solid ${col.border}`,
+                  borderRadius: '999px',
+                  minWidth: '64px',
+                  minHeight: '64px',
+                  lineHeight: '1.1',
+                  padding: '4px 6px',
+                }}
+                title={c.name}
+              >
+                {nameLines.map((line, i) => (
+                  <span
+                    key={i}
+                    className="text-sm font-black whitespace-nowrap"
+                    style={{ color: col.text }}
+                  >
+                    {line}
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 担当職員ボックス行 */}
+        <div className="flex flex-wrap gap-1.5 pt-1" style={{ borderTop: '1px dashed var(--rule)' }}>
+          {slot.isUnassigned ? (
+            <span
+              className="text-base font-black px-2 py-1"
+              style={{ color: 'var(--red)' }}
+            >
+              ⚠ 担当未割当
+            </span>
+          ) : slot.staffIds.length === 0 ? (
+            <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              —
+            </span>
+          ) : (
+            slot.staffIds.map((id) => (
+              <span
+                key={id}
+                className="text-base font-black staff-box whitespace-nowrap"
+                style={{
+                  background: 'var(--white)',
+                  border: '2px solid var(--ink-2)',
+                  borderRadius: '4px',
+                  color: 'var(--ink)',
+                  minWidth: '56px',
+                  padding: '4px 10px',
+                  textAlign: 'center',
+                }}
+              >
+                {staffNameById.get(id) ?? id}
+              </span>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

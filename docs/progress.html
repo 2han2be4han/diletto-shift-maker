@@ -633,6 +633,44 @@
         <strong>データ整合性</strong>: マイグレーションは破壊的（emoji+name 文字列を id に置換、マッチしないものは drop）。本番反映前にバックアップ確認推奨。
     </p>
 
+    <div class="phase-head">Phase 31: 日次出力のホワイトボード風リデザイン</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>31-1</td><td>ダッシュボードカードに「日次出力」追加（STAFF / ADMIN 両方）</td><td>src/app/(app)/dashboard/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ロール可視</td></tr>
+            <tr><td>31-2</td><td>/output/daily 画面を参考画像（実店舗の送迎ホワイトボード）風に刷新: 日付カード / 時刻発ブロック(flex-wrap) / 丸児童マーク + 白職員ボックス / 右サイドに勤務時間表 + 休憩セクション枠</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>バッジ・エリア色は要望通り不採用。休憩は空セクション枠のみ</td></tr>
+            <tr><td>31-3</td><td>日次出力 PDF を同レイアウトに刷新: A4縦・ホワイトボード枠 + 左タイムライン + 右勤務/休憩</td><td>src/app/api/output/daily/pdf/route.ts</td><td class="status-done">完了</td><td>100%</td><td>Helvetica踏襲のため日本語豆腐は未解決（別タスク化提案）</td></tr>
+            <tr><td>31-4</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+            <tr><td>31-5</td><td>ビジュアル確認: ユーザー側既存 dev server (localhost:5000) で確認依頼</td><td>（横断）</td><td class="status-doing">確認待ち</td><td>80%</td><td>preview_start はポート競合で起動不可、ユーザー側で確認</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 32: 日次出力の追加要求対応 + モバイル対応</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>32-1</td><td>日次出力: 迎/送を太線（上下 6px/5px）で完全分離、セクション見出し付き</td><td>src/app/(app)/output/daily/page.tsx, src/app/api/output/daily/pdf/route.ts</td><td class="status-done">完了</td><td>100%</td><td>画面 / PDF 両方</td></tr>
+            <tr><td>32-2</td><td>PDF 日本語フォント: Noto Sans JP Regular を Google Early Access CDN から URL 登録（hyphenation 無効化）</td><td>src/app/api/output/daily/pdf/route.ts</td><td class="status-done">完了</td><td>100%</td><td>CDN 障害時は別途ローカル同梱対応が必要</td></tr>
+            <tr><td>32-3</td><td>モバイル対応: Header を flex-wrap + whitespace-nowrap 化、タイトル・ボタンの縦書き化を解消</td><td>src/components/layout/Header.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ページに波及</td></tr>
+            <tr><td>32-4</td><td>モバイル対応: Button に whitespace-nowrap 追加</td><td>src/components/ui/Button.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>32-5</td><td>モバイル対応: /output/daily 内側 padding を lg:p-6 / p-3 に調整</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>32-6</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+            <tr><td>32-7</td><td>ビジュアル確認</td><td>（横断）</td><td class="status-doing">確認待ち</td><td>80%</td><td>preview_start はポート 5000 競合で起動不可、ユーザー側 localhost:5000 で確認依頼</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 33: PDF 出力をブラウザ印刷方式に切替（全ブラウザ対応）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>33-1</td><td>サーバー側 PDF 生成 API ルートを削除（CDN 依存・日本語豆腐・絵文字非対応・500 エラーを丸ごと排除）</td><td>src/app/api/output/daily/pdf/route.ts（削除）</td><td class="status-done">完了</td><td>100%</td><td>ディレクトリも撤去</td></tr>
+            <tr><td>33-2</td><td>「📄 PDF出力」→「🖨 印刷 / PDF保存」に変更。window.print() を呼び出し、document.title を日次出力_YYYY-MM-DD に一時書換</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>全ブラウザの標準印刷ダイアログ経由</td></tr>
+            <tr><td>33-3</td><td>@media print CSS 追加: A4縦・サイドバー/ヘッダー/操作ボタン非表示・transport-block ページ分割回避・色保持</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>whiteboard-frame / transport-block クラスで制御</td></tr>
+            <tr><td>33-4</td><td>ずれ確認: tsc 通過</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td>型エラー 0</td></tr>
+            <tr><td>33-5</td><td>iPhone Safari / Android Chrome / デスクトップ印刷ダイアログ動作確認</td><td>（手動）</td><td class="status-doing">確認待ち</td><td>50%</td><td>ユーザー側検証</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>
