@@ -260,6 +260,8 @@ export type ShiftAssignmentRow = {
   assignment_type: ShiftAssignmentType;
   is_confirmed: boolean;
   created_at: string;
+  /** Phase 50: 分割シフト対応。同一 (staff_id, date) 内の並び順。既存行は 0。 */
+  segment_order: number;
 };
 
 // ----- Phase 25: シフト変更申請 -----

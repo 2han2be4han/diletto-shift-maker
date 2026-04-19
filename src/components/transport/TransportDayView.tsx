@@ -357,6 +357,22 @@ export default function TransportDayView({
               direction="dropoff"
               rowAreaEmoji={splitAreaLabel(child.dropoffAreaLabel).emoji}
               tripMarks={computeTripMarks(child, children, 'dropoff')}
+              /* Phase 53 (rev): 自動コピーは児童により逆効果なのでボタン化。
+                 迎担当が入っていて送担当が空の時だけ「迎からコピー」ボタンを表示。
+                 押すと送の退勤時刻ガード（Phase 47 ②）を通る職員だけコピーされる。 */
+              copyFromPickup={
+                child.pickupStaffIds.length > 0 && child.dropoffStaffIds.length === 0
+                  ? () => {
+                      const eligible = dropoffEligibleFor(child.dropoffTime);
+                      const copied = child.pickupStaffIds.filter((id) =>
+                        eligible.some((s) => s.id === id),
+                      );
+                      if (copied.length > 0) {
+                        onStaffChange(child.scheduleEntryId, 'dropoff', copied);
+                      }
+                    }
+                  : undefined
+              }
             />
           )}
         </td>
@@ -974,6 +990,7 @@ function StaffSelect({
   direction,
   rowAreaEmoji,
   tripMarks,
+  copyFromPickup,
 }: {
   staffIds: string[];
   availableStaff: TransportStaff[];
@@ -989,6 +1006,9 @@ function StaffSelect({
   /** Phase 47 (①再修正): この行と同じ便（=同じ職員・同方向・30 分以内）の全マーク集合。
       これにより 16:00 に 🌳 と 🏭 を同じ職員が回るケースは両行とも 🌳🏭 と表示される。 */
   tripMarks?: string[];
+  /** Phase 53 (rev): 「迎からコピー」ボタン押下時に呼ばれる。
+      送担当が空かつ迎担当があるときだけ親から渡される想定。 */
+  copyFromPickup?: () => void;
 }) {
   const handleChange = (index: number, newId: string) => {
     const updated = [...staffIds];
@@ -1048,7 +1068,9 @@ function StaffSelect({
       >
         {rowMarks.slice(0, 4).join('')}
       </span>
-      {staffIds.map((id, i) => {
+      {/* Phase 53: 空状態でも「担当を選択」ボタンではなく未選択プルダウンを直接表示。
+          displaySlots は常に最低 1 スロット（未選択）を確保し、選ぶと staffIds に反映される。 */}
+      {(staffIds.length === 0 ? [''] : staffIds).map((id, i) => {
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
         /* Phase 28 fix: 他スロットで既に選ばれている職員を候補から除外し、
            同一送迎で同じ職員が 2 回選ばれるバグを防ぐ。自スロットの値は残す */
@@ -1105,27 +1127,48 @@ function StaffSelect({
           </div>
         );
       })}
-      {/* ＋追加 / 担当を選択 ボタン。横並びの末尾にインライン配置。
-          2 人目追加時はアイコンのみにして横幅をコンパクトに（未選択時は「担当を選択」を残す） */}
-      {(staffIds.length === 0 || (staffIds.length < 2 && !disabled)) && (
+      {/* Phase 53 (rev): 送担当で迎担当が入っていて送が空なら「迎からコピー」の絵文字ボタン。
+          迎に 2 名いたら 2 名まとめてコピー（退勤時刻ガードを通る職員のみ）。
+          自動コピーは児童ごとに正解が違うので手動ボタン方式にした。 */}
+      {direction === 'dropoff' && copyFromPickup && !disabled && (
+        <button
+          onClick={copyFromPickup}
+          className="rounded-md transition-colors shrink-0"
+          style={{
+            padding: '2px 6px',
+            fontSize: '0.95rem',
+            lineHeight: 1,
+            border: '1px dashed var(--accent)',
+            background: 'transparent',
+            whiteSpace: 'nowrap',
+          }}
+          title="迎担当をそのまま送担当にコピー（2名いればまとめてコピー。送の退勤時刻ガードを通る職員のみ）"
+          aria-label="迎担当から送担当へコピー"
+        >
+          📥
+        </button>
+      )}
+      {/* Phase 53: 「＋」ボタンは 1 人目が確定してから（2 人目追加のため）のみ表示。
+          空状態は上の未選択プルダウンでカバーされるのでボタンは不要。 */}
+      {staffIds.length >= 1 && staffIds.length < 2 && !disabled && (
         <button
           onClick={handleAdd}
           disabled={disabled}
           className="rounded-md transition-colors disabled:opacity-60 shrink-0"
           style={{
-            padding: staffIds.length === 0 ? '4px 10px' : '4px 6px',
+            padding: '4px 6px',
             fontSize: '0.74rem',
             fontWeight: 500,
-            color: staffIds.length === 0 ? 'var(--red)' : 'var(--accent)',
-            border: `1px dashed ${staffIds.length === 0 ? 'var(--red)' : 'var(--accent)'}`,
+            color: 'var(--accent)',
+            border: '1px dashed var(--accent)',
             background: 'transparent',
             whiteSpace: 'nowrap',
-            minWidth: staffIds.length === 0 ? undefined : '24px',
+            minWidth: '24px',
           }}
-          title={staffIds.length === 0 ? undefined : 'もう 1 名追加'}
-          aria-label={staffIds.length === 0 ? '担当を選択' : '担当をもう 1 名追加'}
+          title="もう 1 名追加"
+          aria-label="担当をもう 1 名追加"
         >
-          {staffIds.length === 0 ? '担当を選択' : '＋'}
+          ＋
         </button>
       )}
     </div>

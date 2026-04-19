@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   '/signup',
   '/api/signup',
   '/auth/callback',
+  '/auth/confirm',
   '/auth/signout',
 ];
 

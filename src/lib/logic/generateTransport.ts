@@ -74,13 +74,18 @@ export function generateTransportAssignments(
   const childById = new Map(children.map((c) => [c.id, c]));
 
   /* ① 出勤している職員のみ抽出（end_time が記録されている職員）。
+     Phase 50: 分割シフト対応。同一職員に複数セグメントがある場合、
+     少なくとも 1 つに end_time が入っていれば「出勤している」とみなす。
      退勤時刻ガードは送り便のみ selectStaff 内で適用する。 */
-  const workingStaff = staff.filter((s) => {
-    const shift = shiftAssignments.find(
-      (sa) => sa.staff_id === s.id && sa.date === date && sa.assignment_type === 'normal'
-    );
-    return !!(shift && shift.end_time);
-  });
+  const workingStaff = staff.filter((s) =>
+    shiftAssignments.some(
+      (sa) =>
+        sa.staff_id === s.id &&
+        sa.date === date &&
+        sa.assignment_type === 'normal' &&
+        !!sa.end_time
+    )
+  );
 
   /* 職員ごとの送迎担当回数（均等分散用、トリップ単位）。
      同一グループ(同エリア・同時間帯)の児童は同じ職員が担当するため、
@@ -302,20 +307,31 @@ function selectStaff({
   const timeMin = normalizeTimeMinutes(time);
 
   const candidates = workingStaff.filter((s) => {
-    const shift = shiftAssignments.find(
-      (sa) => sa.staff_id === s.id && sa.date === date
+    /* Phase 50: 分割シフト対応。同一 (staff, date) の全セグメントを集め、
+       便時刻がいずれかのセグメントに収まるかで判定する。 */
+    const segments = shiftAssignments.filter(
+      (sa) =>
+        sa.staff_id === s.id &&
+        sa.date === date &&
+        sa.assignment_type === 'normal' &&
+        sa.start_time &&
+        sa.end_time
     );
-    if (!shift || !shift.start_time || !shift.end_time) return false;
+    if (segments.length === 0) return false;
 
-    /* ② 送迎時間が勤務時間内か */
-    if (!isTimeInRange(time, shift.start_time, shift.end_time)) return false;
+    /* ② 送迎時間が勤務時間内か（いずれかのセグメント内に収まれば OK） */
+    const coveringSegment = segments.find(
+      (seg) => isTimeInRange(time, seg.start_time!, seg.end_time!)
+    );
+    if (!coveringSegment) return false;
 
     /* Phase 47 (②): 送り便は退勤時刻ジャストの職員を除外（厳密 end_time > dropoff_time）。
        16:30 発の送り便に 16:30 退勤の職員を当てると、退勤後に時間外運転を強いることになる。
        事業所が「+1 分」設定をしなくても、ロジック側で自動的に弾く。
-       お迎え便にはこのガードを掛けない（早朝出勤のお迎え担当は退勤時刻と無関係）。 */
+       お迎え便にはこのガードを掛けない（早朝出勤のお迎え担当は退勤時刻と無関係）。
+       Phase 50: 分割シフト時は「便時刻を内包しているセグメント」の end_time を基準にする。 */
     if (direction === 'dropoff' && timeMin !== null) {
-      const endMin = normalizeTimeMinutes(shift.end_time);
+      const endMin = normalizeTimeMinutes(coveringSegment.end_time!);
       if (endMin === null || endMin <= timeMin) return false;
     }
 

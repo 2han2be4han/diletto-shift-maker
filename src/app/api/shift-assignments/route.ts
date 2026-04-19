@@ -42,12 +42,14 @@ export async function POST(request: NextRequest) {
     end_time: (a.end_time as string) ?? null,
     assignment_type: (a.assignment_type as string) ?? 'off',
     is_confirmed: Boolean(a.is_confirmed ?? false),
+    /* Phase 50: 分割シフト対応。未指定なら 0（従来挙動）。 */
+    segment_order: Number.isFinite(a.segment_order as number) ? Number(a.segment_order) : 0,
   }));
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('shift_assignments')
-    .upsert(rows, { onConflict: 'tenant_id,staff_id,date' })
+    .upsert(rows, { onConflict: 'tenant_id,staff_id,date,segment_order' })
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

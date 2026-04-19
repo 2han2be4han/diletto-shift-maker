@@ -26,6 +26,8 @@ type ShiftCell = {
   start_time: string | null;
   end_time: string | null;
   assignment_type: ShiftAssignmentType;
+  /** Phase 50: 分割シフト対応。同一 (staff_id, date) の並び順。省略時は 0。 */
+  segment_order?: number;
 };
 
 type ShiftWarning = {
@@ -83,19 +85,38 @@ export default function ShiftGrid({
     });
   }
 
-  /* セルデータをマップ化 */
+  /* セルデータをマップ化。
+     Phase 50: 分割シフト対応。同一 (staff_id, date) に複数セグメントが来る場合に備え、
+     Map<key, ShiftCell[]> で保持する。segment_order 昇順でソート。 */
+  const cellSegmentsMap = new Map<string, ShiftCell[]>();
+  cells.forEach((c) => {
+    const key = `${c.staff_id}_${c.date}`;
+    const arr = cellSegmentsMap.get(key);
+    if (arr) arr.push(c);
+    else cellSegmentsMap.set(key, [c]);
+  });
+  cellSegmentsMap.forEach((arr) => {
+    arr.sort((a, b) => (a.segment_order ?? 0) - (b.segment_order ?? 0));
+  });
+  /* 後方互換: 既存コードの cellMap.get(key) は「先頭セグメント」を返す */
   const cellMap = new Map<string, ShiftCell>();
-  cells.forEach((c) => cellMap.set(`${c.staff_id}_${c.date}`, c));
+  cellSegmentsMap.forEach((arr, key) => {
+    if (arr[0]) cellMap.set(key, arr[0]);
+  });
 
-  /* Phase 26: 職員ごとの出勤/公休/有給日数（職員名横の小さなカウント表示用） */
+  /* Phase 26: 職員ごとの出勤/公休/有給日数（職員名横の小さなカウント表示用）。
+     Phase 50: 同一 (staff, date) に複数セグメントがあっても「1 日 1 回」としてカウント。 */
   const countsByStaff = new Map<string, { work: number; ph: number; pl: number }>();
   staff.forEach((s) => countsByStaff.set(s.id, { work: 0, ph: 0, pl: 0 }));
-  cells.forEach((c) => {
-    const rec = countsByStaff.get(c.staff_id);
+  cellSegmentsMap.forEach((segs, key) => {
+    const [staffId] = key.split('_');
+    const rec = countsByStaff.get(staffId);
     if (!rec) return;
-    if (c.assignment_type === 'normal') rec.work++;
-    else if (c.assignment_type === 'public_holiday') rec.ph++;
-    else if (c.assignment_type === 'paid_leave') rec.pl++;
+    /* 複数セグメントでも代表の assignment_type（先頭）で 1 日分を数える */
+    const type = segs[0]?.assignment_type;
+    if (type === 'normal') rec.work++;
+    else if (type === 'public_holiday') rec.ph++;
+    else if (type === 'paid_leave') rec.pl++;
   });
 
   /* 警告をマップ化 */
@@ -106,13 +127,13 @@ export default function ShiftGrid({
     warningMap.set(w.date, existing);
   });
 
-  /* 各日の出勤人数 */
+  /* 各日の出勤人数（Phase 50: 複数セグメントでも「1 人」カウント） */
   const dailyWorkingCount = new Map<string, number>();
   dates.forEach((d) => {
     let count = 0;
     staff.forEach((s) => {
-      const cell = cellMap.get(`${s.id}_${d.dateStr}`);
-      if (cell && cell.assignment_type === 'normal') count++;
+      const segs = cellSegmentsMap.get(`${s.id}_${d.dateStr}`);
+      if (segs && segs.some((c) => c.assignment_type === 'normal')) count++;
     });
     dailyWorkingCount.set(d.dateStr, count);
   });
@@ -193,6 +214,16 @@ export default function ShiftGrid({
                 >
                   <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{DOW_SHORT[d.dow]}</div>
                   <div style={{ fontSize: '0.85rem' }}>{d.day}</div>
+                  {/* Phase 48: 日別の利用者数（schedule_entries ベース） */}
+                  {(() => {
+                    const childCount = childrenCountByDate?.get(d.dateStr) ?? 0;
+                    if (childCount === 0) return null;
+                    return (
+                      <div style={{ fontSize: '0.6rem', color: 'var(--ink-3)', fontWeight: 400, lineHeight: 1 }}>
+                        {childCount}人
+                      </div>
+                    );
+                  })()}
                 </th>
               );
             })}
@@ -244,12 +275,21 @@ export default function ShiftGrid({
                 </div>
               </td>
               {dates.map((d) => {
-                const cell = cellMap.get(`${s.id}_${d.dateStr}`);
+                const segs = cellSegmentsMap.get(`${s.id}_${d.dateStr}`) ?? [];
+                const cell = segs[0];
                 const type = cell?.assignment_type || 'off';
                 const config = TYPE_CONFIG[type];
                 const commentText = commentMap.get(`${s.id}_${d.dateStr}`);
-                const baseTitle = type === 'normal' && cell ? `${cell.start_time}〜${cell.end_time}` : config.label;
+                /* Phase 50: 分割シフト時は複数時間帯をタイトルに列挙 */
+                const baseTitle =
+                  type === 'normal'
+                    ? segs
+                        .filter((c) => c.assignment_type === 'normal')
+                        .map((c) => `${c.start_time}〜${c.end_time}`)
+                        .join(' / ')
+                    : config.label;
                 const cellTitle = commentText ? `${baseTitle}\n⚠ ${commentText}` : baseTitle;
+                const normalSegs = segs.filter((c) => c.assignment_type === 'normal');
 
                 /* Phase 38: 有資格者の通常出勤セルも gold-pale で行ハイライトを継承 */
                 const cellBg = type !== 'normal'
@@ -272,12 +312,27 @@ export default function ShiftGrid({
                   >
                     {type === 'normal' ? (
                       <div className="flex flex-col gap-0.5 leading-tight py-0.5">
-                        <span style={{ color: 'var(--ink-2)', fontSize: '0.68rem' }}>
-                          {cell?.start_time?.slice(0, 5)}
-                        </span>
-                        <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
-                          {cell?.end_time?.slice(0, 5)}
-                        </span>
+                        {/* Phase 50: 分割シフト時はセグメントごとに時刻ペアを縦積み表示。
+                            分割がない通常シフトは従来通り start/end を 2 行で表示。 */}
+                        {normalSegs.length > 1 ? (
+                          normalSegs.map((seg, i) => (
+                            <span
+                              key={`${seg.segment_order ?? i}-${seg.start_time}`}
+                              style={{ color: 'var(--ink-2)', fontSize: '0.6rem', lineHeight: 1.1 }}
+                            >
+                              {seg.start_time?.slice(0, 5)}-{seg.end_time?.slice(0, 5)}
+                            </span>
+                          ))
+                        ) : (
+                          <>
+                            <span style={{ color: 'var(--ink-2)', fontSize: '0.68rem' }}>
+                              {cell?.start_time?.slice(0, 5)}
+                            </span>
+                            <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                              {cell?.end_time?.slice(0, 5)}
+                            </span>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <span

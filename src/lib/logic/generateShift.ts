@@ -141,6 +141,8 @@ export function generateShiftAssignments(
         end_time: isWorking ? (s.default_end_time || '17:00') : null,
         assignment_type: assignmentType,
         is_confirmed: false,
+        /* Phase 50: 生成ロジックは 1 職員 1 日 1 セグメント前提。segment_order=0 固定。 */
+        segment_order: 0,
       });
     }
 

@@ -42,6 +42,8 @@ type ShiftCell = {
   start_time: string | null;
   end_time: string | null;
   assignment_type: ShiftAssignmentType;
+  /** Phase 50: 分割シフト対応 */
+  segment_order?: number;
 };
 
 type Warning = { date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string };
@@ -137,6 +139,8 @@ export default function ShiftPage() {
           start_time: a.start_time,
           end_time: a.end_time,
           assignment_type: a.assignment_type,
+          /* Phase 50: 分割シフト表示用に segment_order も伝搬 */
+          segment_order: a.segment_order ?? 0,
         }))
       );
       setConfirmed(assigns.some((a) => a.is_confirmed));
@@ -197,6 +201,8 @@ export default function ShiftPage() {
             end_time: a.end_time,
             assignment_type: a.assignment_type,
             is_confirmed: false,
+            /* Phase 50: 生成結果は常に segment_order=0（1 日 1 セグメント） */
+            segment_order: a.segment_order ?? 0,
           })),
         }),
       });

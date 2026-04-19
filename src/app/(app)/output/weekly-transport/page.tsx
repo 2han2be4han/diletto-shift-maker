@@ -74,8 +74,9 @@ function buildWeeklyGrid(year: number, month: number): { weeks: { date: string; 
   return { weeks };
 }
 
-/** 1 日あたりの固定枠数（運用上の定員 12 枠で揃える）。
- *  実際の利用人数が少なくても枠数は固定し、週ごとのレイアウトを統一する。 */
+/** Phase 52 (rev): 1 日あたりの固定枠数。
+ *  7 日 ×（1 見出し + 12 行）= 91 行を A3 縦 1 枚に収めるため、
+ *  フォント・パディング・行ギャップを print CSS で強く圧縮する前提で 12 固定に戻した。 */
 const SLOTS_PER_DAY = 12;
 
 export default function WeeklyTransportPrintPage() {
@@ -203,19 +204,38 @@ export default function WeeklyTransportPrintPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden weekly-transport-print-root">
-      {/* Phase 47: 週次送迎表の印刷専用 CSS。1 週 = 1 A3 ページ。 */}
+      {/* Phase 47 / 52 (rev): 週次送迎表の印刷 CSS。1 週 = A3 縦 1 ページに強制収納。
+         7 日 ×（1 見出し + 12 行）= 91 行を A3 縦（420mm）に収める前提で、
+         @page 余白・フォント・padding・day-block 間ギャップ・h2 を全圧縮。 */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
             @media print {
-              @page { size: A3 portrait; margin: 8mm; }
+              @page { size: A3 portrait; margin: 4mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .weekly-transport-print-root { overflow: visible !important; height: auto !important; }
-              .weekly-transport-print-root .weekly-scroll { overflow: visible !important; padding: 0 !important; }
-              .week-page { page-break-after: always; break-after: page; }
+              .weekly-transport-print-root .weekly-scroll { overflow: visible !important; padding: 0 !important; background: #fff !important; }
+              .week-page {
+                page-break-after: always; break-after: page;
+                padding: 2mm !important; margin: 0 !important; border: none !important;
+                background: #fff !important;
+              }
               .week-page:last-child { page-break-after: auto; break-after: auto; }
-              .day-block { page-break-inside: avoid; break-inside: avoid; }
-              .week-page table { font-size: 8.5pt !important; }
-              .week-page th, .week-page td { padding: 1px 3px !important; }
+              .week-page > div:first-child { margin-bottom: 1mm !important; }
+              .week-page h2 { font-size: 10pt !important; line-height: 1.1 !important; }
+              .week-page > div:first-child > span { font-size: 7pt !important; }
+              /* 週全体のコンテナは縦スクロールなしで詰める */
+              .weekly-transport-print-root .flex.flex-col.gap-6 { gap: 0 !important; }
+              /* 各日ブロック間のギャップを最小化 */
+              .day-block { page-break-inside: avoid; break-inside: avoid; margin-bottom: 0 !important; }
+              /* テーブル自体をコンパクトに */
+              .week-page table { font-size: 7pt !important; line-height: 1.15 !important; border-collapse: collapse !important; }
+              .week-page th, .week-page td {
+                padding: 0.5px 3px !important;
+                line-height: 1.15 !important;
+                height: auto !important;
+              }
+              .week-page thead th { font-size: 7pt !important; padding: 1px 3px !important; }
               .weekly-print-toolbar { display: none !important; }
             }
           `,
@@ -265,10 +285,10 @@ export default function WeeklyTransportPrintPage() {
                       ShiftPuzzle 送迎表
                     </span>
                   </div>
-                  {/* 7 日固定で常に同じレイアウト。月外の日は枠だけ薄表示 */}
+                  {/* Phase 52 (rev): 7 日固定で「1 見出し + 12 行 = 13 行」× 7 日 = 91 行を
+                     A3 縦 1 枚に収める前提で描画する。print CSS で圧縮。 */}
                   {week.map(({ date, inMonth: isInMonth }) => {
                     const realRows = isInMonth ? buildDayRows(date) : [];
-                    /* 12 枠固定: 実データを先頭、不足ぶんは空行で埋める */
                     const padded: (ReturnType<typeof buildDayRows>[number] | null)[] = Array(SLOTS_PER_DAY)
                       .fill(null)
                       .map((_, i) => realRows[i] ?? null);

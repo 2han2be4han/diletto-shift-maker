@@ -347,23 +347,29 @@ export default function DailyOutputPage() {
   const pickupSlots = useMemo(() => slots.filter((s) => s.direction === 'pickup'), [slots]);
   const dropoffSlots = useMemo(() => slots.filter((s) => s.direction === 'dropoff'), [slots]);
 
-  /* ---- 出勤者一覧: 職員管理と同じ並び（staff API が display_order ASC NULLS LAST, name でソート済） ---- */
+  /* ---- 出勤者一覧: 職員管理と同じ並び（staff API が display_order ASC NULLS LAST, name でソート済）
+     Phase 50: 分割シフト対応。同一職員に複数セグメントがある場合、start/end を " / " 区切りで連結表示。 */
   const onDuty: OnDutyStaff[] = useMemo(() => {
-    const shiftByStaffId = new Map(
-      shifts
-        .filter((sa) => sa.assignment_type === 'normal' && sa.start_time && sa.end_time)
-        .map((sa) => [sa.staff_id, sa] as const),
+    const segmentsByStaffId = new Map<string, typeof shifts>();
+    shifts
+      .filter((sa) => sa.assignment_type === 'normal' && sa.start_time && sa.end_time)
+      .forEach((sa) => {
+        const arr = segmentsByStaffId.get(sa.staff_id);
+        if (arr) arr.push(sa);
+        else segmentsByStaffId.set(sa.staff_id, [sa]);
+      });
+    segmentsByStaffId.forEach((arr) =>
+      arr.sort((a, b) => (a.segment_order ?? 0) - (b.segment_order ?? 0)),
     );
-    /* staff 配列の順序をそのまま使う（職員管理の並びと一致） */
     return staff
-      .filter((s) => shiftByStaffId.has(s.id))
+      .filter((s) => segmentsByStaffId.has(s.id))
       .map((s) => {
-        const sa = shiftByStaffId.get(s.id)!;
+        const segs = segmentsByStaffId.get(s.id)!;
         return {
           id: s.id,
           name: staffDisplayName(s),
-          start: fmtTime(sa.start_time),
-          end: fmtTime(sa.end_time),
+          start: segs.map((sa) => fmtTime(sa.start_time)).join(' / '),
+          end: segs.map((sa) => fmtTime(sa.end_time)).join(' / '),
         };
       });
   }, [shifts, staff]);

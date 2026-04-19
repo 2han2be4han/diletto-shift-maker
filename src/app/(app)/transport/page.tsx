@@ -8,6 +8,7 @@ import Header from '@/components/layout/Header';
 import TransportDayView from '@/components/transport/TransportDayView';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
 import type {
   StaffRow,
   ChildRow,
@@ -63,6 +64,7 @@ type PendingAssignment = {
 export default function TransportPage() {
   const searchParams = useSearchParams();
   const urlMonth = searchParams.get('month');
+  const urlDate = searchParams.get('date');
   const { year, month } = useMemo(() => {
     const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
     const [y, m] = source.split('-').map(Number);
@@ -89,6 +91,17 @@ export default function TransportPage() {
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
   /* Phase 28: 自分のロール（viewer は列並び替え不可） */
   const [myRole, setMyRole] = useState<'admin' | 'editor' | 'viewer' | null>(null);
+
+  /* Phase 51: シフト追加モーダル。送迎表作成中に「この職員この日出勤できる」と気づいた時に
+     シフト画面へ移動せずその場でシフトを追加する導線。
+     分割シフト（Phase 50）対応: 既存セグメントがある職員には segment_order を自動採番。 */
+  const [addShiftModal, setAddShiftModal] = useState<{
+    staffId: string;
+    startTime: string;
+    endTime: string;
+    saving: boolean;
+    errorMsg: string;
+  } | null>(null);
 
   /* Phase 26: 日ごとの編集を一時保存する pending state（scheduleEntryId → { pickup, dropoff }） */
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingAssignment>>(new Map());
@@ -159,11 +172,47 @@ export default function TransportPage() {
     return days;
   }, [year, month, daysInMonth]);
 
-  const [selectedDate, setSelectedDate] = useState<string>(workDays[0] ?? '');
+  /* Phase 49: URL ?date=YYYY-MM-DD と同期。
+     他ページに遷移して戻ってきた時も同じ日から再開できるようにする。 */
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) return urlDate;
+    return workDays[0] ?? '';
+  });
+
+  /* Phase 54: URL に ?date= が無い場合は sessionStorage の直前日付を復元。
+     SSR ハイドレーションとの不整合を避けるため useState 初期値では触らず、mount 後に適用。
+     別月に切り替えた場合は採用しない（月の範囲外の日付になるため）。 */
+  const SESSION_DATE_KEY = 'shift-puzzle.transport.lastDate';
+  useEffect(() => {
+    if (urlDate) return;
+    if (typeof window === 'undefined') return;
+    const saved = window.sessionStorage.getItem(SESSION_DATE_KEY);
+    if (!saved || !/^\d{4}-\d{2}-\d{2}$/.test(saved)) return;
+    const [sy, sm] = saved.split('-').map(Number);
+    if (sy !== year || sm !== month) return;
+    /* 既にユーザー操作で他の日付になっている場合は上書きしない（初期ロード時のみ） */
+    setSelectedDate((prev) => (prev === (workDays[0] ?? '') ? saved : prev));
+    /* 依存配列は初期ロードの年月だけ参照。selectedDate は意図的に外す */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month]);
 
   useEffect(() => {
     if (!selectedDate && workDays[0]) setSelectedDate(workDays[0]);
   }, [workDays, selectedDate]);
+
+  /* Phase 49: selectedDate 変更時に URL (history) も更新。pushState ではなく replaceState で
+     履歴を汚さない（戻るボタンで1日ずつ遡る必要がないため）。
+     Phase 54: 同時に sessionStorage にも退避。 */
+  useEffect(() => {
+    if (!selectedDate) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('date') !== selectedDate) {
+      params.set('date', selectedDate);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+    window.sessionStorage.setItem(SESSION_DATE_KEY, selectedDate);
+  }, [selectedDate]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -434,21 +483,31 @@ export default function TransportPage() {
     return { pickup: pickupResult, dropoff: dropoffResult };
   }, [scheduleEntries, selectedDate, children, pickupAreas, dropoffAreas, pendingChanges, transportAssignments]);
 
-  /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す */
+  /* Phase 26 / 27: 当日出勤職員を迎/送両方の areaMarks 付きで UI へ渡す
+     Phase 50: 分割シフト対応。複数セグメントがある場合、endTime は最遅の end_time を採用
+     （「退勤時刻」表示として自然な最終勤務終了を示す）。 */
   const availableStaffForDay = useMemo(() => {
     return staff.map((s) => {
-      const shift = shiftAssignments.find(
+      const daySegments = shiftAssignments.filter(
         (sa) =>
           sa.staff_id === s.id &&
           sa.date === selectedDate &&
-          sa.assignment_type === 'normal'
+          sa.assignment_type === 'normal' &&
+          !!sa.end_time,
       );
+      const latestEndTime =
+        daySegments.length === 0
+          ? null
+          : daySegments.reduce<string | null>((acc, sa) => {
+              if (!acc) return sa.end_time;
+              return (sa.end_time as string) > acc ? (sa.end_time as string) : acc;
+            }, null);
       return {
         id: s.id,
         name: s.name,
         /* Phase 28 F案: 送迎 select の短縮表示に使う */
         display_name: s.display_name ?? null,
-        endTime: shift?.end_time ?? null,
+        endTime: latestEndTime,
         pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
         dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],
       };
@@ -737,6 +796,75 @@ export default function TransportPage() {
     await fetchAll();
   };
 
+  /**
+   * Phase 51: 送迎表から当日シフトを追加する。
+   * - admin / editor のみ許可
+   * - 同一 (staff, date) に既存セグメントがあれば segment_order を採番（分割シフト = Phase 50）
+   * - 基本時間外（早朝・夜間）も入力可能。チェックはしない（運用上スポット出勤もあり得るため）
+   */
+  const handleSaveAddShift = async () => {
+    if (!addShiftModal) return;
+    if (myRole !== 'admin' && myRole !== 'editor') {
+      setAddShiftModal((prev) => (prev ? { ...prev, errorMsg: '権限がありません' } : prev));
+      return;
+    }
+    if (!addShiftModal.staffId) {
+      setAddShiftModal((prev) => (prev ? { ...prev, errorMsg: '職員を選択してください' } : prev));
+      return;
+    }
+    if (!addShiftModal.startTime || !addShiftModal.endTime) {
+      setAddShiftModal((prev) => (prev ? { ...prev, errorMsg: '開始・終了時刻を入力してください' } : prev));
+      return;
+    }
+    if (addShiftModal.startTime >= addShiftModal.endTime) {
+      setAddShiftModal((prev) => (prev ? { ...prev, errorMsg: '終了時刻は開始時刻より後にしてください' } : prev));
+      return;
+    }
+
+    setAddShiftModal((prev) => (prev ? { ...prev, saving: true, errorMsg: '' } : prev));
+
+    /* 既存セグメントから次の segment_order を決定 */
+    const existingSegments = shiftAssignments.filter(
+      (sa) => sa.staff_id === addShiftModal.staffId && sa.date === selectedDate,
+    );
+    const nextSegmentOrder =
+      existingSegments.length === 0
+        ? 0
+        : Math.max(...existingSegments.map((sa) => sa.segment_order ?? 0)) + 1;
+
+    try {
+      const res = await fetch('/api/shift-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: [
+            {
+              staff_id: addShiftModal.staffId,
+              date: selectedDate,
+              start_time: addShiftModal.startTime,
+              end_time: addShiftModal.endTime,
+              assignment_type: 'normal',
+              is_confirmed: false,
+              segment_order: nextSegmentOrder,
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? 'シフト追加に失敗しました');
+      }
+      setAddShiftModal(null);
+      await fetchAll();
+    } catch (err) {
+      setAddShiftModal((prev) =>
+        prev
+          ? { ...prev, saving: false, errorMsg: err instanceof Error ? err.message : 'シフト追加に失敗しました' }
+          : prev,
+      );
+    }
+  };
+
   /** 日付切替時のガード */
   const handleSelectDate = (date: string) => {
     if (pendingCountForDay > 0) {
@@ -807,6 +935,23 @@ export default function TransportPage() {
             />
             {confirmed && <Badge variant="success">確定済み</Badge>}
             {generated && !confirmed && <Badge variant="warning">未確定</Badge>}
+            {/* Phase 55: 当日の出勤スタッフ数（シフトに入っていて end_time が設定されている職員） */}
+            {(() => {
+              const onDutyCount = availableStaffForDay.filter((s) => !!s.endTime).length;
+              return (
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded"
+                  style={{
+                    background: 'var(--bg)',
+                    color: 'var(--ink-2)',
+                    border: '1px solid var(--rule)',
+                  }}
+                  title="この日にシフトが入っている職員数（分割シフトは1名としてカウント）"
+                >
+                  👤 出勤 {onDutyCount}人
+                </span>
+              );
+            })()}
             {generated && unassignedTotal > 0 && (
               <Badge variant="error">未割当 {unassignedTotal}件</Badge>
             )}
@@ -841,6 +986,25 @@ export default function TransportPage() {
             >
               🖨 週次印刷
             </Button>
+            {/* Phase 51: 送迎表作成中にシフト外の職員を当日出勤扱いにして担当に立てるための導線 */}
+            {(myRole === 'admin' || myRole === 'editor') && (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  setAddShiftModal({
+                    staffId: '',
+                    startTime: '09:00',
+                    endTime: '17:00',
+                    saving: false,
+                    errorMsg: '',
+                  })
+                }
+                disabled={!selectedDate}
+                title="この日に出勤する職員を追加（基本時間外も可）"
+              >
+                ＋ シフト追加
+              </Button>
+            )}
             {generated && !confirmed && (
               <Button variant="primary" onClick={handleConfirm} disabled={unassignedTotal > 0}>
                 {unassignedTotal > 0 ? '未割当あり（確定不可）' : '送迎表確定'}
@@ -972,6 +1136,121 @@ export default function TransportPage() {
           </>
         )}
       </div>
+
+      {/* Phase 51: シフト追加モーダル。送迎表編集中に当日分のシフトを追加する */}
+      {addShiftModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => (addShiftModal.saving ? null : setAddShiftModal(null))}
+          title={`シフト追加（${selectedDate}）`}
+          size="sm"
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+              この日に出勤する職員を追加します。基本時間外（早朝・夜間）も入力可能です。
+              既に当日シフトがある職員を選ぶと、分割シフト（2 コマ目以降）として追加されます。
+            </p>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>職員</span>
+              <select
+                value={addShiftModal.staffId}
+                onChange={(e) =>
+                  setAddShiftModal((prev) => (prev ? { ...prev, staffId: e.target.value } : prev))
+                }
+                disabled={addShiftModal.saving}
+                className="outline-none"
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '0.9rem',
+                  border: '1px solid var(--rule)',
+                  borderRadius: '6px',
+                  background: 'var(--white)',
+                }}
+              >
+                <option value="">選択してください</option>
+                {staff
+                  .filter((s) => s.is_active !== false)
+                  .map((s) => {
+                    const hasShift = shiftAssignments.some(
+                      (sa) =>
+                        sa.staff_id === s.id &&
+                        sa.date === selectedDate &&
+                        sa.assignment_type === 'normal',
+                    );
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                        {hasShift ? '（既にシフトあり → 分割追加）' : ''}
+                      </option>
+                    );
+                  })}
+              </select>
+            </label>
+            <div className="flex gap-3">
+              <label className="flex-1 flex flex-col gap-1">
+                <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>開始</span>
+                <input
+                  type="time"
+                  value={addShiftModal.startTime}
+                  onChange={(e) =>
+                    setAddShiftModal((prev) => (prev ? { ...prev, startTime: e.target.value } : prev))
+                  }
+                  disabled={addShiftModal.saving}
+                  style={{
+                    padding: '8px 10px',
+                    fontSize: '0.9rem',
+                    border: '1px solid var(--rule)',
+                    borderRadius: '6px',
+                    background: 'var(--white)',
+                  }}
+                />
+              </label>
+              <label className="flex-1 flex flex-col gap-1">
+                <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>終了</span>
+                <input
+                  type="time"
+                  value={addShiftModal.endTime}
+                  onChange={(e) =>
+                    setAddShiftModal((prev) => (prev ? { ...prev, endTime: e.target.value } : prev))
+                  }
+                  disabled={addShiftModal.saving}
+                  style={{
+                    padding: '8px 10px',
+                    fontSize: '0.9rem',
+                    border: '1px solid var(--rule)',
+                    borderRadius: '6px',
+                    background: 'var(--white)',
+                  }}
+                />
+              </label>
+            </div>
+            {addShiftModal.errorMsg && (
+              <div
+                className="px-3 py-2 rounded text-xs"
+                style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
+              >
+                {addShiftModal.errorMsg}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-2">
+              <Button
+                variant="secondary"
+                onClick={() => setAddShiftModal(null)}
+                disabled={addShiftModal.saving}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSaveAddShift}
+                disabled={addShiftModal.saving || !addShiftModal.staffId}
+              >
+                {addShiftModal.saving ? '保存中…' : 'シフト追加'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
