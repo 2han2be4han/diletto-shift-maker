@@ -397,11 +397,14 @@ export default function DailyOutputPage() {
     [],
   );
 
-  /* 利用児童数: 当日 entries のうち欠席でないユニーク child_id 数 */
+  /* 利用児童数: 当日 entries のうち「実際に来所する」児童のユニーク数。
+     Phase 42: 欠席 (attendance_status='absent') と お休み (times 両方 null) を除外。
+     お休みは国保連請求対象外、欠席は請求対象だが当日は来所しない。どちらも「利用児童」にカウントしない。 */
   const activeChildCount = useMemo(() => {
     const ids = new Set<string>();
     for (const e of entries) {
       if (e.attendance_status === 'absent') continue;
+      if (!e.pickup_time && !e.dropoff_time) continue;
       ids.add(e.child_id);
     }
     return ids.size;

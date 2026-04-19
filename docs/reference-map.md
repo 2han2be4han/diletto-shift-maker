@@ -554,3 +554,19 @@
   - セル描画を 4 状態に: 未入力(−) / 出席(時間+送迎マーク) / 欠席(赤バッジ + 赤背景) / お休み(灰バッジ + 灰背景)
   - title 属性で状態 hover ヒント付き
   - 状態判定: !entry → 未入力 / status='absent' → 欠席 / entry あり times 両方 null → お休み / それ以外 → 出席
+
+---
+
+## Phase 42b 変更一覧（2026-04-19）
+
+### 業務ルール
+- 欠席 (attendance_status='absent'): 国保連請求対象、送迎不要
+- お休み (entry あり / pickup_time も dropoff_time も null): 国保連請求対象外、送迎不要
+- 両方とも /transport の児童行と /output/daily の利用者カウントから除外する
+
+### 実装
+- `src/app/(app)/transport/page.tsx`:
+  - fetchAll の setScheduleEntries フィルタに `(!e.pickup_time && !e.dropoff_time)` を追加
+- `src/app/(app)/output/daily/page.tsx`:
+  - activeChildCount から times 両方 null を除外
+  - 送迎スロット (TransportSlot) 側は既に entry.pickup_time / dropoff_time チェックで skip 済

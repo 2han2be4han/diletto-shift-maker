@@ -149,12 +149,16 @@ export default function TransportPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      /* Phase 38: 欠席児童 (attendance_status='absent') は送迎表から完全除外。
-         /output/daily と挙動を揃え、出席連動で送迎担当割当の対象外とする。 */
+      /* Phase 38/42: 送迎表で出さないものを除外。
+         - 欠席 (attendance_status='absent'): お金は発生するが送迎は不要
+         - お休み (pickup_time も dropoff_time も null): 国保連請求対象外、送迎も不要
+         どちらも送迎担当を割り当てる必要がない entry なので /transport から弾く。 */
       setScheduleEntries(
-        ((eJson.entries ?? []) as ScheduleEntryRow[]).filter(
-          (e) => e.attendance_status !== 'absent',
-        ),
+        ((eJson.entries ?? []) as ScheduleEntryRow[]).filter((e) => {
+          if (e.attendance_status === 'absent') return false;
+          if (!e.pickup_time && !e.dropoff_time) return false;
+          return true;
+        }),
       );
       setShiftAssignments(aJson.assignments ?? []);
       setTransportAssignments(tJson.assignments ?? []);
