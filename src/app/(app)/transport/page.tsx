@@ -1363,7 +1363,10 @@ function ToastBanner({
 
 
 /* Phase 38: 「年月日(曜日)」表示 + クリックでネイティブカレンダーを開く日付ピッカー。
-   ヘッダーの長い日付タブ列が伸びても、ここから直接日付ジャンプ可能。 */
+   ヘッダーの長い日付タブ列が伸びても、ここから直接日付ジャンプ可能。
+   実装ポイント: <label> 内に見かけのボタン風 UI と type="date" の input を重ねる。
+   input を opacity:0 で全面に被せ、pointer-events は有効にしてタップ/クリックを直接受け取る。
+   旧実装の showPicker() は Safari/iOS で失敗することが多く「押しても反応しない」不具合を招いていた。 */
 function DateHeaderPicker({
   year,
   month,
@@ -1377,7 +1380,6 @@ function DateHeaderPicker({
   workDays: string[];
   onChange: (d: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const DOW = ['日', '月', '火', '水', '木', '金', '土'];
 
   let label = `${year}年${month}月`;
@@ -1392,40 +1394,23 @@ function DateHeaderPicker({
   const maxDate = workDays[workDays.length - 1] ?? minDate;
 
   return (
-    <div className="relative inline-flex items-center">
-      <button
-        type="button"
-        onClick={() => {
-          const el = inputRef.current;
-          if (!el) return;
-          if (typeof el.showPicker === 'function') el.showPicker();
-          else el.click();
-        }}
-        className="text-lg font-bold inline-flex items-center gap-2 cursor-pointer transition-all"
-        style={{
-          color: 'var(--ink)',
-          background: 'var(--white)',
-          border: '1.5px solid var(--accent)',
-          borderRadius: '8px',
-          padding: '6px 14px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--accent-pale)';
-          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.10)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--white)';
-          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
-        }}
-        title="日付を選択して遷移"
-        aria-label={`${label} の日付を変更`}
-      >
-        <span>{label}</span>
-        <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
-      </button>
+    <label
+      className="relative inline-flex items-center gap-2 text-lg font-bold cursor-pointer transition-all"
+      style={{
+        color: 'var(--ink)',
+        background: 'var(--white)',
+        border: '1.5px solid var(--accent)',
+        borderRadius: '8px',
+        padding: '6px 14px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        whiteSpace: 'nowrap',
+      }}
+      title="日付を選択して遷移"
+      aria-label={`${label} の日付を変更`}
+    >
+      <span>{label}</span>
+      <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
       <input
-        ref={inputRef}
         type="date"
         value={selectedDate}
         min={minDate}
@@ -1434,11 +1419,10 @@ function DateHeaderPicker({
           const v = e.target.value;
           if (v) onChange(v);
         }}
-        className="absolute inset-0 opacity-0 pointer-events-none"
-        tabIndex={-1}
-        aria-hidden="true"
+        className="absolute inset-0 w-full h-full cursor-pointer"
+        style={{ opacity: 0, colorScheme: 'light' }}
       />
-    </div>
+    </label>
   );
 }
 

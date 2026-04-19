@@ -7,6 +7,20 @@
 
 ---
 
+## DateHeaderPicker の 📅 ボタンがクリックに反応しない（Safari / iOS 等）
+
+- **発生日**: 2026-04-19
+- **発生箇所**: `src/app/(app)/transport/page.tsx` — `DateHeaderPicker` コンポーネント
+- **エラー内容**: 送迎表の日付ボタン（年月日 + 📅）をクリック/タップしてもネイティブ date picker が開かない
+- **原因**:
+  1. `<input type="date">` を `opacity:0 + pointer-events-none` で隠し、ボタンの `onClick` から `input.showPicker()` を呼ぶ実装だった
+  2. `showPicker()` は Chrome では動くが Safari/iOS で未実装 or 制限があり、フォールバックの `el.click()` も pointer-events-none の input では不発
+  3. ボタンに `whiteSpace: nowrap` が無く、狭幅ビューで文字が縦に 1 文字ずつ折り返していた（レイアウト破綻）
+- **解決方法**: `<label>` で UI を囲み、その中に `<input type="date">` を `absolute inset-0 opacity:0 cursor-pointer` で重ねる。ラベル上の任意位置をタップすると input にフォーカス/クリックが届き、ネイティブ picker が開く。`showPicker()` への依存を廃止
+- **再発防止**: 隠し input を用いた独自ピッカーは避け、**label + input の重ね合わせ**を第一候補にする。`showPicker()` を使う場合は必ず try-catch とフォールバック経路を用意する
+
+---
+
 ## 送迎表が月遷移しない（selectedDate が旧月のまま固定）
 
 - **発生日**: 2026-04-19
