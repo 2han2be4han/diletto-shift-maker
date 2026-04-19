@@ -39,11 +39,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'assignments が空です' }, { status: 400 });
   }
 
+  /* Phase 45 fix: uuid[] カラムに空文字が入ると Postgres が
+     「invalid input syntax for type uuid: ""」で全件失敗する。
+     StaffSelect で「（未選択）」を選ぶと '' が staff_ids に混じるので、サーバー側でフィルタする。 */
+  const cleanUuidArray = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    return input.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  };
+
   const rows = assignments.map((a) => ({
     tenant_id: gate.staff.tenant_id,
     schedule_entry_id: String(a.schedule_entry_id ?? ''),
-    pickup_staff_ids: (a.pickup_staff_ids as string[]) ?? [],
-    dropoff_staff_ids: (a.dropoff_staff_ids as string[]) ?? [],
+    pickup_staff_ids: cleanUuidArray(a.pickup_staff_ids),
+    dropoff_staff_ids: cleanUuidArray(a.dropoff_staff_ids),
     is_unassigned: Boolean(a.is_unassigned ?? false),
     is_confirmed: Boolean(a.is_confirmed ?? false),
     /* Phase 45: 手動編集ロック。「保存」呼び出しは true、再生成 (handleGenerate) は false で送る */
