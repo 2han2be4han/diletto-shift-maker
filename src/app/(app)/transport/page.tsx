@@ -1086,7 +1086,9 @@ export default function TransportPage() {
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
-              disabled={confirmed}
+              /* Phase 55b: viewer は閲覧のみ。担当セル操作・列並び替え・保存系を全ロック。
+                 確定済み月も従来通り読み取り専用。 */
+              disabled={confirmed || myRole === 'viewer'}
               /* Phase 28: 列の並び順（テナント設定） + 並び替え保存コールバック */
               columnOrder={columnOrder}
               onColumnReorder={
