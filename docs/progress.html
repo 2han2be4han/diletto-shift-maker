@@ -671,6 +671,20 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 34: モバイル印刷修正 + 送迎グルーピング刷新 + 再生成 UI 改善</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>34-1</td><td>モバイル印刷で紙面左上に縮小される問題修正: @media print に html/body min-width 1100px、AppShell 外周を display:block 化</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>コミット c06de92, e7bfc48</td></tr>
+            <tr><td>34-2</td><td>モバイル画面の 2-col 崩れ修正: @media screen max-width 1023px で whiteboard-grid を 1 列縦積み化（印刷には影響しないよう screen スコープ）</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>コミット cfda029</td></tr>
+            <tr><td>34-3</td><td>送迎ロジック: 同便/別便グルーピング実装。前便との時刻差&lt;30分なら同職員を再利用、≥30分なら別便として新規選定。staffAssignCount はトリップ単位</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td>CLAUDE.md §8 ルール #4 の仕様変更を反映。コミット 550be44</td></tr>
+            <tr><td>34-4</td><td>日次出力に保護者送迎(method='self')を表示。担当欄に「👪 保護者」バッジ、未割当扱いしない。グルーピングキーに P: プレフィックス追加</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>コミット 550be44</td></tr>
+            <tr><td>34-5</td><td>再生成ボタンにローディング UI + 21st.dev 風トースト通知。連打ガード、進捗 (N/M) 表示、alert() を廃止</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>コミット de25cf6</td></tr>
+            <tr><td>34-6</td><td>ドキュメント更新: CLAUDE.md §8 ルール #4, #5、reference-map.md の定数表</td><td>CLAUDE.md / docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>34-7</td><td>実機動作確認: モバイル印刷 / モバイル画面 / 送迎再生成 / 同便統合</td><td>（手動）</td><td class="status-doing">確認待ち</td><td>0%</td><td>ユーザー側検証</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

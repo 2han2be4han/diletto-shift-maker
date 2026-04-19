@@ -140,7 +140,7 @@
 |---|---|---|---|
 | `MAX_STAFF_PER_TRANSPORT` | `2` | `types/index.ts` | （未実装） |
 | `DEFAULT_MIN_QUALIFIED_STAFF` | `2` | `types/index.ts` | （未実装） |
-| `TRANSPORT_GROUP_TIME_WINDOW_MINUTES` | `30` | `lib/logic/generateTransport.ts` | （未実装） |
+| `SEPARATE_TRIP_GAP_MINUTES` | `30` | `lib/logic/generateTransport.ts` | 同便/別便の閾値。前便との時刻差がこの値未満なら同便扱いで同じ職員を再利用、以上なら別便として新規選定 |
 | `CLAUDE_MODEL` | `'claude-sonnet-4-20250514'` | `lib/anthropic/parsePdf.ts` | （未実装） |
 | `CLAUDE_MAX_TOKENS` | `4000` | `lib/anthropic/parsePdf.ts` | （未実装） |
 
