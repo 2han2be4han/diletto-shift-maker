@@ -94,6 +94,18 @@ export default function TransportPage() {
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingAssignment>>(new Map());
   const [saving, setSaving] = useState(false);
 
+  /* 再生成のローディング状態。連打防止・進捗可視化に使用。 */
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState<{ current: number; total: number } | null>(null);
+  /* 完了/エラー通知のトースト。4 秒で自動非表示。 */
+  const [toast, setToast] = useState<{ kind: 'success' | 'warning' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
   /* Phase 28: 当月の全日を対象にする（土日も含む。放デイは土曜利用があるため）。
@@ -351,15 +363,25 @@ export default function TransportPage() {
   }, [staff, shiftAssignments, selectedDate, staffAreaMarksForDay]);
 
   const handleGenerate = async () => {
+    if (isGenerating) return; /* 連打ガード */
+    setIsGenerating(true);
+
+    /* 実際に処理する日のみをカウント対象にして progress 分母を合わせる */
+    const targetDates = workDays.filter((date) =>
+      scheduleEntries.some((e) => e.date === date)
+    );
+    setGenerateProgress({ current: 0, total: targetDates.length });
+
     try {
       let totalAssigned = 0;
       let totalUnassigned = 0;
       const errors: string[] = [];
 
       /* 各日付ごとに /api/transport/generate → 結果を /api/transport-assignments に upsert */
-      for (const date of workDays) {
+      for (let i = 0; i < targetDates.length; i++) {
+        const date = targetDates[i];
+        setGenerateProgress({ current: i + 1, total: targetDates.length });
         const entriesForDate = scheduleEntries.filter((e) => e.date === date);
-        if (entriesForDate.length === 0) continue; /* 利用予定なしの日はスキップ */
 
         const genRes = await fetch('/api/transport/generate', {
           method: 'POST',
@@ -411,21 +433,30 @@ export default function TransportPage() {
       }
       await fetchAll();
 
-      /* 結果通知（ユーザーが何が起きたか把握できるように） */
+      /* 結果通知: alert の代わりに控えめなトーストを使う（21st.dev 風） */
       if (errors.length > 0) {
-        alert(
-          `再生成完了 (一部エラー):\n` +
-          `対象 ${totalAssigned} 件 / 未割当 ${totalUnassigned} 件\n` +
-          `エラー:\n${errors.slice(0, 5).join('\n')}`
-        );
+        setToast({
+          kind: 'warning',
+          message:
+            `再生成完了（一部エラー）: 対象 ${totalAssigned} 件 / 未割当 ${totalUnassigned} 件` +
+            ` / エラー ${errors.length} 件`,
+        });
       } else {
-        alert(
-          `再生成完了: ${totalAssigned} 件の担当を再割り当てしました` +
-          (totalUnassigned > 0 ? `\n（条件を満たす職員がいない: ${totalUnassigned} 件）` : '')
-        );
+        setToast({
+          kind: 'success',
+          message:
+            `再生成完了: ${totalAssigned} 件の担当を再割り当てしました` +
+            (totalUnassigned > 0 ? ` (未割当 ${totalUnassigned} 件)` : ''),
+        });
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : '生成失敗');
+      setToast({
+        kind: 'error',
+        message: e instanceof Error ? e.message : '生成失敗',
+      });
+    } finally {
+      setIsGenerating(false);
+      setGenerateProgress(null);
     }
   };
 
@@ -629,6 +660,24 @@ export default function TransportPage() {
 
   return (
     <>
+      {/* 21st.dev 風トーストのスライドイン用アニメーション。
+          トーストと共にだけ必要。他ページの影響を避けるため inline style タグで同梱。 */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes transport-toast-in {
+              from { opacity: 0; transform: translate(-50%, -8px); }
+              to   { opacity: 1; transform: translate(-50%, 0); }
+            }
+            @keyframes transport-spin {
+              to { transform: rotate(360deg); }
+            }
+          `,
+        }}
+      />
+
+      {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
+
       <Header title="送迎表" showMonthSelector />
 
       <div className="px-2 py-3 overflow-y-auto">
@@ -650,9 +699,28 @@ export default function TransportPage() {
             <Button
               variant={generated ? 'secondary' : 'app-card-cta'}
               onClick={handleGenerate}
-              disabled={confirmed || scheduleEntries.length === 0 || staff.length === 0}
+              disabled={
+                isGenerating ||
+                confirmed ||
+                scheduleEntries.length === 0 ||
+                staff.length === 0
+              }
             >
-              {generated ? '再生成' : '割り当て生成'}
+              {isGenerating ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  <span>
+                    生成中
+                    {generateProgress && generateProgress.total > 0
+                      ? ` (${generateProgress.current}/${generateProgress.total})`
+                      : '…'}
+                  </span>
+                </span>
+              ) : generated ? (
+                '再生成'
+              ) : (
+                '割り当て生成'
+              )}
             </Button>
           </div>
         </div>
@@ -785,5 +853,95 @@ export default function TransportPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** 再生成ボタン内の小スピナー（currentColor 追従で button バリアントを問わず馴染む） */
+function Spinner() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ animation: 'transport-spin 0.7s linear infinite' }}
+    >
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path
+        d="M12 2a10 10 0 0 1 10 10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** 21st.dev 風の完了/エラー通知トースト。画面上部中央に 4 秒だけ表示。 */
+function ToastBanner({
+  toast,
+  onClose,
+}: {
+  toast: { kind: 'success' | 'warning' | 'error'; message: string };
+  onClose: () => void;
+}) {
+  const accent =
+    toast.kind === 'success'
+      ? { border: 'rgba(42,122,82,0.28)', icon: '✓', iconColor: 'rgb(28,90,60)' }
+      : toast.kind === 'warning'
+        ? { border: 'rgba(200,140,30,0.32)', icon: '⚠', iconColor: 'rgb(160,110,20)' }
+        : { border: 'rgba(200,50,50,0.32)', icon: '✕', iconColor: 'rgb(170,40,40)' };
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed z-[100] flex items-start gap-3"
+      style={{
+        top: '18px',
+        left: '50%',
+        maxWidth: 'min(520px, calc(100vw - 24px))',
+        padding: '12px 16px',
+        background: '#fff',
+        border: `1px solid ${accent.border}`,
+        borderRadius: '12px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
+        animation: 'transport-toast-in 200ms ease-out',
+        fontSize: '0.875rem',
+        lineHeight: 1.5,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          color: accent.iconColor,
+          fontSize: '1rem',
+          fontWeight: 700,
+          lineHeight: 1.25,
+          marginTop: '1px',
+        }}
+      >
+        {accent.icon}
+      </span>
+      <span style={{ color: 'var(--ink)', fontWeight: 500, flex: 1 }}>{toast.message}</span>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="通知を閉じる"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--ink-3)',
+          cursor: 'pointer',
+          fontSize: '0.9rem',
+          lineHeight: 1,
+          padding: '2px 4px',
+          marginLeft: '4px',
+        }}
+      >
+        ×
+      </button>
+    </div>
   );
 }
