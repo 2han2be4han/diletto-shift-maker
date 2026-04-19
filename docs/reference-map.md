@@ -570,3 +570,16 @@
 - `src/app/(app)/output/daily/page.tsx`:
   - activeChildCount から times 両方 null を除外
   - 送迎スロット (TransportSlot) 側は既に entry.pickup_time / dropoff_time チェックで skip 済
+
+---
+
+## Phase 43 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/app/(app)/output/daily/page.tsx`:
+  - 印刷時 .whiteboard-frame の border/角丸/padding を撤去 + .daily-output-root と .flex-1 を強制白化（印刷プレビューが「白い紙」そのものに見える）
+  - slot 構築の主軸を transportAssignments → scheduleEntries に変更:
+    - taByEntry Map で transport_assignment を lookup
+    - ta が無くても entry が描画される。ta?.is_unassigned ?? true で「担当未割当」赤枠
+    - これで送迎再生成前の児童も日次出力に出る
+  - SortableChildBadge: エリア名 0.78→0.95rem、児童名 text-sm→1.05rem、バッジ 64→76px に拡大

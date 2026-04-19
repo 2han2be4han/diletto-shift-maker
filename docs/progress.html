@@ -812,6 +812,17 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 43: 日次出力の印刷背景白化 + 担当未割当の表示 + 児童バッジ拡大（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>43-1</td><td>印刷時 .whiteboard-frame の border/角丸/padding 撤去 + 内側スクロール枠も白で統一（紙そのままの見た目に）</td><td>src/app/(app)/output/daily/page.tsx (@media print)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>43-2</td><td>slot 構築の主軸を transportAssignments → scheduleEntries に変更。ta が無い児童も「担当未割当」赤枠で表示</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ta?.is_unassigned ?? true で fallback</td></tr>
+            <tr><td>43-3</td><td>児童バッジの文字サイズ拡大: エリア名 0.78→0.95rem、児童名 sm→1.05rem、バッジ 64→76px</td><td>src/app/(app)/output/daily/page.tsx (SortableChildBadge)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>43-4</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

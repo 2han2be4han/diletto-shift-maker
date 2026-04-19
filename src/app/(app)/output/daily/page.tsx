@@ -211,14 +211,17 @@ export default function DailyOutputPage() {
     const entryById = new Map(entries.map((e) => [e.id, e]));
 
     const list: TransportSlot[] = [];
+    /* Phase 43: schedule_entries を主軸に走査。transport_assignment が存在しない児童も
+       「担当未割当」として赤枠表示する（旧仕様は ta を回していたため未生成の子が消えていた）。 */
+    const taByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
 
-    for (const ta of transportAssignments) {
-      const entry = entryById.get(ta.schedule_entry_id);
-      if (!entry) continue;
+    for (const entry of entries) {
       if (entry.attendance_status === 'absent') continue;
+      if (!entry.pickup_time && !entry.dropoff_time) continue; /* お休み除外 */
 
       const child = childById.get(entry.child_id);
       if (!child) continue;
+      const ta = taByEntry.get(entry.id);
       const spec = resolveEntryTransportSpec(entry, {
         child,
         pickupAreas,
@@ -235,19 +238,21 @@ export default function DailyOutputPage() {
         const areaName = !isSelf && spec.pickup.areaLabel
           ? spec.pickup.areaLabel.replace(/^\S+\s+/, '').trim() || null
           : null;
+        const pickupStaffIds = ta?.pickup_staff_ids ?? [];
         list.push({
           time: fmtTime(entry.pickup_time),
           direction: 'pickup',
           areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
           children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
-          staffIds: isSelf ? [] : ta.pickup_staff_ids,
-          /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する） */
+          staffIds: isSelf ? [] : pickupStaffIds,
+          /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する）。
+             Phase 43: ta が無い (transport_assignment 未生成) ケースも未割当扱い */
           isUnassigned:
             !isSelf &&
-            (ta.is_unassigned ||
-              (entry.pickup_method === 'pickup' && ta.pickup_staff_ids.length === 0)),
-          isConfirmed: ta.is_confirmed,
+            ((ta?.is_unassigned ?? true) ||
+              (entry.pickup_method === 'pickup' && pickupStaffIds.length === 0)),
+          isConfirmed: ta?.is_confirmed ?? false,
           isSelfTransport: isSelf,
         });
       }
@@ -262,19 +267,20 @@ export default function DailyOutputPage() {
         const areaName = !isSelf && spec.dropoff.areaLabel
           ? spec.dropoff.areaLabel.replace(/^\S+\s+/, '').trim() || null
           : null;
+        const dropoffStaffIds = ta?.dropoff_staff_ids ?? [];
         list.push({
           time: fmtTime(entry.dropoff_time),
           direction: 'dropoff',
           areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
           children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
-          staffIds: isSelf ? [] : ta.dropoff_staff_ids,
-          /* 保護者送迎は「未割当」扱いしない */
+          staffIds: isSelf ? [] : dropoffStaffIds,
+          /* Phase 43: ta が無い場合も未割当扱い */
           isUnassigned:
             !isSelf &&
-            (ta.is_unassigned ||
-              (entry.dropoff_method === 'dropoff' && ta.dropoff_staff_ids.length === 0)),
-          isConfirmed: ta.is_confirmed,
+            ((ta?.is_unassigned ?? true) ||
+              (entry.dropoff_method === 'dropoff' && dropoffStaffIds.length === 0)),
+          isConfirmed: ta?.is_confirmed ?? false,
           isSelfTransport: isSelf,
         });
       }
@@ -487,6 +493,17 @@ export default function DailyOutputPage() {
                 box-shadow: none !important;
                 max-width: none !important;
                 margin: 0 !important;
+                /* Phase 43: 紙面に「枠」が見えないよう、印刷時はボーダー・角丸・パディングを撤去し、
+                   背景を完全に白へ。これで印刷プレビューがそのまま白い紙のように見える。 */
+                border: none !important;
+                border-radius: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+              }
+              /* daily-output-root 自身と内側スクロール枠もすべて白に統一 */
+              .daily-output-root,
+              .daily-output-root .flex-1 {
+                background: #fff !important;
               }
               .transport-block {
                 page-break-inside: avoid;
@@ -981,10 +998,11 @@ function SortableChildBadge({
     background: col.bg,
     border: `2px solid ${col.border}`,
     borderRadius: '999px',
-    minWidth: '64px',
-    minHeight: '64px',
-    lineHeight: '1.1',
-    padding: '4px 6px',
+    /* Phase 43: 文字を大きくしたのでバッジも 64→76 に拡大 */
+    minWidth: '76px',
+    minHeight: '76px',
+    lineHeight: '1.15',
+    padding: '6px 8px',
     cursor: 'grab',
   };
   return (
@@ -1001,8 +1019,8 @@ function SortableChildBadge({
           aria-label="送迎エリア"
           className="leading-none whitespace-nowrap text-center"
           style={{
-            fontSize: '0.78rem',
-            marginBottom: '3px',
+            fontSize: '0.95rem',
+            marginBottom: '4px',
             color: 'var(--ink-2)',
             fontWeight: 700,
           }}
@@ -1014,8 +1032,8 @@ function SortableChildBadge({
         {nameLines.map((line, i) => (
           <span
             key={i}
-            className="text-sm font-black whitespace-nowrap"
-            style={{ color: col.text }}
+            className="font-black whitespace-nowrap"
+            style={{ color: col.text, fontSize: '1.05rem', lineHeight: 1.15 }}
           >
             {line}
           </span>
