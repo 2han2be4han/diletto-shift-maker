@@ -514,16 +514,10 @@ export default function DailyOutputPage() {
               .daily-output-root .flex-1 {
                 background: #fff !important;
               }
-              /* Phase 44: 印刷時に紙面内が灰色に見える残りの原因を全て排除。
-                 transport-block / 児童マーク / 職員ボックス / バッジ系の意図的な背景は維持し、
-                 それ以外の全ての子要素を強制的に白へ落とす。
-                 background-color だと shorthand に負けるため background + background-image:none で確実に。 */
-              .daily-output-root *:not(.transport-block):not(.child-mark):not(.staff-box):not([data-keep-bg]) {
-                background: #fff !important;
-                background-image: none !important;
-              }
-              /* 念押し: 大本のラッパも強制白 */
-              html, body, body > *, main, .daily-output-root, .whiteboard-frame, .whiteboard-grid {
+              /* Phase 45: 紙面内の灰色を消す。原因は AppShell 外周 div の inline var(--bg)。
+                 universal セレクタは badge の色まで潰すので、ラッパ系のみ狙い撃ちする。 */
+              html, body, body > *, body > * > *,
+              main, .daily-output-root, .whiteboard-frame, .whiteboard-grid {
                 background: #fff !important;
                 background-image: none !important;
               }
