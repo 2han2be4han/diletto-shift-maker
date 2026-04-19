@@ -446,89 +446,57 @@ export default function DailyOutputPage() {
         dangerouslySetInnerHTML={{
           __html: `
             @media print {
+              /* Phase 45 final: シンプル再構築。前版の display:block/min-width 操作が
+                 一部環境でコンテンツを描画外に追いやっていた疑いがあるため、最小限に絞る。 */
               @page { size: A3 portrait; margin: 10mm; }
-              html, body {
-                background: #fff !important;
-                height: auto !important;
-                overflow: visible !important;
-                /* モバイル印刷対策: 狭いビューポートのときだけ 1100px まで広げる。
-                   PC は通常これ以上の幅があるため no-op。 */
-                min-width: 1100px !important;
-              }
-              /* AppShell 外周 (flex h-screen overflow-hidden) を印刷時に解放。
-                 モバイル印刷では 100vh で下がクリップされ、flex 構造で幅も圧縮されるため
-                 display: block + 幅/高さ解放に切り替える。PC でもサイドバーは aside で
-                 非表示なので block 化しても副作用なし。 */
-              body > div {
-                display: block !important;
-                height: auto !important;
-                min-height: 0 !important;
-                overflow: visible !important;
-                min-width: 1100px !important;
-                /* Phase 44: AppShell の最外周 div は inline style="background: var(--bg)" を持つ。
-                   これが印刷時に紙面内へ灰色として透ける主犯。強制白で潰す。 */
-                background: #fff !important;
-                background-image: none !important;
-              }
-              /* AppShell の入れ子 div も全部白に */
-              body > div > div {
-                background: #fff !important;
-                background-image: none !important;
-              }
-              main {
-                width: 100% !important;
-                height: auto !important;
-                overflow: visible !important;
-              }
-              /* AppShell や layout が灰色 (var(--bg)) を当てている要素をすべて白に強制 */
-              [style*="var(--bg)"],
-              main {
-                background: #fff !important;
-                background-color: #fff !important;
-              }
-              /* アプリシェルの付帯UIを完全非表示 */
+
+              /* 余計な UI を消す */
               aside, header, .print-hide {
                 display: none !important;
               }
-              /* メインコンテナを紙面に馴染ませる */
-              .daily-output-root,
-              .daily-output-root > div {
-                height: auto !important;
-                overflow: visible !important;
-                padding: 0 !important;
-                background: #fff !important;
+
+              /* 印刷の色再現を有効化（これがないと色が薄くなる） */
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
+
+              /* 灰色の出元を白で潰す（html/body/外周 div + 灰色 inline スタイル） */
+              html, body {
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              body > div,
+              body > div > div,
+              [style*="var(--bg)"] {
+                background: #fff !important;
+                background-image: none !important;
+              }
+
+              /* 高さ・スクロール制約を解いてコンテンツが全部見えるように */
+              html, body, body > div, body > div > div,
+              .daily-output-root, .daily-output-root > div, .daily-output-root .flex-1 {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+              }
+
+              /* ホワイトボード枠の見た目を紙面に馴染ませる */
               .whiteboard-frame {
                 box-shadow: none !important;
                 max-width: none !important;
                 margin: 0 !important;
-                /* Phase 43: 紙面に「枠」が見えないよう、印刷時はボーダー・角丸・パディングを撤去し、
-                   背景を完全に白へ。これで印刷プレビューがそのまま白い紙のように見える。 */
                 border: none !important;
                 border-radius: 0 !important;
                 padding: 0 !important;
                 background: #fff !important;
               }
-              /* daily-output-root 自身と内側スクロール枠もすべて白に統一 */
-              .daily-output-root,
-              .daily-output-root .flex-1 {
-                background: #fff !important;
-              }
-              /* Phase 45: 紙面内の灰色を消す。原因は AppShell 外周 div の inline var(--bg)。
-                 universal セレクタは badge の色まで潰すので、ラッパ系のみ狙い撃ちする。 */
-              html, body, body > *, body > * > *,
-              main, .daily-output-root, .whiteboard-frame, .whiteboard-grid {
-                background: #fff !important;
-                background-image: none !important;
-              }
+
+              /* カードがページまたぎで切れないように */
               .transport-block {
                 page-break-inside: avoid;
                 break-inside: avoid;
-              }
-              /* 色を残す */
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
               }
             }
 
