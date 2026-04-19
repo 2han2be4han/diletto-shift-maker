@@ -1005,11 +1005,13 @@ export default function TransportPage() {
                 ＋ シフト追加
               </Button>
             )}
-            {generated && !confirmed && (
+            {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示 */}
+            {generated && !confirmed && myRole !== 'viewer' && (
               <Button variant="primary" onClick={handleConfirm} disabled={unassignedTotal > 0}>
                 {unassignedTotal > 0 ? '未割当あり（確定不可）' : '送迎表確定'}
               </Button>
             )}
+            {myRole !== 'viewer' && (
             <Button
               variant={generated ? 'secondary' : 'app-card-cta'}
               onClick={handleGenerate}
@@ -1036,6 +1038,7 @@ export default function TransportPage() {
                 '割り当て生成'
               )}
             </Button>
+            )}
           </div>
         </div>
 
@@ -1100,14 +1103,14 @@ export default function TransportPage() {
               }
             />
 
-            {/* Phase 26: 日ごとの保存ボタン */}
+            {/* Phase 26: 日ごとの保存ボタン（Phase 55b: viewer には非表示） */}
             <div className="flex items-center justify-end gap-3 mt-4">
               {pendingCountForDay > 0 && (
                 <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
                   未保存 {pendingCountForDay} 件
                 </span>
               )}
-              {(() => {
+              {myRole !== 'viewer' && (() => {
                 /* Phase 46: 保存済み (lock 済) の日はボタンを「✅ 保存済み」表示に切り替え。
                    再編集すると pending が立つので自動的に「保存」に戻る。 */
                 const currentDayLocked = transportAssignments.some(
