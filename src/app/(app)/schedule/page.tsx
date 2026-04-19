@@ -219,19 +219,54 @@ export default function SchedulePage() {
     setSelectedCell({ childId, date });
   };
 
-  /* Phase 25: 出欠ステータス変更（RPC 経由）。全ロール可。 */
+  /* Phase 25: 出欠ステータス変更（RPC 経由）。全ロール可。
+     Phase 40: entry が存在しない（空セル）日に出欠ボタンを押した場合、
+     先に空 entry (times=null) を auto-create してから attendance を更新する。
+     旧仕様の「先に時間を保存してください」アラートを撤廃し、1 操作で完結させる。 */
   const handleAttendanceChange = async (next: AttendanceStatus) => {
+    if (!selectedCell) return;
     const cell = cells.find(
-      (c) => c.child_id === selectedCell?.childId && c.date === selectedCell?.date,
+      (c) => c.child_id === selectedCell.childId && c.date === selectedCell.date,
     );
-    if (!cell?.entry_id) {
-      alert('この日の利用予定がまだ登録されていないため、出欠記録できません。先に時間などを保存してください。');
-      return;
-    }
     setAttendanceBusy(true);
     try {
+      let entryId = cell?.entry_id ?? null;
+
+      /* 空セルなら entry を空で作成（pickup_time/dropoff_time=null）。
+         API は upsert (onConflict: tenant_id+child_id+date) なので二重作成は起きない。 */
+      if (!entryId) {
+        const createRes = await fetch('/api/schedule-entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entries: [{
+              child_id: selectedCell.childId,
+              date: selectedCell.date,
+              pickup_time: null,
+              dropoff_time: null,
+              pickup_method: 'pickup',
+              dropoff_method: 'dropoff',
+            }],
+          }),
+        });
+        if (!createRes.ok) {
+          throw new Error((await createRes.json()).error ?? '利用予定の作成に失敗しました');
+        }
+        const created = await createRes.json();
+        entryId = (created.entries?.[0]?.id ?? created.entry?.id ?? null) as string | null;
+        if (!entryId) {
+          /* レスポンス形式が想定外 → fetchAll で取り直す */
+          await fetchAll();
+          const refreshed = cells.find(
+            (c) => c.child_id === selectedCell.childId && c.date === selectedCell.date,
+          );
+          entryId = refreshed?.entry_id ?? null;
+        }
+        if (!entryId) throw new Error('作成した利用予定の id を取得できませんでした');
+      }
+
       const res = await fetch(
-        `/api/schedule-entries/${cell.entry_id}/attendance`,
+        `/api/schedule-entries/${entryId}/attendance`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -240,13 +275,20 @@ export default function SchedulePage() {
       );
       if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
       setAttendanceStatus(next);
-      setCells((prev) =>
-        prev.map((c) =>
-          c.entry_id === cell.entry_id ? { ...c, attendance_status: next } : c,
-        ),
-      );
-      /* 履歴を開いてたら再取得 */
-      if (logsOpen) void loadAttendanceLogs(cell.entry_id);
+      const finalEntryId = entryId;
+      setCells((prev) => {
+        /* 既存セル更新、または新規作成された entry を反映 */
+        const exists = prev.some((c) => c.entry_id === finalEntryId);
+        if (exists) {
+          return prev.map((c) =>
+            c.entry_id === finalEntryId ? { ...c, attendance_status: next } : c,
+          );
+        }
+        /* fetchAll で確実に同期 */
+        void fetchAll();
+        return prev;
+      });
+      if (logsOpen) void loadAttendanceLogs(finalEntryId);
     } catch (e) {
       alert(e instanceof Error ? e.message : '更新失敗');
     } finally {

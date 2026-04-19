@@ -520,3 +520,15 @@
   - 利用予定編集モーダルから「出欠種類 (出席/欠席/お休み)」セクションを撤去
   - 「当日の出欠記録 (予定/出席/欠席/遅刻/早退) + 履歴」のみ残す
   - attendance state は load 値を保持→ handleSave に渡すので既存エントリの挙動は維持
+
+---
+
+## Phase 40 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/app/(app)/transport/page.tsx` (DateHeaderPicker):
+  - ▾→📅 の表示をボタンらしく装飾（border + padding + hover で background/shadow を強調）
+- `src/app/(app)/schedule/page.tsx` (handleAttendanceChange):
+  - entry_id がない（空セル）場合に POST /api/schedule-entries で空 entry (times=null) を auto-create → その id で attendance 更新
+  - 旧アラート「先に時間などを保存してください」を撤廃。1 操作で完結
+  - cells に未反映の場合は fetchAll() で同期

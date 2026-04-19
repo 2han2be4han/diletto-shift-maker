@@ -769,6 +769,16 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 40: 出欠記録の動線改善 + 📅 視認性向上（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>40-1</td><td>📅 ボタンを「クリックできる感」のあるデザインに（border/padding/hover/カーソル）</td><td>src/app/(app)/transport/page.tsx (DateHeaderPicker)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>40-2</td><td>handleAttendanceChange: entry_id がなければ POST /api/schedule-entries で空 entry (times=null) を auto-create → 返却 id で attendance を更新 → cells 更新。アラート撤去</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>POST 失敗時のみエラー表示</td></tr>
+            <tr><td>40-3</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

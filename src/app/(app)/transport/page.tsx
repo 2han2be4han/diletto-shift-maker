@@ -996,11 +996,28 @@ function DateHeaderPicker({
           if (typeof el.showPicker === 'function') el.showPicker();
           else el.click();
         }}
-        className="text-lg font-bold cursor-pointer hover:text-[var(--accent)] transition-colors"
-        style={{ color: 'var(--ink)', background: 'transparent', border: 'none', padding: 0 }}
+        className="text-lg font-bold inline-flex items-center gap-2 cursor-pointer transition-all"
+        style={{
+          color: 'var(--ink)',
+          background: 'var(--white)',
+          border: '1.5px solid var(--accent)',
+          borderRadius: '8px',
+          padding: '6px 14px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--accent-pale)';
+          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.10)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--white)';
+          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
+        }}
         title="日付を選択して遷移"
+        aria-label={`${label} の日付を変更`}
       >
-        {label} 📅
+        <span>{label}</span>
+        <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
       </button>
       <input
         ref={inputRef}
