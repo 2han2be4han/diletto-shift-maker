@@ -52,15 +52,16 @@ function splitChildName(name: string): string[] {
 /** 児童管理 (settings/children) の getGradeRowBg と揃えた色分け。
     bg/border/text を返す。preschool=青系 / nursery=赤系 / 他=緑系。 */
 function getGradeColors(grade: GradeType): { bg: string; border: string; text: string } {
+  /* Phase 37: 背景 0.14→0.28、ボーダー 0.75→1.0 で 2 段階濃く（視認性向上） */
   switch (grade) {
     case 'preschool':
-      return { bg: 'rgba(26,62,184,0.14)', border: 'rgba(26,62,184,0.75)', text: 'rgb(16,40,120)' };
+      return { bg: 'rgba(26,62,184,0.28)', border: 'rgba(26,62,184,1)', text: 'rgb(16,40,120)' };
     case 'nursery_3':
     case 'nursery_4':
     case 'nursery_5':
-      return { bg: 'rgba(155,51,51,0.14)', border: 'rgba(155,51,51,0.75)', text: 'rgb(120,35,35)' };
+      return { bg: 'rgba(155,51,51,0.28)', border: 'rgba(155,51,51,1)', text: 'rgb(120,35,35)' };
     default:
-      return { bg: 'rgba(42,122,82,0.14)', border: 'rgba(42,122,82,0.75)', text: 'rgb(28,90,60)' };
+      return { bg: 'rgba(42,122,82,0.28)', border: 'rgba(42,122,82,1)', text: 'rgb(28,90,60)' };
   }
 }
 

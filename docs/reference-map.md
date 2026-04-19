@@ -471,3 +471,20 @@
 
 ### ロジック変更
 - `src/lib/logic/generateShift.ts`: 'available_day' → 'full_day_available' (+ am_off/pm_off も availableDays に追加)
+
+---
+
+## Phase 37 変更一覧（2026-04-19）
+
+### UI 修正
+- `src/components/shift/ShiftGrid.tsx`:
+  - getCellBg: 半透明 rgba を opaque RGB (rgb(252,249,249)/rgb(248,249,253)/var(--white)) に変更。sticky セルでスクロール中の文字被りを解消
+  - CoverageRow「有資格者」「提供時間」: dow=0 かつ childrenCount=0 のセルは判定対象外（空表示）
+  - 関連: getCellBg!=='transparent' 判定が型不整合になったため簡略化
+- `src/app/(app)/shift/page.tsx`:
+  - 上余白詰め: p-6 → px-6 pb-6 pt-0、バッジ行 mb-4 → pt-2 mb-2
+  - handleGenerate: 再生成前に shift_requests と schedule_entries を再 fetch（state スタレ対策）
+- `src/app/(app)/output/daily/page.tsx`:
+  - getGradeColors: 背景 0.14→0.28、ボーダー 0.75→1.0 に濃化
+- `src/components/request/AdminRequestList.tsx`:
+  - 詳細モーダルの日付一覧を DateRangeChips（連続日範囲圧縮 + 曜日付き chip）に変更

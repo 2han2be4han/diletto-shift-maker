@@ -208,9 +208,7 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
                       {r.dates.length} 日
                     </span>
                   </div>
-                  <p className="text-xs" style={{ color: 'var(--ink-2)' }}>
-                    {r.dates.sort().join(', ')}
-                  </p>
+                  <DateRangeChips dates={r.dates} />
                   {r.notes && (
                     <p className="text-xs mt-2 p-2 rounded" style={{ background: 'var(--white)', color: 'var(--ink-2)' }}>
                       メモ: {r.notes}
@@ -255,5 +253,58 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
         )}
       </Modal>
     </>
+  );
+}
+
+/* Phase 37: 日付配列を「連続範囲＋曜日付き chip」で見やすく整形
+ *  例: ["2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-27","2026-04-28","2026-04-30"]
+ *      → "4/20(月)-4/23(木)" "4/27(月)-4/28(火)" "4/30(木)" の 3 チップに
+ */
+function DateRangeChips({ dates }: { dates: string[] }) {
+  if (!dates || dates.length === 0) {
+    return <p className="text-xs" style={{ color: 'var(--ink-3)' }}>(なし)</p>;
+  }
+  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+  const fmt = (d: string) => {
+    const [, m, day] = d.split('-').map(Number);
+    const dt = new Date(d);
+    return `${m}/${day}(${DOW[dt.getDay()]})`;
+  };
+  /* 連続日をグループ化 (前日 +1 でない場合に新グループ開始) */
+  const sorted = [...dates].sort();
+  const groups: string[][] = [];
+  for (const d of sorted) {
+    const last = groups[groups.length - 1];
+    if (last) {
+      const prev = new Date(last[last.length - 1]);
+      const cur = new Date(d);
+      const diff = (cur.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000);
+      if (diff === 1) {
+        last.push(d);
+        continue;
+      }
+    }
+    groups.push([d]);
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+      {groups.map((g) => {
+        const text = g.length === 1 ? fmt(g[0]) : `${fmt(g[0])} 〜 ${fmt(g[g.length - 1])}`;
+        return (
+          <span
+            key={g[0]}
+            className="text-xs font-medium px-2 py-1 rounded"
+            style={{
+              background: 'var(--white)',
+              border: '1px solid var(--rule)',
+              color: 'var(--ink)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {text}
+          </span>
+        );
+      })}
+    </div>
   );
 }

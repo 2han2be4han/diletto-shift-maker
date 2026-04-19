@@ -730,6 +730,22 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 37: UI 細部改善 + 再生成バグ修正（2026-04-19 着手）</div>
+    <p style="font-size:0.9rem;color:#444;">
+      ① シフト表 sticky セルの透過解消 / ② 日次出力の児童バッジ色を濃く (背景+ボーダー 2 段) / ③ シフト不足判定で「日曜かつ利用者ゼロ」の日は除外 / ④ シフト再生成で休み希望が反映されない不具合の調査・修正 / ⑤ AdminRequestList 詳細モーダルの日付表示を見やすく整形
+    </p>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>37-1</td><td>① シフト表 sticky 部分（職員名列・日付ヘッダー・出勤数行・カバレッジ行）の背景を不透明に強制してスクロール時の文字被りを解消</td><td>src/components/shift/ShiftGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>「土/日」と下のセル時刻が重なる現象</td></tr>
+            <tr><td>37-2</td><td>② 日次出力の児童バッジ色濃化: 背景 0.14→0.28 / ボーダー 0.75→1.0</td><td>src/app/(app)/output/daily/page.tsx (getGradeColors)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>37-3</td><td>③ 不足判定で「日曜 (dow=0) かつ utilization=0」の日は警告/カウント除外</td><td>src/lib/logic/generateShift.ts, src/components/shift/ShiftGrid.tsx, src/lib/logic/qualifiedCoverage.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>37-4</td><td>④ シフト再生成で休み希望が反映されない事象を調査・修正</td><td>src/app/(app)/shift/page.tsx, src/lib/logic/generateShift.ts</td><td class="status-done">完了</td><td>100%</td><td>fetch タイミング・確定済みガード・request_type 拡張の影響を確認</td></tr>
+            <tr><td>37-5</td><td>⑤ AdminRequestList 詳細モーダル: 日付配列を圧縮表記 (4/20-23 4/27-28 4/30) + 曜日 chip で表示</td><td>src/components/request/AdminRequestList.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>37-6</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

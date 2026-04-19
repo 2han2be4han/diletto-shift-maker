@@ -139,10 +139,12 @@ export default function ShiftGrid({
     return 'var(--ink-2)';
   };
 
+  /* Phase 37: 不透明色に変更。sticky セルでスクロール時に下のセル文字が透けて被る問題を解消。
+     値は元の rgba を白背景に precompose したもの。 */
   const getCellBg = (dow: number) => {
-    if (dow === 0) return 'rgba(155,51,51,0.03)';
-    if (dow === 6) return 'rgba(26,62,184,0.03)';
-    return 'transparent';
+    if (dow === 0) return 'rgb(252,249,249)'; /* 旧: rgba(155,51,51,0.03) on white */
+    if (dow === 6) return 'rgb(248,249,253)'; /* 旧: rgba(26,62,184,0.03)  on white */
+    return 'var(--white)';
   };
 
   return (
@@ -183,7 +185,7 @@ export default function ShiftGrid({
                       ? 'var(--red-pale)'
                       : hasWarning
                       ? 'var(--gold-pale)'
-                      : getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
+                      : getCellBg(d.dow),
                     color: getDowColor(d.dow),
                     boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                   }}
@@ -321,7 +323,7 @@ export default function ShiftGrid({
                     borderTop: '2px solid var(--rule-strong)',
                     borderRight: '1px solid var(--rule)',
                     color: count > 3 ? 'var(--green)' : count > 0 ? 'var(--gold)' : 'var(--ink-3)',
-                    background: getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : 'var(--bg)',
+                    background: getCellBg(d.dow),
                   }}
                 >
                   {count > 0 ? count : ''}
@@ -330,7 +332,8 @@ export default function ShiftGrid({
             })}
           </tr>
 
-          {/* Phase 19: 有資格者 / 提供時間 / 余力 */}
+          {/* Phase 19: 有資格者 / 提供時間 / 余力
+              Phase 37: 日曜かつ利用者ゼロの日はカウント/警告対象外（事業所休業日扱い） */}
           <CoverageRow
             label="有資格者"
             title="コアタイム(10:30〜16:30)に重なる有資格者数"
@@ -338,7 +341,9 @@ export default function ShiftGrid({
             getCellBg={getCellBg}
             render={(d) => {
               const cov = coverageByDate.get(d.dateStr);
-              if (!cov || cov.qualifiedCount === 0) return { value: '', color: 'var(--ink-3)' };
+              if (!cov) return { value: '', color: 'var(--ink-3)' };
+              if (d.dow === 0 && cov.childrenCount === 0) return { value: '', color: 'var(--ink-3)' };
+              if (cov.qualifiedCount === 0) return { value: '', color: 'var(--ink-3)' };
               return {
                 value: String(cov.qualifiedCount),
                 color: cov.qualifiedCount >= 2 ? 'var(--green)' : 'var(--gold)',
@@ -353,6 +358,7 @@ export default function ShiftGrid({
             render={(d) => {
               const cov = coverageByDate.get(d.dateStr);
               if (!cov) return { value: '', color: 'var(--ink-3)' };
+              if (d.dow === 0 && cov.childrenCount === 0) return { value: '', color: 'var(--ink-3)' };
               if (cov.minCoverage === '不足') {
                 return { value: '不足', color: 'var(--red)', bg: 'var(--red-pale)' };
               }
@@ -423,7 +429,8 @@ function CoverageRow({ label, title, dates, getCellBg, render, isLast }: Coverag
         const { value, color, bg, fontSize } = render(d);
         /* sticky bottom 行は透ける rgba を直接指定すると下のシフト行が裏抜けするため、
            solid な --bg をベースに linear-gradient でオーバーレイする */
-        const tint = bg ?? (getCellBg(d.dow) !== 'transparent' ? getCellBg(d.dow) : null);
+        /* Phase 37: getCellBg は常に opaque を返すので transparent 判定は不要に */
+        const tint = bg ?? getCellBg(d.dow);
         const bgStyle = isLast
           ? tint
             ? `linear-gradient(${tint}, ${tint}), var(--bg)`

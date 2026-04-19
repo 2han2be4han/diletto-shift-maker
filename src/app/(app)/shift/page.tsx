@@ -150,13 +150,39 @@ export default function ShiftPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleGenerate = async () => {
+    /* Phase 37: 再生成は「最新の休み希望/利用予定を必ず反映」する意味合い。
+       state がスタレ（別タブで休み希望を提出した直後など）でも確実に最新を取得して使う。 */
+    let freshRequests = shiftRequests;
+    let freshEntries = scheduleEntries;
+    try {
+      const from = `${monthStr}-01`;
+      const lastDay = getDaysInMonth(new Date(year, month - 1));
+      const to = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+      const [rRes, eRes] = await Promise.all([
+        fetch(`/api/shift-requests?month=${monthStr}`),
+        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+      ]);
+      if (rRes.ok) {
+        const j = await rRes.json();
+        freshRequests = (j.requests ?? []) as ShiftRequestRow[];
+        setShiftRequests(freshRequests);
+      }
+      if (eRes.ok) {
+        const j = await eRes.json();
+        freshEntries = (j.entries ?? []) as ScheduleEntryRow[];
+        setScheduleEntries(freshEntries);
+      }
+    } catch {
+      /* fetch 失敗時は state をそのまま使う */
+    }
+
     const result = generateShiftAssignments({
       tenantId: staff[0]?.tenant_id ?? '',
       year,
       month,
       staff,
-      shiftRequests,
-      scheduleEntries,
+      shiftRequests: freshRequests,
+      scheduleEntries: freshEntries,
     });
     /* DB に upsert */
     try {
@@ -322,14 +348,16 @@ export default function ShiftPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header title="シフト表" showMonthSelector actions={headerActions} />
 
-      <div className="flex-1 overflow-auto p-6">
+      {/* Phase 37: ヘッダーと日付バーの間の上余白を撤去 (pt-0)、左右と下のみ余白を維持 */}
+      <div className="flex-1 overflow-auto px-6 pb-6 pt-0">
         {/* Phase 25: admin のみ承認キュー表示。Phase 25-C-7a で出勤中制約撤廃 */}
         {isAdmin && (
           <ApprovalQueue staff={staff} canApprove={isAdmin} />
         )}
 
-        {/* Phase 26: h2 年月 + 再生成/確定ボタンは Header actions に移設済。ここはバッジのみ。 */}
-        <div className="flex items-center mb-4 flex-wrap gap-2">
+        {/* Phase 26: h2 年月 + 再生成/確定ボタンは Header actions に移設済。ここはバッジのみ。
+            Phase 37: ヘッダー直下の余白を詰めるため pt-2 mb-2 に縮小 */}
+        <div className="flex items-center pt-2 mb-2 flex-wrap gap-2">
           {confirmed && !editMode && <Badge variant="success">確定済み</Badge>}
           {confirmed && editMode && <Badge variant="warning">編集中（確定済みを変更しています）</Badge>}
           {cells.length > 0 && !confirmed && <Badge variant="warning">未確定</Badge>}
