@@ -583,3 +583,12 @@
     - ta が無くても entry が描画される。ta?.is_unassigned ?? true で「担当未割当」赤枠
     - これで送迎再生成前の児童も日次出力に出る
   - SortableChildBadge: エリア名 0.78→0.95rem、児童名 text-sm→1.05rem、バッジ 64→76px に拡大
+
+---
+
+## Phase 44 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/components/transport/TransportDayView.tsx`:
+  - StaffSelect SELECT_WIDTH 60 → 80px、padding 4px 6px → 4px 2px 4px 6px に。3 文字名（「あやせ」「ヨハン」）が省略されない
+  - 場所セル (LocationCellInline) で pickup/dropoff method='self' のときは areaLabel/location を null 化して非表示

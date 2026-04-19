@@ -209,8 +209,9 @@ export default function TransportDayView({
       accent: PICK_ACCENT,
       renderCell: (child, isExpanded) => (
         <LocationCellInline
-          areaLabel={child.pickupAreaLabel}
-          location={child.pickupLocation}
+          /* Phase 44: 保護者送迎は場所欄を非表示（「保護者なのに自宅?」と混乱するため） */
+          areaLabel={child.pickupMethod === 'self' ? null : child.pickupAreaLabel}
+          location={child.pickupMethod === 'self' ? null : child.pickupLocation}
           accentColor={PICK_ACCENT}
           isExpanded={isExpanded}
         />
@@ -259,8 +260,9 @@ export default function TransportDayView({
       accent: DROP_ACCENT,
       renderCell: (child, isExpanded) => (
         <LocationCellInline
-          areaLabel={child.dropoffAreaLabel}
-          location={child.dropoffLocation}
+          /* Phase 44: 保護者送迎は場所欄を非表示 */
+          areaLabel={child.dropoffMethod === 'self' ? null : child.dropoffAreaLabel}
+          location={child.dropoffMethod === 'self' ? null : child.dropoffLocation}
           accentColor={DROP_ACCENT}
           isExpanded={isExpanded}
         />
@@ -900,7 +902,9 @@ function StaffSelect({
      マークは担当者全員分のユニオンを先頭に 1 回だけ表示（Excel の "🚂🍇 金田・加藤" 準拠）
      Phase 28 F案: staff.display_name（3 文字上限）で表示するため select 幅を大幅縮小。
      フルネームは option 側で残すので同姓の区別は候補選択時に可能。 */
-  const SELECT_WIDTH = 60;
+  /* Phase 44: 旧 60px ではネイティブ select の右端矢印に削られて 3 文字が「あ...」に省略されていた。
+     80px + 右パディング縮小で 3 文字（「あやせ」「ヨハン」「中條さ」など）が見切れず表示される。 */
+  const SELECT_WIDTH = 80;
 
   /* 全担当者のマークを集約（重複排除、表示順保持） */
   const aggregatedMarks = (() => {
@@ -957,7 +961,8 @@ function StaffSelect({
               className="outline-none disabled:opacity-60"
               style={{
                 width: SELECT_WIDTH,
-                padding: '4px 6px',
+                /* Phase 44: 右パディングを 6→2 に削って文字領域を確保（矢印は変えられないが余白は減らせる） */
+                padding: '4px 2px 4px 6px',
                 fontSize: '0.78rem',
                 border: `1px solid ${isMissing ? 'var(--red)' : id ? 'var(--rule)' : 'var(--red)'}`,
                 borderRadius: '6px',
