@@ -65,11 +65,20 @@ export default function TransportPage() {
   const searchParams = useSearchParams();
   const urlMonth = searchParams.get('month');
   const urlDate = searchParams.get('date');
+  /* 年月の決定順: ?date= > ?month= > 来月デフォルト。
+     ?date= があれば月情報はそこから導出できるため、URL に ?month= を重ねない（冗長防止）。 */
   const { year, month } = useMemo(() => {
-    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
+    let source: string;
+    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
+      source = urlDate.slice(0, 7);
+    } else if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
+      source = urlMonth;
+    } else {
+      source = defaultNextMonthStr();
+    }
     const [y, m] = source.split('-').map(Number);
     return { year: y, month: m };
-  }, [urlMonth]);
+  }, [urlMonth, urlDate]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -213,14 +222,25 @@ export default function TransportPage() {
 
   /* Phase 49: selectedDate 変更時に URL (history) も更新。pushState ではなく replaceState で
      履歴を汚さない（戻るボタンで1日ずつ遡る必要がないため）。
-     Phase 54: 同時に sessionStorage にも退避。 */
+     Phase 54: 同時に sessionStorage にも退避。
+     URL 整理: ?date= があれば ?month= は冗長なので削除（date から月は導出可能）。 */
   useEffect(() => {
     if (!selectedDate) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    let changed = false;
     if (params.get('date') !== selectedDate) {
       params.set('date', selectedDate);
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+      changed = true;
+    }
+    if (params.has('month')) {
+      params.delete('month');
+      changed = true;
+    }
+    if (changed) {
+      const qs = params.toString();
+      const nextUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      window.history.replaceState({}, '', nextUrl);
     }
     window.sessionStorage.setItem(SESSION_DATE_KEY, selectedDate);
   }, [selectedDate]);

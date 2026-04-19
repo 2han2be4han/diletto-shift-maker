@@ -35,12 +35,27 @@ export default function MonthSelector() {
   const searchParams = useSearchParams();
 
   const urlMonth = searchParams.get('month');
-  const isValid = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth);
-  const current = isValid ? urlMonth : nextMonthStr();
+  const urlDate = searchParams.get('date');
+  /* URL が ?date= を主キーに使うページ（/transport）では date から月を導出。
+     ?month= と ?date= が並立すると URL が冗長になるため、date があれば month を出さない。 */
+  const monthFromDate =
+    urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate.slice(0, 7) : null;
+  const isMonthValid = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth);
+  const current = monthFromDate ?? (isMonthValid ? urlMonth : nextMonthStr());
+  /* 初回マウント時に URL への初期値書き込みが必要か（date も month も無いときだけ） */
+  const needsInitialWrite = !monthFromDate && !isMonthValid;
 
-  /* 初回マウント: URL に month 無しなら localStorage or 来月を URL に反映 */
+  /* 初回マウント: URL に month も date も無ければ localStorage or 来月を URL に反映 */
   useEffect(() => {
-    if (isValid) {
+    if (monthFromDate) {
+      try {
+        localStorage.setItem(STORAGE_KEY, monthFromDate);
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+    if (isMonthValid) {
       try {
         localStorage.setItem(STORAGE_KEY, urlMonth);
       } catch {
@@ -59,7 +74,7 @@ export default function MonthSelector() {
     params.set('month', next);
     router.replace(`${pathname}?${params.toString()}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isValid]);
+  }, [needsInitialWrite]);
 
   const setMonth = (next: string) => {
     try {
@@ -68,7 +83,13 @@ export default function MonthSelector() {
       /* noop */
     }
     const params = new URLSearchParams(searchParams.toString());
-    params.set('month', next);
+    if (params.has('date')) {
+      /* date ベースのページでは date を新月の初日に揃え、month は持たない */
+      params.set('date', `${next}-01`);
+      params.delete('month');
+    } else {
+      params.set('month', next);
+    }
     router.push(`${pathname}?${params.toString()}`);
   };
 
