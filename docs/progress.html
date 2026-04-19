@@ -833,6 +833,21 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 45: 送迎担当の手動ロック (is_locked) + 印刷背景の最終修正（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>45-1</td><td>migration 0035: transport_assignments.is_locked boolean default false + index</td><td>supabase/migrations/0035_transport_is_locked.sql</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-2</td><td>TransportAssignmentRow に is_locked 追加、API POST で受け入れ</td><td>src/types/index.ts, src/app/api/transport-assignments/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-3</td><td>handleSaveDay: 保存時に is_locked=true で送信</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-4</td><td>handleGenerate: is_locked=true を含む日をスキップ + トーストに「🔒 保存済 N 日はスキップ」</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-5</td><td>generateTransport: 自動生成行は常に is_locked=false で出力</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-6</td><td>UI: ヘッダーに「🔒 保存済(再生成スキップ)」バッジ追加</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>45-7</td><td>印刷背景の追加修正: AppShell 外周 div の inline var(--bg) を強制白で潰す + 入れ子 div も白</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>原因は AppShell.tsx の outer div の var(--bg)</td></tr>
+            <tr><td>45-8</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

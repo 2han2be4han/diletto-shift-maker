@@ -465,6 +465,15 @@ export default function DailyOutputPage() {
                 min-height: 0 !important;
                 overflow: visible !important;
                 min-width: 1100px !important;
+                /* Phase 44: AppShell の最外周 div は inline style="background: var(--bg)" を持つ。
+                   これが印刷時に紙面内へ灰色として透ける主犯。強制白で潰す。 */
+                background: #fff !important;
+                background-image: none !important;
+              }
+              /* AppShell の入れ子 div も全部白に */
+              body > div > div {
+                background: #fff !important;
+                background-image: none !important;
               }
               main {
                 width: 100% !important;
@@ -507,12 +516,17 @@ export default function DailyOutputPage() {
               }
               /* Phase 44: 印刷時に紙面内が灰色に見える残りの原因を全て排除。
                  transport-block / 児童マーク / 職員ボックス / バッジ系の意図的な背景は維持し、
-                 それ以外の全ての子要素を強制的に白へ落とす。 */
+                 それ以外の全ての子要素を強制的に白へ落とす。
+                 background-color だと shorthand に負けるため background + background-image:none で確実に。 */
               .daily-output-root *:not(.transport-block):not(.child-mark):not(.staff-box):not([data-keep-bg]) {
-                background-color: #fff !important;
+                background: #fff !important;
+                background-image: none !important;
               }
-              /* ただし transport-block 内部の未割当 (.red-pale) や子バッジ色は保持したいので
-                 transport-block は除外している。child-mark / staff-box も同様。 */
+              /* 念押し: 大本のラッパも強制白 */
+              html, body, body > *, main, .daily-output-root, .whiteboard-frame, .whiteboard-grid {
+                background: #fff !important;
+                background-image: none !important;
+              }
               .transport-block {
                 page-break-inside: avoid;
                 break-inside: avoid;

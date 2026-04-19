@@ -257,6 +257,8 @@ export function generateTransportAssignments(
       pickup_staff_ids: pickupStaff.map((s) => s.id),
       dropoff_staff_ids: dropoffStaff.map((s) => s.id),
       is_confirmed: false,
+      /* Phase 45: 自動生成は常に lock=false で出力（既存ロックは handleGenerate 側でスキップ済） */
+      is_locked: false,
       is_unassigned: isUnassigned,
     });
   }

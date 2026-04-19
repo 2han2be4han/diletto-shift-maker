@@ -419,9 +419,20 @@ export default function TransportPage() {
     if (isGenerating) return; /* 連打ガード */
     setIsGenerating(true);
 
+    /* Phase 45: 「保存」でロックされた日 (is_locked=true を 1 件でも持つ日付) は再生成対象外。
+       転送の中身を直接職員が編集している意思表示なので、自動再生成で潰さない。
+       強制再生成は将来の Phase で対応 (個別ロック解除 or 強制ボタン)。 */
+    const lockedEntryIds = new Set(
+      transportAssignments.filter((t) => t.is_locked).map((t) => t.schedule_entry_id),
+    );
+    const lockedDates = new Set<string>();
+    for (const e of scheduleEntries) {
+      if (lockedEntryIds.has(e.id)) lockedDates.add(e.date);
+    }
+
     /* 実際に処理する日のみをカウント対象にして progress 分母を合わせる */
-    const targetDates = workDays.filter((date) =>
-      scheduleEntries.some((e) => e.date === date)
+    const targetDates = workDays.filter(
+      (date) => scheduleEntries.some((e) => e.date === date) && !lockedDates.has(date),
     );
     setGenerateProgress({ current: 0, total: targetDates.length });
 
@@ -487,19 +498,22 @@ export default function TransportPage() {
       await fetchAll();
 
       /* 結果通知: alert の代わりに控えめなトーストを使う（21st.dev 風） */
+      const lockedSuffix =
+        lockedDates.size > 0 ? ` ／ 🔒 保存済 ${lockedDates.size} 日はスキップ` : '';
       if (errors.length > 0) {
         setToast({
           kind: 'warning',
           message:
             `再生成完了（一部エラー）: 対象 ${totalAssigned} 件 / 未割当 ${totalUnassigned} 件` +
-            ` / エラー ${errors.length} 件`,
+            ` / エラー ${errors.length} 件${lockedSuffix}`,
         });
       } else {
         setToast({
           kind: 'success',
           message:
             `再生成完了: ${totalAssigned} 件の担当を再割り当てしました` +
-            (totalUnassigned > 0 ? ` (未割当 ${totalUnassigned} 件)` : ''),
+            (totalUnassigned > 0 ? ` (未割当 ${totalUnassigned} 件)` : '') +
+            lockedSuffix,
         });
       }
     } catch (e) {
@@ -556,6 +570,7 @@ export default function TransportPage() {
         dropoff_staff_ids: string[];
         is_unassigned: boolean;
         is_confirmed: boolean;
+        is_locked: boolean;
       }[] = [];
 
       for (const [sid, change] of pendingChanges.entries()) {
@@ -572,6 +587,8 @@ export default function TransportPage() {
           dropoff_staff_ids: change.dropoffStaffIds,
           is_unassigned: pickupEmpty || dropoffEmpty,
           is_confirmed: existing?.is_confirmed ?? false,
+          /* Phase 45: 手動保存はロック扱い。次回再生成でこの日をスキップ */
+          is_locked: true,
         });
       }
 
@@ -748,6 +765,24 @@ export default function TransportPage() {
             {generated && !confirmed && <Badge variant="warning">未確定</Badge>}
             {generated && unassignedTotal > 0 && (
               <Badge variant="error">未割当 {unassignedTotal}件</Badge>
+            )}
+            {/* Phase 45: 当日がロック済み (保存済み) なら 🔒 を表示。再生成でスキップされる目印 */}
+            {transportAssignments.some(
+              (t) =>
+                t.is_locked &&
+                scheduleEntries.some((e) => e.id === t.schedule_entry_id && e.date === selectedDate),
+            ) && (
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded"
+                style={{
+                  background: 'var(--accent-pale)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent)',
+                }}
+                title="この日は手動で保存済みです。再生成でスキップされます。"
+              >
+                🔒 保存済(再生成スキップ)
+              </span>
             )}
           </div>
           <div className="flex gap-2">

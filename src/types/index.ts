@@ -320,6 +320,8 @@ export type TransportAssignmentRow = {
   dropoff_staff_ids: string[];
   is_confirmed: boolean;
   is_unassigned: boolean;
+  /** Phase 45: 手動編集ロック。true の日は再生成でスキップされる */
+  is_locked: boolean;
   created_at: string;
 };
 

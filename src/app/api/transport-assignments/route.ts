@@ -46,6 +46,8 @@ export async function POST(request: NextRequest) {
     dropoff_staff_ids: (a.dropoff_staff_ids as string[]) ?? [],
     is_unassigned: Boolean(a.is_unassigned ?? false),
     is_confirmed: Boolean(a.is_confirmed ?? false),
+    /* Phase 45: 手動編集ロック。「保存」呼び出しは true、再生成 (handleGenerate) は false で送る */
+    is_locked: Boolean(a.is_locked ?? false),
   }));
 
   const supabase = await createClient();

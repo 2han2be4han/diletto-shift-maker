@@ -592,3 +592,29 @@
 - `src/components/transport/TransportDayView.tsx`:
   - StaffSelect SELECT_WIDTH 60 → 80px、padding 4px 6px → 4px 2px 4px 6px に。3 文字名（「あやせ」「ヨハン」）が省略されない
   - 場所セル (LocationCellInline) で pickup/dropoff method='self' のときは areaLabel/location を null 化して非表示
+
+---
+
+## Phase 45 変更一覧（2026-04-19）
+
+### スキーマ
+- `transport_assignments.is_locked boolean default false`（Migration 0035）
+  - 用途: 「保存」ボタン押下で true。再生成 (handleGenerate) はこの flag が true の row を含む日をスキップ
+  - is_confirmed (確定) とは別軸: ロック=編集中保護、確定=最終承認
+
+### 型・API
+- `src/types/index.ts`: TransportAssignmentRow に is_locked: boolean 追加
+- `src/app/api/transport-assignments/route.ts`: POST で is_locked を受け取り upsert
+
+### ロジック
+- `src/app/(app)/transport/page.tsx`:
+  - handleSaveDay: payload に is_locked: true をセットして DB upsert
+  - handleGenerate: 事前に lockedDates Set を構築、targetDates から除外
+  - 完了トーストに「🔒 保存済 N 日はスキップ」を併記
+  - ヘッダーに「🔒 保存済(再生成スキップ)」バッジ
+- `src/lib/logic/generateTransport.ts`: 自動生成 row は is_locked: false で出力
+
+### 印刷背景修正（追加）
+- `src/app/(app)/output/daily/page.tsx`:
+  - body > div { background: #fff }, body > div > div { background: #fff } を print CSS に追加
+  - 原因: AppShell.tsx 最外周 div の inline style="background: var(--bg)" が紙面内に灰色として透けていた
