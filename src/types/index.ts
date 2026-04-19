@@ -382,6 +382,17 @@ export type ChildDropoffLocationRow = {
   created_at: string;
 };
 
+// ----- Phase 35: 日次出力カードの児童 DnD 並び順学習記憶 -----
+export type ChildDisplayOrderMemoryRow = {
+  id: string;
+  tenant_id: string;
+  /** "HH:MM|pickup|areaId1,areaId2" 形式（areaId はソート済み） */
+  slot_signature: string;
+  child_id: string;
+  display_order: number;
+  updated_at: string;
+};
+
 // ----- 認証セッションから得た staff 情報（サーバー共通） -----
 export type AuthenticatedStaff = Pick<
   StaffRow,

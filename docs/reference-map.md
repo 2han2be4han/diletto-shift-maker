@@ -406,3 +406,30 @@
 
 ### 触らない / 残置
 - ExcelPasteModal は A-1 スコープ外。pattern_id=undefined で送信され、API 側で null 保存。Excel 側 UI は A-2 で対応予定
+
+---
+
+## Phase 35 変更一覧（2026-04-19）
+
+### 新規テーブル
+- `child_display_order_memory`（Migration 0033）: tenant_id, slot_signature(text), child_id, display_order(int), updated_at, unique(tenant_id, slot_signature, child_id)
+  - RLS: 同テナント内で全ロール（viewer 含む）SELECT/INSERT/UPDATE/DELETE 可。出欠 RPC と同じく現場運用前提。
+  - signature 形式: `"HH:MM|pickup|dropoff|areaIdsSorted.join(',')"`（buildSlotSignature in `src/app/(app)/output/daily/page.tsx`）
+
+### 新規 API ルート
+- `GET /api/transport/child-order`（viewer 以上）: テナント全 memory rows
+- `POST /api/transport/child-order`（viewer 以上）: { signature, orders: [{child_id, display_order}] } を upsert（onConflict: tenant_id+slot_signature+child_id）
+
+### 新規型
+- `ChildDisplayOrderMemoryRow` in `src/types/index.ts`
+
+### UI 変更
+- `src/app/(app)/output/daily/page.tsx`:
+  - TransportBlock 本体レイアウトを「児童 ｜ 区切り縦線 ｜ 職員」横並び 1 段に変更（旧: 児童横並び＋下に職員横並びの 2 段）
+  - 児童バッジを @dnd-kit/sortable で並び替え可能に（horizontalListSortingStrategy）
+  - 並び順は dragEnd で local 反映 + サーバー upsert（楽観更新、失敗時サイレント）
+  - fetchAll で memory 全件取得、slots 組立後に signature ヒット児童を sort、未登録は末尾
+  - TransportSlot に `areaIds: string[]` と `children[].id` を追加
+
+### 依存追加
+- `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`（package.json）

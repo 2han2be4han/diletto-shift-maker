@@ -15,7 +15,26 @@ import type {
   AreaLabel,
   TenantSettings,
   GradeType,
+  ChildDisplayOrderMemoryRow,
 } from '@/types';
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 import { staffDisplayName } from '@/lib/utils/displayName';
 
@@ -58,7 +77,11 @@ type TransportSlot = {
   direction: 'pickup' | 'dropoff';
   /** 同一担当者にまとめた結果、複数エリアを跨ぐ場合に備えて配列で保持 */
   areaLabels: string[];
+  /** Phase 35: 学習記憶の signature 生成用。areaLabels と同じ並びの ID 群（無いものは除外） */
+  areaIds: string[];
   children: Array<{
+    /** Phase 35: DnD 並び順保存用 */
+    id: string;
     name: string;
     areaEmoji: string | null;
     grade: GradeType;
@@ -69,6 +92,13 @@ type TransportSlot = {
   /** 保護者送迎（method='self'）。担当欄に「👪 保護者」を表示し、未割当扱いしない。 */
   isSelfTransport: boolean;
 };
+
+/** Phase 35: スロット条件のシグネチャ。日付・職員・児童に依存しないキー。
+ *  例: "13:20|pickup|<uuid1>,<uuid2>"  (areaIds はソート済み) */
+function buildSlotSignature(slot: { time: string; direction: 'pickup' | 'dropoff'; areaIds: string[] }): string {
+  const ids = [...slot.areaIds].sort().join(',');
+  return `${slot.time}|${slot.direction}|${ids}`;
+}
 
 type OnDutyStaff = {
   id: string;
@@ -94,18 +124,21 @@ export default function DailyOutputPage() {
   const [transportAssignments, setTransportAssignments] = useState<TransportAssignmentRow[]>([]);
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
+  /* Phase 35: 日次出力カードの児童 DnD 並び順学習記憶。signature → (childId → order) */
+  const [orderMemory, setOrderMemory] = useState<Map<string, Map<string, number>>>(new Map());
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [sRes, cRes, eRes, aRes, tRes, tenantRes] = await Promise.all([
+      const [sRes, cRes, eRes, aRes, tRes, tenantRes, oRes] = await Promise.all([
         fetch('/api/staff'),
         fetch('/api/children'),
         fetch(`/api/schedule-entries?from=${date}&to=${date}`),
         fetch(`/api/shift-assignments?from=${date}&to=${date}`),
         fetch(`/api/transport-assignments?from=${date}&to=${date}`),
         fetch('/api/tenant'),
+        fetch('/api/transport/child-order'),
       ]);
       const sJson = sRes.ok ? await sRes.json() : { staff: [] };
       const cJson = cRes.ok ? await cRes.json() : { children: [] };
@@ -113,6 +146,7 @@ export default function DailyOutputPage() {
       const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
       const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
       const tenantJson = tenantRes.ok ? await tenantRes.json() : { tenant: null };
+      const oJson = oRes.ok ? await oRes.json() : { orders: [] };
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
@@ -122,6 +156,17 @@ export default function DailyOutputPage() {
       const settings: TenantSettings = tenantJson.tenant?.settings ?? {};
       setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
       setDropoffAreas(settings.dropoff_areas ?? []);
+
+      const memMap = new Map<string, Map<string, number>>();
+      for (const r of (oJson.orders ?? []) as ChildDisplayOrderMemoryRow[]) {
+        let inner = memMap.get(r.slot_signature);
+        if (!inner) {
+          inner = new Map();
+          memMap.set(r.slot_signature, inner);
+        }
+        inner.set(r.child_id, r.display_order);
+      }
+      setOrderMemory(memMap);
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -143,6 +188,16 @@ export default function DailyOutputPage() {
     for (const a of allAreas) {
       m.set(`${a.emoji} ${a.name}`, a.emoji);
       m.set(a.name, a.emoji);
+    }
+    return m;
+  }, [allAreas]);
+  /* Phase 35: ラベル文字列 → AreaLabel.id 引き。signature 生成用 */
+  const areaIdByLabel = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of allAreas) {
+      if (!a.id) continue;
+      m.set(`${a.emoji} ${a.name}`, a.id);
+      m.set(a.name, a.id);
     }
     return m;
   }, [allAreas]);
@@ -172,11 +227,13 @@ export default function DailyOutputPage() {
         const emoji = spec.pickup.areaLabel
           ? areaEmojiByLabel.get(spec.pickup.areaLabel) ?? null
           : null;
+        const areaId = spec.pickup.areaLabel ? areaIdByLabel.get(spec.pickup.areaLabel) ?? null : null;
         list.push({
           time: fmtTime(entry.pickup_time),
           direction: 'pickup',
           areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
-          children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
+          areaIds: areaId ? [areaId] : [],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, grade: child.grade_type }],
           staffIds: isSelf ? [] : ta.pickup_staff_ids,
           /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する） */
           isUnassigned:
@@ -193,11 +250,13 @@ export default function DailyOutputPage() {
         const emoji = spec.dropoff.areaLabel
           ? areaEmojiByLabel.get(spec.dropoff.areaLabel) ?? null
           : null;
+        const areaId = spec.dropoff.areaLabel ? areaIdByLabel.get(spec.dropoff.areaLabel) ?? null : null;
         list.push({
           time: fmtTime(entry.dropoff_time),
           direction: 'dropoff',
           areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
-          children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
+          areaIds: areaId ? [areaId] : [],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, grade: child.grade_type }],
           staffIds: isSelf ? [] : ta.dropoff_staff_ids,
           /* 保護者送迎は「未割当」扱いしない */
           isUnassigned:
@@ -228,9 +287,12 @@ export default function DailyOutputPage() {
       if (existing) {
         existing.children.push(...s.children);
         existing.staffIds = Array.from(new Set([...existing.staffIds, ...s.staffIds]));
-        /* エリア違いの slot がマージされたら areaLabels に追加 */
+        /* エリア違いの slot がマージされたら areaLabels / areaIds に追加 */
         for (const al of s.areaLabels) {
           if (al && !existing.areaLabels.includes(al)) existing.areaLabels.push(al);
+        }
+        for (const aid of s.areaIds) {
+          if (aid && !existing.areaIds.includes(aid)) existing.areaIds.push(aid);
         }
         existing.isUnassigned = existing.isUnassigned || s.isUnassigned;
       } else {
@@ -238,14 +300,32 @@ export default function DailyOutputPage() {
           ...s,
           children: [...s.children],
           areaLabels: [...s.areaLabels],
+          areaIds: [...s.areaIds],
         });
       }
     }
 
     const result = Array.from(grouped.values());
     result.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+
+    /* Phase 35: 学習記憶を適用。signature ヒットした児童は memory の display_order 昇順、
+       未登録の児童は元の並び（追加された順）で末尾に配置。 */
+    for (const slot of result) {
+      const sig = buildSlotSignature(slot);
+      const mem = orderMemory.get(sig);
+      if (!mem || mem.size === 0) continue;
+      slot.children.sort((a, b) => {
+        const oa = mem.get(a.id);
+        const ob = mem.get(b.id);
+        if (oa === undefined && ob === undefined) return 0;
+        if (oa === undefined) return 1; /* 未登録は末尾 */
+        if (ob === undefined) return -1;
+        return oa - ob;
+      });
+    }
+
     return result;
-  }, [children, entries, transportAssignments, pickupAreas, dropoffAreas, areaEmojiByLabel]);
+  }, [children, entries, transportAssignments, pickupAreas, dropoffAreas, areaEmojiByLabel, areaIdByLabel, orderMemory]);
 
   const pickupSlots = useMemo(() => slots.filter((s) => s.direction === 'pickup'), [slots]);
   const dropoffSlots = useMemo(() => slots.filter((s) => s.direction === 'dropoff'), [slots]);
@@ -276,6 +356,34 @@ export default function DailyOutputPage() {
   const staffNameById = useMemo(
     () => new Map(staff.map((s) => [s.id, staffDisplayName(s)])),
     [staff],
+  );
+
+  /* Phase 35: 並び替え結果を local state に反映 + サーバーに保存。
+     local 反映は楽観更新（API 失敗時のロールバックは行わない＝学習データは
+     非クリティカルなので、次回 fetch で正が確定する）。 */
+  const persistChildOrder = useCallback(
+    async (signature: string, orderedChildIds: string[]) => {
+      setOrderMemory((prev) => {
+        const next = new Map(prev);
+        const inner = new Map<string, number>();
+        orderedChildIds.forEach((id, idx) => inner.set(id, idx));
+        next.set(signature, inner);
+        return next;
+      });
+      try {
+        await fetch('/api/transport/child-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signature,
+            orders: orderedChildIds.map((id, idx) => ({ child_id: id, display_order: idx })),
+          }),
+        });
+      } catch {
+        /* ネットワーク失敗時はサイレント。次回 fetch で再同期される。 */
+      }
+    },
+    [],
   );
 
   /* 利用児童数: 当日 entries のうち欠席でないユニーク child_id 数 */
@@ -515,6 +623,7 @@ export default function DailyOutputPage() {
                           staffNameById={staffNameById}
                           keyPrefix="p"
                           direction="pickup"
+                          onReorderChildren={persistChildOrder}
                         />
                       )}
                     </DirectionSection>
@@ -533,6 +642,7 @@ export default function DailyOutputPage() {
                           staffNameById={staffNameById}
                           keyPrefix="d"
                           direction="dropoff"
+                          onReorderChildren={persistChildOrder}
                         />
                       )}
                     </DirectionSection>
@@ -689,11 +799,13 @@ function ThreeColGrid({
   staffNameById,
   keyPrefix,
   direction,
+  onReorderChildren,
 }: {
   slots: TransportSlot[];
   staffNameById: Map<string, string>;
   keyPrefix: string;
   direction: 'pickup' | 'dropoff';
+  onReorderChildren: (signature: string, orderedChildIds: string[]) => void;
 }) {
   return (
     <div
@@ -711,7 +823,7 @@ function ThreeColGrid({
             key={`${keyPrefix}-${s.time}-${s.areaLabels.join(',')}-${i}`}
             style={{ gridColumn: pos.col, gridRow: pos.row }}
           >
-            <TransportBlock slot={s} staffNameById={staffNameById} />
+            <TransportBlock slot={s} staffNameById={staffNameById} onReorderChildren={onReorderChildren} />
           </div>
         );
       })}
@@ -723,11 +835,32 @@ function ThreeColGrid({
 function TransportBlock({
   slot,
   staffNameById,
+  onReorderChildren,
 }: {
   slot: TransportSlot;
   staffNameById: Map<string, string>;
+  onReorderChildren: (signature: string, orderedChildIds: string[]) => void;
 }) {
   const headerColor = slot.direction === 'pickup' ? 'var(--accent)' : 'var(--green)';
+  const signature = buildSlotSignature(slot);
+
+  /* DnD センサ: マウス + タッチ + キーボード。activationConstraint でクリックと誤認しない */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = slot.children.findIndex((c) => c.id === active.id);
+    const newIdx = slot.children.findIndex((c) => c.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(slot.children, oldIdx, newIdx);
+    onReorderChildren(signature, reordered.map((c) => c.id));
+  };
+
   return (
     <div
       className="flex flex-col transport-block"
@@ -738,7 +871,7 @@ function TransportBlock({
         /* 内容に応じて自然幅。児童 1 名でも詰めて表示、多い便だけ横に広がる。 */
         flex: '0 0 auto',
         minWidth: 0,
-        maxWidth: '380px',
+        maxWidth: '420px',
       }}
     >
       {/* ヘッダー: 13:10発  榎江保育園(小)  / 大府緑公園  (複数エリア対応) */}
@@ -759,44 +892,34 @@ function TransportBlock({
         )}
       </div>
 
-      {/* 本体: 児童マーク + 担当職員 */}
-      <div className="p-3 flex flex-col gap-2">
-        {/* 児童マーク行 */}
-        <div className="flex flex-wrap gap-1.5">
-          {slot.children.map((c, idx) => {
-            const col = getGradeColors(c.grade);
-            const nameLines = splitChildName(c.name);
-            return (
-              <div
-                key={idx}
-                className="flex flex-col items-center justify-center child-mark"
-                style={{
-                  background: col.bg,
-                  border: `2px solid ${col.border}`,
-                  borderRadius: '999px',
-                  minWidth: '64px',
-                  minHeight: '64px',
-                  lineHeight: '1.1',
-                  padding: '4px 6px',
-                }}
-                title={c.name}
-              >
-                {nameLines.map((line, i) => (
-                  <span
-                    key={i}
-                    className="text-sm font-black whitespace-nowrap"
-                    style={{ color: col.text }}
-                  >
-                    {line}
-                  </span>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+      {/* 本体: 児童マーク ｜ 担当職員 を横並びで（児童最大4人想定） */}
+      <div className="p-3 flex items-center gap-3 flex-wrap">
+        {/* 児童マーク群（DnD 並び替え可能） */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={slot.children.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+            <div className="flex flex-wrap gap-1.5">
+              {slot.children.map((c) => (
+                <SortableChildBadge key={c.id} child={c} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
 
-        {/* 担当職員ボックス行 */}
-        <div className="flex flex-wrap gap-1.5 pt-1" style={{ borderTop: '1px dashed var(--rule)' }}>
+        {/* 区切り（児童と職員の間に縦線）。担当が空のときは出さない */}
+        {(slot.isSelfTransport || slot.isUnassigned || slot.staffIds.length > 0) && (
+          <div
+            aria-hidden="true"
+            style={{
+              alignSelf: 'stretch',
+              width: 0,
+              borderLeft: '1.5px solid var(--rule)',
+              minHeight: '40px',
+            }}
+          />
+        )}
+
+        {/* 担当職員ボックス群 */}
+        <div className="flex flex-wrap gap-1.5">
           {slot.isSelfTransport ? (
             <span
               className="text-base font-black px-2 py-1 whitespace-nowrap"
@@ -842,6 +965,54 @@ function TransportBlock({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ===== Phase 35: 並び替え可能な児童バッジ ===== */
+function SortableChildBadge({
+  child,
+}: {
+  child: { id: string; name: string; grade: GradeType };
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: child.id,
+  });
+  const col = getGradeColors(child.grade);
+  const nameLines = splitChildName(child.name);
+  const style: React.CSSProperties = {
+    background: col.bg,
+    border: `2px solid ${col.border}`,
+    borderRadius: '999px',
+    minWidth: '64px',
+    minHeight: '64px',
+    lineHeight: '1.1',
+    padding: '4px 6px',
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    cursor: 'grab',
+    touchAction: 'none',
+    userSelect: 'none',
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex flex-col items-center justify-center child-mark"
+      style={style}
+      title={child.name}
+      {...attributes}
+      {...listeners}
+    >
+      {nameLines.map((line, i) => (
+        <span
+          key={i}
+          className="text-sm font-black whitespace-nowrap"
+          style={{ color: col.text }}
+        >
+          {line}
+        </span>
+      ))}
     </div>
   );
 }

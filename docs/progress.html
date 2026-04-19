@@ -685,6 +685,31 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 35: 日次出力の児童 DnD 並び替え + 学習記憶（2026-04-19 着手）</div>
+    <p style="font-size:0.9rem;color:#444;">
+      <strong>ゴール</strong>: 日次出力カードで職員が児童バッジを DnD で並び替え、並び順をスロット条件（時刻+方向+エリア）単位で記憶。次回以降同条件のスロットが出現したら学習順を自動復元。
+      レイアウトも「児童 ｜ 職員」横並びに変更。viewer も DnD 可（出欠と同じく現場全員が触れる）。
+    </p>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>35-1</td><td>migration 0033: child_display_order_memory テーブル作成。tenant_id + slot_signature(text) + child_id + display_order + updated_at。RLS は tenant_id 一致のみで全ロール SELECT/INSERT/UPDATE/DELETE 可（出欠 RPC と同じく現場運用前提）</td><td>supabase/migrations/0033_child_display_order_memory.sql</td><td class="status-done">完了</td><td>100%</td><td>signature = "HH:MM|pickup|dropoff|areaIdsSorted.join(',')"</td></tr>
+            <tr><td>35-2</td><td>types: ChildDisplayOrderMemoryRow 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>35-3</td><td>API GET /api/transport/child-order: 当該テナントの全 memory rows を返す（軽量なので全件で OK、〜数百行想定）</td><td>src/app/api/transport/child-order/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>35-4</td><td>API POST /api/transport/child-order: { signature, orders: [{child_id, display_order}] } を upsert。tenant_id はサーバー側でセッションから注入。viewer も実行可</td><td>src/app/api/transport/child-order/route.ts</td><td class="status-done">完了</td><td>100%</td><td>onConflict (tenant_id, signature, child_id)</td></tr>
+            <tr><td>35-5</td><td>@dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities インストール</td><td>package.json</td><td class="status-done">完了</td><td>100%</td><td>軽量・React 19 対応</td></tr>
+            <tr><td>35-6</td><td>TransportSlot 型に areaIds: string[] と children[].id 追加。slots 構築時に id を保持</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>signature 生成と DnD 永続化に必須</td></tr>
+            <tr><td>35-7</td><td>レイアウト変更: TransportBlock 本体を「児童 flex-wrap | 区切り | 職員 flex-wrap」の横並び1段に。区切りは縦線（border-left）。担当未割当時はそのまま</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>flex items-center gap-3</td></tr>
+            <tr><td>35-8</td><td>DnD 実装: 各 TransportBlock の児童群を SortableContext でラップ、各バッジを useSortable に。dragEnd で local 順を更新 + signature 単位で API POST</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>印刷時 DnD ハンドル非表示 (@media print)</td></tr>
+            <tr><td>35-9</td><td>学習順の復元: fetchAll で memory rows も取得 → slots 組み立て後、各 slot の children を memory[signature] の display_order で sort、未登録は末尾</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>useMemo で signature → orderMap を作る</td></tr>
+            <tr><td>35-10</td><td>動作確認: ローカル dev で DnD 動作 / 順序保存 / 日付切替で復元 / viewer ロールでも操作可（DEV_SKIP_AUTH 環境）</td><td>npm run dev</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>35-11</td><td>reference-map.md 更新（child_display_order_memory テーブル + signature 仕様）、コミット</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:#555;margin-top:8px;">
+      <strong>整合性チェック</strong>: (1) 児童が転所/退所 → child_id FK CASCADE で memory も自動削除 (2) エリアが削除/改名 → signature 不一致で memory が孤立するが害はない（次回 DnD で新 signature 上書き） (3) 同時刻・同方向・同エリアで車両が違うケース → 1 グループとして扱う（ユーザー意向：車両 ID 不要）
+    </p>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>
