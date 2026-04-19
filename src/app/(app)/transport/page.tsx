@@ -886,17 +886,33 @@ export default function TransportPage() {
                   未保存 {pendingCountForDay} 件
                 </span>
               )}
-              <Button
-                variant="primary"
-                onClick={handleSaveDay}
-                disabled={saving || pendingCountForDay === 0 || confirmed}
-              >
-                {saving
-                  ? '保存中...'
-                  : pendingCountForDay > 0
-                  ? `この日の送迎を保存（${pendingCountForDay}件）`
-                  : 'この日の送迎を保存'}
-              </Button>
+              {(() => {
+                /* Phase 46: 保存済み (lock 済) の日はボタンを「✅ 保存済み」表示に切り替え。
+                   再編集すると pending が立つので自動的に「保存」に戻る。 */
+                const currentDayLocked = transportAssignments.some(
+                  (t) =>
+                    t.is_locked &&
+                    scheduleEntries.some(
+                      (e) => e.id === t.schedule_entry_id && e.date === selectedDate,
+                    ),
+                );
+                const showSaved = pendingCountForDay === 0 && currentDayLocked && !saving;
+                return (
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveDay}
+                    disabled={saving || pendingCountForDay === 0 || confirmed}
+                  >
+                    {saving
+                      ? '保存中...'
+                      : pendingCountForDay > 0
+                      ? `この日の送迎を保存（${pendingCountForDay}件）`
+                      : showSaved
+                      ? '✅ 保存済み'
+                      : 'この日の送迎を保存'}
+                  </Button>
+                );
+              })()}
             </div>
           </>
         )}
