@@ -1,7 +1,7 @@
 'use client';
 
 import { getDaysInMonth, getDay } from 'date-fns';
-import type { ShiftAssignmentType } from '@/types';
+import type { ShiftAssignmentType, ShiftRequestCommentRow } from '@/types';
 import { calculateCoverage } from '@/lib/logic/qualifiedCoverage';
 
 /**
@@ -43,6 +43,8 @@ type ShiftGridProps = {
   onCellClick: (staffId: string, date: string) => void;
   /** 日付(YYYY-MM-DD) → 児童数（カバレッジ判定・10人超閾値用）。省略可 */
   childrenCountByDate?: Map<string, number>;
+  /** Phase 36: 休み希望コメント。該当セルに ⚠ 赤マーク + tooltip 表示 */
+  requestComments?: ShiftRequestCommentRow[];
 };
 
 const TYPE_CONFIG: Record<ShiftAssignmentType, { label: string; color: string; bg: string }> = {
@@ -62,7 +64,13 @@ export default function ShiftGrid({
   warnings,
   onCellClick,
   childrenCountByDate,
+  requestComments,
 }: ShiftGridProps) {
+  /* Phase 36: コメント map (staffId_date → text) */
+  const commentMap = new Map<string, string>();
+  for (const c of requestComments ?? []) {
+    commentMap.set(`${c.staff_id}_${c.date}`, c.comment_text);
+  }
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
   const dates: { day: number; dow: number; dateStr: string }[] = [];
 
@@ -233,18 +241,22 @@ export default function ShiftGrid({
                 const cell = cellMap.get(`${s.id}_${d.dateStr}`);
                 const type = cell?.assignment_type || 'off';
                 const config = TYPE_CONFIG[type];
+                const commentText = commentMap.get(`${s.id}_${d.dateStr}`);
+                const baseTitle = type === 'normal' && cell ? `${cell.start_time}〜${cell.end_time}` : config.label;
+                const cellTitle = commentText ? `${baseTitle}\n⚠ ${commentText}` : baseTitle;
 
                 return (
                   <td
                     key={d.dateStr}
-                    className="px-0.5 py-1 text-center cursor-pointer transition-colors hover:bg-[var(--accent-pale)]"
+                    className="px-0.5 py-1 text-center cursor-pointer transition-colors hover:bg-[var(--accent-pale)] relative"
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: '1px solid var(--rule)',
                       background: type !== 'normal' ? config.bg : getCellBg(d.dow),
+                      position: 'relative',
                     }}
                     onClick={() => onCellClick(s.id, d.dateStr)}
-                    title={type === 'normal' && cell ? `${cell.start_time}〜${cell.end_time}` : config.label}
+                    title={cellTitle}
                   >
                     {type === 'normal' ? (
                       <div className="flex flex-col gap-0.5 leading-tight py-0.5">
@@ -261,6 +273,23 @@ export default function ShiftGrid({
                         style={{ color: config.color, fontSize: '0.7rem' }}
                       >
                         {config.label}
+                      </span>
+                    )}
+                    {commentText && (
+                      <span
+                        aria-label={`コメント: ${commentText}`}
+                        style={{
+                          position: 'absolute',
+                          top: '1px',
+                          right: '2px',
+                          color: 'var(--red)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          lineHeight: 1,
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        ⚠
                       </span>
                     )}
                   </td>

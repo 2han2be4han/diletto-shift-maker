@@ -16,6 +16,7 @@ import type {
   StaffRow,
   ShiftAssignmentRow,
   ShiftRequestRow,
+  ShiftRequestCommentRow,
   ScheduleEntryRow,
   StaffRole,
 } from '@/types';
@@ -59,6 +60,8 @@ export default function ShiftPage() {
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntryRow[]>([]);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequestRow[]>([]);
+  /* Phase 36: 休み希望コメント (per-date)。シフト表で ⚠ 赤マーク表示に使用 */
+  const [requestComments, setRequestComments] = useState<ShiftRequestCommentRow[]>([]);
   const [cells, setCells] = useState<ShiftCell[]>([]);
   const [warnings, setWarnings] = useState<Warning[]>([]);
   const [confirmed, setConfirmed] = useState(false);
@@ -105,11 +108,12 @@ export default function ShiftPage() {
       const lastDay = getDaysInMonth(new Date(year, month - 1));
       const to = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      const [sRes, eRes, rRes, aRes] = await Promise.all([
+      const [sRes, eRes, rRes, aRes, cRes] = await Promise.all([
         fetch('/api/staff'),
         fetch(`/api/schedule-entries?from=${from}&to=${to}`),
         fetch(`/api/shift-requests?month=${monthStr}`),
         fetch(`/api/shift-assignments?from=${from}&to=${to}`),
+        fetch(`/api/shift-request-comments?month=${monthStr}`),
       ]);
 
       if (!sRes.ok) throw new Error('職員取得失敗');
@@ -123,6 +127,8 @@ export default function ShiftPage() {
       setStaff(sArr ?? []);
       setScheduleEntries(entries ?? []);
       setShiftRequests(rJson.requests ?? []);
+      const cJson = cRes.ok ? await cRes.json() : { comments: [] };
+      setRequestComments(cJson.comments ?? []);
       const assigns: ShiftAssignmentRow[] = aJson.assignments ?? [];
       setCells(
         assigns.map<ShiftCell>((a) => ({
@@ -365,6 +371,7 @@ export default function ShiftPage() {
               warnings={warnings}
               onCellClick={handleCellClick}
               childrenCountByDate={childrenCountByDate}
+              requestComments={requestComments}
             />
           </div>
         ) : (

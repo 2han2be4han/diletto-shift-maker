@@ -710,6 +710,26 @@
       <strong>整合性チェック</strong>: (1) 児童が転所/退所 → child_id FK CASCADE で memory も自動削除 (2) エリアが削除/改名 → signature 不一致で memory が孤立するが害はない（次回 DnD で新 signature 上書き） (3) 同時刻・同方向・同エリアで車両が違うケース → 1 グループとして扱う（ユーザー意向：車両 ID 不要）
     </p>
 
+    <div class="phase-head">Phase 36: 休み希望モーダル拡張 + コメント機能 + 退職者除外（2026-04-19 着手）</div>
+    <p style="font-size:0.9rem;color:#444;">
+      <strong>ゴール</strong>: (a) 退職者を休み希望一覧から除外、(b) 選択肢を「指定なし/公休/有給/1日出勤可/AM休/PM休/コメント」へ拡張（コメントは他選択肢と排他、自由入力）、(c) ポップオーバーの画面端見切れ修正、(d) シフト表でコメント付き日付に赤ビックリマーク表示。
+    </p>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>36-1</td><td>退職者除外: 休み希望一覧 (AdminRequestList) で is_active=false の職員を除外。staff API デフォルト挙動 (?include_retired なし) に揃える</td><td>src/components/request/AdminRequestList.tsx ほか fetch 元</td><td class="status-done">完了</td><td>100%</td><td>まず簡単に直せる</td></tr>
+            <tr><td>36-2</td><td>migration 0034: ShiftRequestType 拡張 ('public_holiday'|'paid_leave'|'full_day_available'|'am_off'|'pm_off'|'comment')。既存 'available_day' を 'full_day_available' に自動変換。CHECK 制約更新</td><td>supabase/migrations/0034_shift_request_extended_types.sql</td><td class="status-done">完了</td><td>100%</td><td>UPDATE shift_requests SET request_type='full_day_available' WHERE request_type='available_day'</td></tr>
+            <tr><td>36-3</td><td>同 migration に shift_request_comments テーブル追加 (tenant_id, staff_id, month, date, comment_text, updated_at)。unique(tenant_id, staff_id, date)。RLS は本人 + admin/editor 編集可、同テナント SELECT 可</td><td>supabase/migrations/0034_shift_request_extended_types.sql</td><td class="status-done">完了</td><td>100%</td><td>per-date コメント。シフト表赤マーク判定にも使用</td></tr>
+            <tr><td>36-4</td><td>types: ShiftRequestType を拡張、ShiftRequestCommentRow 追加</td><td>src/types/index.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>36-5</td><td>API: GET /api/shift-requests でコメント rows もまとめて返す（or 別エンドポイント）。POST/PATCH でコメント保存</td><td>src/app/api/shift-requests/route.ts ほか</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>36-6</td><td>MyRequestCalendar の選択肢を 6 種 + コメント に拡張。コメント選択時はテキストエリア表示、他オプションは無効化（排他）。AM休/PM休 はバッジ色で区別</td><td>src/components/request/MyRequestCalendar.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>36-7</td><td>ポップオーバー位置修正: viewport 端超過で上/横に反転。useRef + getBoundingClientRect 計算（Floating UI は導入せず手書き）</td><td>src/components/request/MyRequestCalendar.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>36-8</td><td>シフト表の赤ビックリマーク: ShiftCell でコメント付きの日付に「⚠」を赤色で表示。tooltip でコメント本文を表示。月一括 fetch</td><td>src/components/shift/ShiftGrid.tsx, ShiftCell.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>36-9</td><td>typecheck + build OK 確認 + コミット</td><td>npm scripts</td><td class="status-doing">確認待ち</td><td>70%</td><td>動作確認はユーザー側</td></tr>
+            <tr><td>36-10</td><td>reference-map.md 更新</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

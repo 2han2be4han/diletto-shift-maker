@@ -46,7 +46,8 @@ export default async function RequestPage({
   let allRequests: ShiftRequestRow[] = [];
   if (showAdminView) {
     const [sRes, rRes] = await Promise.all([
-      supabase.from('staff').select('*').order('display_order', { ascending: true, nullsFirst: false }).order('name'),
+      /* Phase 36: 退職者 (is_active=false) は休み希望一覧から除外 */
+      supabase.from('staff').select('*').eq('is_active', true).order('display_order', { ascending: true, nullsFirst: false }).order('name'),
       supabase.from('shift_requests').select('*').eq('month', targetMonth),
     ]);
     allStaff = (sRes.data ?? []) as StaffRow[];

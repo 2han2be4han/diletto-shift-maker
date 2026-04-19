@@ -77,7 +77,14 @@ export function generateShiftAssignments(
     for (const d of req.dates) {
       if (req.request_type === 'public_holiday') entry.publicHolidays.add(d);
       if (req.request_type === 'paid_leave') entry.paidLeaves.add(d);
-      if (req.request_type === 'available_day') entry.availableDays.add(d);
+      /* Phase 36: 旧 available_day を full_day_available にリネーム + am_off/pm_off も「出勤可」扱い（部分的でも勤務枠あり） */
+      if (
+        req.request_type === 'full_day_available' ||
+        req.request_type === 'am_off' ||
+        req.request_type === 'pm_off'
+      ) {
+        entry.availableDays.add(d);
+      }
     }
   }
 

@@ -433,3 +433,41 @@
 
 ### 依存追加
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`（package.json）
+
+---
+
+## Phase 36 変更一覧（2026-04-19）
+
+### スキーマ変更
+- `shift_requests.request_type` CHECK 制約拡張（Migration 0034）:
+  - 旧: 'public_holiday'|'paid_leave'|'available_day'
+  - 新: 'public_holiday'|'paid_leave'|'full_day_available'|'am_off'|'pm_off'|'comment'
+  - 既存 'available_day' は migration で 'full_day_available' に自動変換
+
+### 新規テーブル
+- `shift_request_comments`（Migration 0034）: tenant_id, staff_id, month, date, comment_text, updated_at, unique(tenant_id, staff_id, date)
+  - RLS: shift_requests と同等（admin/editor は全員、viewer は自分のみ書込み、同テナント SELECT 可）
+  - 用途: 休み希望の自由入力（他施設応援/会議/研修等）。シフト表の ⚠ 赤マーク判定にも使用
+
+### 新規 API ルート
+- `GET /api/shift-request-comments?month=YYYY-MM`（viewer 以上）
+- `POST /api/shift-request-comments`（viewer 以上、空文字 comment_text で delete）
+
+### 新規/変更型
+- `ShiftRequestType` 拡張 in `src/types/index.ts`
+- `ShiftRequestCommentRow` 追加 in `src/types/index.ts`
+
+### UI 変更
+- `src/app/(app)/request/page.tsx`: staff fetch に `is_active=true` フィルタ追加（退職者除外）
+- `src/components/request/MyRequestCalendar.tsx`: 全面リライト
+  - 6 種ステータス + コメント（排他）対応
+  - AM休/PM休 はセル背景の半月色塗りで視覚区別
+  - DayPopover サブコンポーネント新設（viewport 端で上下反転 + 横方向 shift）
+  - クリック外しで close、scroll/resize で位置再計算
+  - shift_request_comments 初期 fetch + per-date upsert
+- `src/components/request/AdminRequestList.tsx`: detail modal の Badge を 6 種対応（labelOf / badgeVariantOf ヘルパー）
+- `src/components/shift/ShiftGrid.tsx`: requestComments prop 追加、該当セルに ⚠ 赤色表示 + tooltip
+- `src/app/(app)/shift/page.tsx`: shift_request_comments 月一括 fetch、ShiftGrid に渡す
+
+### ロジック変更
+- `src/lib/logic/generateShift.ts`: 'available_day' → 'full_day_available' (+ am_off/pm_off も availableDays に追加)

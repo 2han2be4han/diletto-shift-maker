@@ -17,6 +17,28 @@ type Props = {
   targetMonth: string;
 };
 
+/* Phase 36: 拡張された ShiftRequestType の表示ヘルパー */
+function labelOf(t: ShiftRequestRow['request_type']): string {
+  switch (t) {
+    case 'public_holiday': return '公休';
+    case 'paid_leave': return '有給';
+    case 'full_day_available': return '1日出勤可';
+    case 'am_off': return 'AM休';
+    case 'pm_off': return 'PM休';
+    case 'comment': return 'コメント';
+  }
+}
+function badgeVariantOf(t: ShiftRequestRow['request_type']): 'info' | 'success' | 'warning' | 'error' {
+  switch (t) {
+    case 'public_holiday': return 'info';
+    case 'paid_leave': return 'success';
+    case 'full_day_available': return 'warning';
+    case 'am_off': return 'info';
+    case 'pm_off': return 'info';
+    case 'comment': return 'error';
+  }
+}
+
 export default function AdminRequestList({ staff, initialRequests, targetMonth }: Props) {
   const [requests, setRequests] = useState<ShiftRequestRow[]>(initialRequests);
   const [detail, setDetail] = useState<{ staff: StaffRow; reqs: ShiftRequestRow[] } | null>(null);
@@ -129,7 +151,7 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
                     {getCount(reqs, 'paid_leave') || '-'}
                   </td>
                   <td className="px-3 py-2 text-center" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--gold)' }}>
-                    {getCount(reqs, 'available_day') || '-'}
+                    {getCount(reqs, 'full_day_available') || '-'}
                   </td>
                   <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)', maxWidth: '150px' }}>
                     <span className="truncate block">{phRow?.notes ?? '-'}</span>
@@ -179,8 +201,8 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
                   style={{ background: 'var(--bg)', borderRadius: '6px' }}
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <Badge variant={r.request_type === 'public_holiday' ? 'info' : r.request_type === 'paid_leave' ? 'success' : 'warning'}>
-                      {r.request_type === 'public_holiday' ? '公休' : r.request_type === 'paid_leave' ? '有給' : '出勤可'}
+                    <Badge variant={badgeVariantOf(r.request_type)}>
+                      {labelOf(r.request_type)}
                     </Badge>
                     <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                       {r.dates.length} 日

@@ -213,7 +213,15 @@ export type AttendanceAuditLogRow = {
 };
 
 // ----- 休み希望 -----
-export type ShiftRequestType = 'public_holiday' | 'paid_leave' | 'available_day';
+/** Phase 36: 旧 'available_day' を 'full_day_available' に改名 + 'am_off' / 'pm_off' / 'comment' を追加。
+ *  'comment' は他選択肢と排他、shift_request_comments テーブルとペアで運用する。 */
+export type ShiftRequestType =
+  | 'public_holiday'
+  | 'paid_leave'
+  | 'full_day_available'
+  | 'am_off'
+  | 'pm_off'
+  | 'comment';
 
 export type ShiftRequestRow = {
   id: string;
@@ -226,6 +234,17 @@ export type ShiftRequestRow = {
   submitted_at: string;
   /** Phase 25: 入力者 id。NULL or = staff_id なら本人、異なれば代理入力 */
   submitted_by_staff_id: string | null;
+};
+
+/** Phase 36: 休み希望の自由入力コメント（日付ごと、他選択肢と排他） */
+export type ShiftRequestCommentRow = {
+  id: string;
+  tenant_id: string;
+  staff_id: string;
+  month: string;
+  date: string;
+  comment_text: string;
+  updated_at: string;
 };
 
 // ----- シフト確定 -----
