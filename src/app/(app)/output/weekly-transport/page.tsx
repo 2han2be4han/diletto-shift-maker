@@ -170,11 +170,17 @@ export default function WeeklyTransportPrintPage() {
         });
         const t = assignByEntry.get(e.id);
         const pickupStaffNames = (t?.pickup_staff_ids ?? [])
-          .map((id) => staffDisplayName(staffById.get(id) ?? null) || staffById.get(id)?.name || '')
+          .map((id) => {
+            const s = staffById.get(id);
+            return s ? (staffDisplayName(s) || s.name) : '';
+          })
           .filter(Boolean)
           .join('・');
         const dropoffStaffNames = (t?.dropoff_staff_ids ?? [])
-          .map((id) => staffDisplayName(staffById.get(id) ?? null) || staffById.get(id)?.name || '')
+          .map((id) => {
+            const s = staffById.get(id);
+            return s ? (staffDisplayName(s) || s.name) : '';
+          })
           .filter(Boolean)
           .join('・');
         return {
