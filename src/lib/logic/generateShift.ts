@@ -116,12 +116,15 @@ export function generateShiftAssignments(
         assignmentType = 'public_holiday';
       } else if (requests?.paidLeaves.has(dateStr)) {
         assignmentType = 'paid_leave';
+      } else if (s.employment_type === 'part_time') {
+        /* Phase 47: パートはデフォルト off。本人が「1日出勤可 / AM休 / PM休」を
+           申請した日（= availableDays に含まれる日）のみ normal で出勤割当する。
+           常勤の振る舞い（公休/有給以外は出勤）は変更なし。 */
+        assignmentType = requests?.availableDays.has(dateStr) ? 'normal' : 'off';
       } else if (dow === 0) {
-        /* 日曜は全員休み（デフォルト） */
+        /* 常勤: 日曜は全員休み（デフォルト） */
         assignmentType = 'off';
       }
-      /* Phase 25: パートは休み希望(公休/有給)以外は反映せず、常勤と同じく normal 扱い
-         （旧仕様では available_day に含まれない日を off にしていたが、希望無提出で全員休み化してしまう不具合があったため撤廃） */
 
       const isWorking = assignmentType === 'normal';
 
