@@ -1384,9 +1384,14 @@ function ToastBanner({
 
 /* Phase 38: 「年月日(曜日)」表示 + クリックでネイティブカレンダーを開く日付ピッカー。
    ヘッダーの長い日付タブ列が伸びても、ここから直接日付ジャンプ可能。
-   実装ポイント: <label> 内に見かけのボタン風 UI と type="date" の input を重ねる。
-   input を opacity:0 で全面に被せ、pointer-events は有効にしてタップ/クリックを直接受け取る。
-   旧実装の showPicker() は Safari/iOS で失敗することが多く「押しても反応しない」不具合を招いていた。 */
+
+   実装ポイント（何度も試行錯誤した結論）:
+   - `<input type="date">` を「見える要素」として実際に描画する（opacity:0 の hidden input だと
+     iOS Safari/Chrome で picker が開かないケースがある）
+   - input の文字色を transparent にして YYYY/MM/DD ネイティブ表示を隠す
+   - その上に日本語ラベル「YYYY年M月D日（曜）📅」を `pointer-events: none` の div で被せる
+   - こうするとタップは input に素通りで届き、ネイティブ picker が確実に開く
+   - `showPicker()` や `label` 包み込みパターンは端末依存で不安定だったため廃止 */
 function DateHeaderPicker({
   year,
   month,
@@ -1414,22 +1419,7 @@ function DateHeaderPicker({
   const maxDate = workDays[workDays.length - 1] ?? minDate;
 
   return (
-    <label
-      className="relative inline-flex items-center gap-2 text-lg font-bold cursor-pointer transition-all"
-      style={{
-        color: 'var(--ink)',
-        background: 'var(--white)',
-        border: '1.5px solid var(--accent)',
-        borderRadius: '8px',
-        padding: '6px 14px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        whiteSpace: 'nowrap',
-      }}
-      title="日付を選択して遷移"
-      aria-label={`${label} の日付を変更`}
-    >
-      <span>{label}</span>
-      <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
+    <div className="relative inline-block">
       <input
         type="date"
         value={selectedDate}
@@ -1439,10 +1429,47 @@ function DateHeaderPicker({
           const v = e.target.value;
           if (v) onChange(v);
         }}
-        className="absolute inset-0 w-full h-full cursor-pointer"
-        style={{ opacity: 0, colorScheme: 'light' }}
+        aria-label={`${label} の日付を変更`}
+        title="日付を選択して遷移"
+        style={{
+          /* 実体としての input を描画。文字は transparent で隠し、当たり判定は残す。 */
+          fontSize: '1rem',
+          fontWeight: 700,
+          padding: '6px 14px',
+          border: '1.5px solid var(--accent)',
+          borderRadius: '8px',
+          background: 'var(--white)',
+          color: 'transparent',
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          minWidth: '13rem',
+          /* iOS Safari でフォーカス時のズームを抑止 */
+          WebkitAppearance: 'none',
+          appearance: 'none',
+        }}
       />
-    </label>
+      {/* 見た目ラベル。input の上に重ねるが pointer-events:none でクリックを素通しさせる */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 14px',
+          color: 'var(--ink)',
+          fontSize: '1rem',
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          lineHeight: 1.2,
+        }}
+      >
+        <span>{label}</span>
+        <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
+      </div>
+    </div>
   );
 }
 

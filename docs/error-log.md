@@ -12,12 +12,12 @@
 - **発生日**: 2026-04-19
 - **発生箇所**: `src/app/(app)/transport/page.tsx` — `DateHeaderPicker` コンポーネント
 - **エラー内容**: 送迎表の日付ボタン（年月日 + 📅）をクリック/タップしてもネイティブ date picker が開かない
-- **原因**:
-  1. `<input type="date">` を `opacity:0 + pointer-events-none` で隠し、ボタンの `onClick` から `input.showPicker()` を呼ぶ実装だった
-  2. `showPicker()` は Chrome では動くが Safari/iOS で未実装 or 制限があり、フォールバックの `el.click()` も pointer-events-none の input では不発
-  3. ボタンに `whiteSpace: nowrap` が無く、狭幅ビューで文字が縦に 1 文字ずつ折り返していた（レイアウト破綻）
-- **解決方法**: `<label>` で UI を囲み、その中に `<input type="date">` を `absolute inset-0 opacity:0 cursor-pointer` で重ねる。ラベル上の任意位置をタップすると input にフォーカス/クリックが届き、ネイティブ picker が開く。`showPicker()` への依存を廃止
-- **再発防止**: 隠し input を用いた独自ピッカーは避け、**label + input の重ね合わせ**を第一候補にする。`showPicker()` を使う場合は必ず try-catch とフォールバック経路を用意する
+- **試行した実装と結果**:
+  1. ❌ `showPicker()` + hidden input（`opacity:0 + pointer-events-none`）: Safari/iOS で `showPicker()` が失敗し、フォールバックの `el.click()` も pointer-events-none では不発
+  2. ❌ `<label>` 包み込み + 子 input (`opacity:0`): iOS では label の click forwarding と input の event が干渉し、picker が開かないケースが観測された
+  3. ✅ **input を実体として描画し、文字色だけ transparent にして隠す + ラベルを `pointer-events:none` で重ねる**: タップは input に素通りで届き、ネイティブ picker が確実に開く
+- **解決方法**: `<input type="date">` を通常描画（枠や padding は可視）、`color: transparent` で YYYY/MM/DD 表示を隠蔽。上に日本語ラベル（YYYY年M月D日（曜）📅）を `position:absolute + pointer-events:none` で重ねる。`showPicker()` や隠し input パターンは完全廃止
+- **再発防止**: カスタム表示のネイティブ date picker を作る際は **input を主役（可視）とし、表示だけをオーバーレイで置き換える**ことを第一候補とする。hidden input + プログラム起動（`showPicker` / `click`）は端末依存で不安定
 
 ---
 
