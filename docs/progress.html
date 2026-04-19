@@ -789,6 +789,16 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 42: 利用予定セルの 4 状態表示（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>42-1</td><td>ScheduleCellData に entry_id / attendance_status を追加</td><td>src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>42-2</td><td>セル描画を「未入力(−) / 出席(時間+送迎) / 欠席(赤バッジ+赤背景) / お休み(灰バッジ+灰背景)」の 4 状態に</td><td>src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>title 属性で hover ヒント</td></tr>
+            <tr><td>42-3</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

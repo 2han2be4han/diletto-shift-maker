@@ -543,3 +543,14 @@
   - 時間/送迎 UI と handleSave の保存判定を attendanceStatus !== 'absent' に統一
   - cell ロード時の setAttendance 分岐 (L207-213) も削除
   - ルール: 「欠席以外は時間入力可、欠席なら times=null で保存して /transport から除外」
+
+---
+
+## Phase 42 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/components/schedule/ScheduleGrid.tsx`:
+  - ScheduleCellData に entry_id?, attendance_status? 追加
+  - セル描画を 4 状態に: 未入力(−) / 出席(時間+送迎マーク) / 欠席(赤バッジ + 赤背景) / お休み(灰バッジ + 灰背景)
+  - title 属性で状態 hover ヒント付き
+  - 状態判定: !entry → 未入力 / status='absent' → 欠席 / entry あり times 両方 null → お休み / それ以外 → 出席

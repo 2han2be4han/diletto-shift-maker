@@ -27,6 +27,9 @@ type ScheduleCellData = {
   pickup_method: 'self' | 'pickup'; // self=自分で来る, pickup=お迎え
   dropoff_method: 'self' | 'dropoff'; // self=自分で帰る, dropoff=送り
   note: string | null; // 追・休、定・休 など
+  /** Phase 42: セルに状態バッジを出すための追加項目 */
+  entry_id?: string | null;
+  attendance_status?: 'planned' | 'present' | 'absent' | 'late' | 'early_leave';
 };
 
 type ScheduleGridProps = {
@@ -173,7 +176,20 @@ export default function ScheduleGrid({
               </td>
               {dates.map((d) => {
                 const cell = cellMap.get(`${child.id}_${d.dateStr}`);
-                const hasData = cell && (cell.pickup_time || cell.dropoff_time);
+                const hasTimes = !!(cell && (cell.pickup_time || cell.dropoff_time));
+                /* Phase 42: 状態判定
+                   - 未入力: entry が存在しない（cell == null or entry_id == null）
+                   - 欠席: attendance_status='absent'
+                   - お休み: entry あり / times 両方 null / 欠席ではない
+                   - 出席: times あり */
+                const hasEntry = !!cell && (cell.entry_id ?? null) !== null;
+                const isAbsent = cell?.attendance_status === 'absent';
+                const isOff = hasEntry && !hasTimes && !isAbsent;
+
+                /* セル背景: 状態によって淡くハイライト */
+                let bg = getCellBg(d.dow);
+                if (isAbsent) bg = 'var(--red-pale)';
+                else if (isOff) bg = 'rgba(0,0,0,0.04)';
 
                 return (
                   <td
@@ -182,9 +198,12 @@ export default function ScheduleGrid({
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: '1px solid var(--rule)',
-                      background: getCellBg(d.dow),
+                      background: bg,
                     }}
                     onClick={() => onCellClick(child.id, d.dateStr)}
+                    title={
+                      isAbsent ? '欠席' : isOff ? 'お休み' : hasTimes ? '出席' : '未入力（クリックで編集）'
+                    }
                   >
                     {cell?.note ? (
                       /* 追・休 や 定・休 などの特殊表示 */
@@ -194,9 +213,23 @@ export default function ScheduleGrid({
                       >
                         {cell.note}
                       </span>
-                    ) : hasData ? (
+                    ) : isAbsent ? (
+                      <span
+                        className="text-xs font-bold"
+                        style={{ color: 'var(--red)' }}
+                      >
+                        欠席
+                      </span>
+                    ) : isOff ? (
+                      <span
+                        className="text-xs font-bold"
+                        style={{ color: 'var(--ink-3)' }}
+                      >
+                        お休み
+                      </span>
+                    ) : hasTimes ? (
                       <div className="flex flex-col gap-0 leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {cell.pickup_time && (
+                        {cell?.pickup_time && (
                           cell.pickup_method === 'self' ? (
                             <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
                               自 {formatHM(cell.pickup_time)}
@@ -207,7 +240,7 @@ export default function ScheduleGrid({
                             </span>
                           )
                         )}
-                        {cell.dropoff_time && (
+                        {cell?.dropoff_time && (
                           cell.dropoff_method === 'self' ? (
                             <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
                               自 {formatHM(cell.dropoff_time)}
@@ -219,7 +252,15 @@ export default function ScheduleGrid({
                           )
                         )}
                       </div>
-                    ) : null}
+                    ) : (
+                      /* 未入力（entry が無い） */
+                      <span
+                        className="text-xs"
+                        style={{ color: 'var(--ink-3)', opacity: 0.5 }}
+                      >
+                        −
+                      </span>
+                    )}
                   </td>
                 );
               })}
