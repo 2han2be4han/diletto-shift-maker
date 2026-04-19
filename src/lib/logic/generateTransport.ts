@@ -20,8 +20,10 @@ import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
  * 1. その日に出勤している職員のみ候補
  * 2. 送迎時間が職員の勤務時間内に収まること
  * 3. 送迎エリアが職員の対応エリアと一致すること
- * 4. 同一エリア・同一時間帯（±30分以内）の児童はグルーピング
- * 5. 1日の送迎回数が均等になるよう分散
+ * 4. 同一エリア・同一方向で、前便との間隔が 30 分未満の場合はグルーピング
+ *    → 同グループ内の児童は同じ職員が担当（同便＝同一トリップ扱い）
+ *    → 30 分以上空いたら別便扱いで新規に職員を選定
+ * 5. 1日の送迎回数（トリップ単位）が均等になるよう分散
  *
  * 制約:
  * - 1回の送迎につき担当者は最大2名まで
@@ -76,12 +78,50 @@ export function generateTransportAssignments(
     return compareTime(shift.end_time, minEndTime) >= 0;
   });
 
-  /* 職員ごとの送迎担当回数（均等分散用） */
+  /* 職員ごとの送迎担当回数（均等分散用、トリップ単位）。
+     同一グループ(同エリア・同時間帯)の児童は同じ職員が担当するため、
+     グループ新規作成時のみカウントを増やし、再利用時は増やさない。 */
   const staffAssignCount = new Map<string, number>();
   workingStaff.forEach((s) => staffAssignCount.set(s.id, 0));
   /* Phase 28: 職員ごとに「最後に迎を担当した pickup_time（分）」を記録し、
      クールダウン内の再アサインを防ぐ。送り側には適用しない。 */
   const lastPickupMinByStaff = new Map<string, number>();
+
+  /* グルーピング記録: 同一 (direction, areaId) で、グループ内の既存便との時刻差が
+     SEPARATE_TRIP_GAP_MINUTES 未満なら「同便」として職員を再利用する。
+     30 分以上空いた場合は「別便」として新規にグループ（新規職員選定）を作る。
+     運用イメージ: 同一スタッフが「行って帰ってまた行く」のを別便としてカウントするため、
+     前便の時刻から 30 分以上経過していれば別トリップとして扱う。
+     CLAUDE.md §8 ルール #4 の実装。 */
+  const SEPARATE_TRIP_GAP_MINUTES = 30;
+  type GroupRecord = {
+    direction: 'pickup' | 'dropoff';
+    areaId: string;
+    /** グループ内で最も新しい時刻（分）。次エントリとの差が <30 分なら同便。 */
+    latestTimeMin: number;
+    staff: StaffRow[];
+  };
+  const groupAssignments: GroupRecord[] = [];
+  /** 既存グループの中で (direction, areaId) が一致し、時刻差が <30 分のものを返す。
+      該当が複数ある場合は最も時刻が近い（最後に更新された）グループを返す。 */
+  function findMatchingGroup(
+    direction: 'pickup' | 'dropoff',
+    areaId: string | null,
+    timeMin: number | null
+  ): GroupRecord | null {
+    if (!areaId || timeMin === null) return null;
+    let best: GroupRecord | null = null;
+    let bestDiff = SEPARATE_TRIP_GAP_MINUTES;
+    for (const g of groupAssignments) {
+      if (g.direction !== direction || g.areaId !== areaId) continue;
+      const diff = Math.abs(g.latestTimeMin - timeMin);
+      if (diff < bestDiff) {
+        best = g;
+        bestDiff = diff;
+      }
+    }
+    return best;
+  }
 
   const assignments: Omit<TransportAssignmentRow, 'id' | 'created_at'>[] = [];
   let unassignedCount = 0;
@@ -119,9 +159,20 @@ export function generateTransportAssignments(
     const pickupResolvable = pickupNeedsStaff && !!pickupAreaId;
     const dropoffResolvable = dropoffNeedsStaff && !!dropoffAreaId;
 
-    /* 迎え担当を選定（保護者送迎なら空 / エリア未解決なら空） */
-    const pickupStaff = pickupResolvable
-      ? selectStaff({
+    /* 迎え担当を選定（保護者送迎なら空 / エリア未解決なら空）。
+       ルール #4: 同エリア・前便との間隔<30分なら同便扱いで職員を再利用。 */
+    const pickupTimeMin = normalizeTimeMinutes(pickupTime);
+    let pickupStaff: StaffRow[] = [];
+    if (pickupResolvable) {
+      const matched = findMatchingGroup('pickup', pickupAreaId, pickupTimeMin);
+      if (matched) {
+        pickupStaff = matched.staff;
+        /* グループの最新時刻を更新（次エントリとの間隔判定用） */
+        if (pickupTimeMin !== null && pickupTimeMin > matched.latestTimeMin) {
+          matched.latestTimeMin = pickupTimeMin;
+        }
+      } else {
+        pickupStaff = selectStaff({
           workingStaff,
           shiftAssignments,
           date,
@@ -136,12 +187,31 @@ export function generateTransportAssignments(
             lastPickupMinByStaff,
             cooldownMinutes: pickupCooldownMin,
           },
-        })
-      : [];
+        });
+        if (pickupStaff.length > 0 && pickupAreaId && pickupTimeMin !== null) {
+          groupAssignments.push({
+            direction: 'pickup',
+            areaId: pickupAreaId,
+            latestTimeMin: pickupTimeMin,
+            staff: pickupStaff,
+          });
+        }
+      }
+    }
 
-    /* 送り担当を選定（保護者送迎なら空 / エリア未解決なら空） */
-    const dropoffStaff = dropoffResolvable
-      ? selectStaff({
+    /* 送り担当を選定（保護者送迎なら空 / エリア未解決なら空）。
+       ルール #4: 同エリア・前便との間隔<30分なら同便扱いで職員を再利用。 */
+    const dropoffTimeMin = normalizeTimeMinutes(dropoffTime);
+    let dropoffStaff: StaffRow[] = [];
+    if (dropoffResolvable) {
+      const matched = findMatchingGroup('dropoff', dropoffAreaId, dropoffTimeMin);
+      if (matched) {
+        dropoffStaff = matched.staff;
+        if (dropoffTimeMin !== null && dropoffTimeMin > matched.latestTimeMin) {
+          matched.latestTimeMin = dropoffTimeMin;
+        }
+      } else {
+        dropoffStaff = selectStaff({
           workingStaff,
           shiftAssignments,
           date,
@@ -151,8 +221,17 @@ export function generateTransportAssignments(
           staffAssignCount,
           maxStaff: AUTO_ASSIGN_STAFF_COUNT,
           /* 送りにはクールダウンを適用しない */
-        })
-      : [];
+        });
+        if (dropoffStaff.length > 0 && dropoffAreaId && dropoffTimeMin !== null) {
+          groupAssignments.push({
+            direction: 'dropoff',
+            areaId: dropoffAreaId,
+            latestTimeMin: dropoffTimeMin,
+            staff: dropoffStaff,
+          });
+        }
+      }
+    }
 
     /* Phase 28: 迎を割り当てた職員について pickup_time を記録（次のクールダウン判定用） */
     const pickupMin = normalizeTimeMinutes(pickupTime);

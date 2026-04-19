@@ -66,6 +66,8 @@ type TransportSlot = {
   staffIds: string[];
   isUnassigned: boolean;
   isConfirmed: boolean;
+  /** 保護者送迎（method='self'）。担当欄に「👪 保護者」を表示し、未割当扱いしない。 */
+  isSelfTransport: boolean;
 };
 
 type OnDutyStaff = {
@@ -165,7 +167,8 @@ export default function DailyOutputPage() {
         dropoffAreas,
       });
 
-      if (entry.pickup_time && entry.pickup_method === 'pickup') {
+      if (entry.pickup_time) {
+        const isSelf = entry.pickup_method === 'self';
         const emoji = spec.pickup.areaLabel
           ? areaEmojiByLabel.get(spec.pickup.areaLabel) ?? null
           : null;
@@ -174,15 +177,19 @@ export default function DailyOutputPage() {
           direction: 'pickup',
           areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
           children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
-          staffIds: ta.pickup_staff_ids,
+          staffIds: isSelf ? [] : ta.pickup_staff_ids,
+          /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する） */
           isUnassigned:
-            ta.is_unassigned ||
-            (entry.pickup_method === 'pickup' && ta.pickup_staff_ids.length === 0),
+            !isSelf &&
+            (ta.is_unassigned ||
+              (entry.pickup_method === 'pickup' && ta.pickup_staff_ids.length === 0)),
           isConfirmed: ta.is_confirmed,
+          isSelfTransport: isSelf,
         });
       }
 
-      if (entry.dropoff_time && entry.dropoff_method === 'dropoff') {
+      if (entry.dropoff_time) {
+        const isSelf = entry.dropoff_method === 'self';
         const emoji = spec.dropoff.areaLabel
           ? areaEmojiByLabel.get(spec.dropoff.areaLabel) ?? null
           : null;
@@ -191,25 +198,31 @@ export default function DailyOutputPage() {
           direction: 'dropoff',
           areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
           children: [{ name: child.name, areaEmoji: emoji, grade: child.grade_type }],
-          staffIds: ta.dropoff_staff_ids,
+          staffIds: isSelf ? [] : ta.dropoff_staff_ids,
+          /* 保護者送迎は「未割当」扱いしない */
           isUnassigned:
-            ta.is_unassigned ||
-            (entry.dropoff_method === 'dropoff' && ta.dropoff_staff_ids.length === 0),
+            !isSelf &&
+            (ta.is_unassigned ||
+              (entry.dropoff_method === 'dropoff' && ta.dropoff_staff_ids.length === 0)),
           isConfirmed: ta.is_confirmed,
+          isSelfTransport: isSelf,
         });
       }
     }
 
     /* グルーピング:
+       - 保護者送迎 slot: 同時刻+同方向+同エリア でまとめる（スタッフと混ざらないよう独立キー）
        - 担当者が割り当てられている slot: 同時刻+同方向+同じ担当者集合 でまとめる
          （エリア違いでも同じ担当者なら 1 ブロックに統合。areaLabels は配列で保持）
        - 未割当 slot: 同時刻+同方向+同エリア でまとめる（担当者が無いので area ベース） */
     const grouped = new Map<string, TransportSlot>();
     for (const s of list) {
       const hasStaff = s.staffIds.length > 0;
-      const staffKey = hasStaff
-        ? `S:${[...s.staffIds].sort().join(',')}`
-        : `U:${s.areaLabels.join('|')}`;
+      const staffKey = s.isSelfTransport
+        ? `P:${s.areaLabels.join('|')}`
+        : hasStaff
+          ? `S:${[...s.staffIds].sort().join(',')}`
+          : `U:${s.areaLabels.join('|')}`;
       const key = `${s.time}|${s.direction}|${staffKey}`;
       const existing = grouped.get(key);
       if (existing) {
@@ -784,7 +797,20 @@ function TransportBlock({
 
         {/* 担当職員ボックス行 */}
         <div className="flex flex-wrap gap-1.5 pt-1" style={{ borderTop: '1px dashed var(--rule)' }}>
-          {slot.isUnassigned ? (
+          {slot.isSelfTransport ? (
+            <span
+              className="text-base font-black px-2 py-1 whitespace-nowrap"
+              style={{
+                background: 'var(--white)',
+                border: '2px dashed var(--ink-3)',
+                borderRadius: '4px',
+                color: 'var(--ink-2)',
+              }}
+              title="保護者による送迎のため、担当職員の割り当ては不要です"
+            >
+              👪 保護者
+            </span>
+          ) : slot.isUnassigned ? (
             <span
               className="text-base font-black px-2 py-1"
               style={{ color: 'var(--red)' }}
