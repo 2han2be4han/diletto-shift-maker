@@ -505,6 +505,14 @@ export default function DailyOutputPage() {
               .daily-output-root .flex-1 {
                 background: #fff !important;
               }
+              /* Phase 44: 印刷時に紙面内が灰色に見える残りの原因を全て排除。
+                 transport-block / 児童マーク / 職員ボックス / バッジ系の意図的な背景は維持し、
+                 それ以外の全ての子要素を強制的に白へ落とす。 */
+              .daily-output-root *:not(.transport-block):not(.child-mark):not(.staff-box):not([data-keep-bg]) {
+                background-color: #fff !important;
+              }
+              /* ただし transport-block 内部の未割当 (.red-pale) や子バッジ色は保持したいので
+                 transport-block は除外している。child-mark / staff-box も同様。 */
               .transport-block {
                 page-break-inside: avoid;
                 break-inside: avoid;
