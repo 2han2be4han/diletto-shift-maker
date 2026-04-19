@@ -406,19 +406,10 @@ export default function SchedulePage() {
       >
         {selectedCell && selectedChild && (
           <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>出欠種類</label>
-              <ToggleGroup
-                options={[
-                  { label: '出席', value: 'attend' },
-                  { label: '欠席', value: 'absent' },
-                  { label: 'お休み', value: 'off' },
-                ]}
-                value={attendance}
-                onChange={(v) => setAttendance(v as 'attend' | 'absent' | 'off')}
-                accentColor="#4dbfbf"
-              />
-            </div>
+            {/* Phase 39: 「出欠種類 (出席/欠席/お休み)」セクションを撤去。
+                同じ意味の「当日の出欠記録 (予定/出席/欠席/遅刻/早退)」+ 履歴のみを残す。
+                attendance state は load 時の値を保持し handleSave に渡すので、
+                既存エントリ（お休み=null 時刻）の挙動は維持される。 */}
 
             {attendance === 'attend' && (
               <>

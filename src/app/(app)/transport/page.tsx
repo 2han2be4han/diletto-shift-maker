@@ -791,53 +791,7 @@ export default function TransportPage() {
           <div className="py-20 text-center text-sm" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
         ) : (
           <>
-            {/* Phase 28: 日付タブは当月の全営業日を常時表示。
-                利用予定/割当の有無に関わらず全日切替可能にし、
-                各タブに「利用N / 割当M / 未割当赤」をラベル表示 */}
-            <div className="flex gap-1 overflow-x-auto pb-2 mb-4" style={{ scrollbarWidth: 'thin' }}>
-              {workDays.map((date) => {
-                const dayEntries = scheduleEntries.filter((e) => e.date === date);
-                const hasUnassigned = (unassignedByDate.get(date) ?? 0) > 0;
-                const isEmpty = dayEntries.length === 0;
-                const isSelected = date === selectedDate;
-                return (
-                  <button
-                    key={date}
-                    onClick={() => handleSelectDate(date)}
-                    className="px-3 py-2 text-xs font-semibold whitespace-nowrap rounded-md transition-all shrink-0"
-                    style={{
-                      background: isSelected
-                        ? 'var(--accent)'
-                        : hasUnassigned
-                        ? 'var(--red-pale)'
-                        : isEmpty
-                        ? 'var(--bg)'
-                        : 'var(--white)',
-                      color: isSelected
-                        ? '#fff'
-                        : hasUnassigned
-                        ? 'var(--red)'
-                        : isEmpty
-                        ? 'var(--ink-3)'
-                        : 'var(--ink-2)',
-                      border: `1px solid ${
-                        isSelected
-                          ? 'var(--accent)'
-                          : hasUnassigned
-                          ? 'rgba(155,51,51,0.2)'
-                          : 'var(--rule)'
-                      }`,
-                      opacity: isEmpty && !isSelected ? 0.7 : 1,
-                    }}
-                  >
-                    {format(new Date(date), 'M/d（E）', { locale: ja })}
-                    {dayEntries.length > 0 && (
-                      <span className="ml-1 opacity-70">{dayEntries.length}名</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Phase 39: 日付タブ列は撤去（横長で煩雑）。日付遷移はヘッダーの DateHeaderPicker（📅）に集約 */}
 
             {!generated && scheduleEntries.length > 0 && (
               <div
@@ -1046,7 +1000,7 @@ function DateHeaderPicker({
         style={{ color: 'var(--ink)', background: 'transparent', border: 'none', padding: 0 }}
         title="日付を選択して遷移"
       >
-        {label} ▾
+        {label} 📅
       </button>
       <input
         ref={inputRef}

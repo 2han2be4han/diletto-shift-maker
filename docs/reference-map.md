@@ -505,3 +505,18 @@
   - staffAreaMarksForDay: 30 分超で別便扱いし同マークを複数回出す（同便は dedup 維持）
 - `src/components/shift/ShiftGrid.tsx`:
   - 有資格者の行を gold-pale で全幅ハイライト（職員名セル + 通常出勤セル両方）
+
+---
+
+## Phase 39 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/app/(app)/output/daily/page.tsx`:
+  - 保護者送迎 (pickup_method='self' / dropoff_method='self') のスロットでは児童バッジ上部の場所 emoji+名前を非表示
+- `src/app/(app)/transport/page.tsx`:
+  - 日付タブ列（workDays.map のブロック）を削除。日付遷移はヘッダー DateHeaderPicker (📅) に集約
+  - DateHeaderPicker のラベル末尾を ▾ → 📅 に変更
+- `src/app/(app)/schedule/page.tsx`:
+  - 利用予定編集モーダルから「出欠種類 (出席/欠席/お休み)」セクションを撤去
+  - 「当日の出欠記録 (予定/出席/欠席/遅刻/早退) + 履歴」のみ残す
+  - attendance state は load 値を保持→ handleSave に渡すので既存エントリの挙動は維持

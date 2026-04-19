@@ -758,6 +758,17 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 39: 保護者送迎の場所非表示 / 日付タブ撤去 / 出欠 UI 整理（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>39-1</td><td>① 保護者送迎 (isSelf) のスロットで児童バッジ上部の場所 emoji+名前を非表示</td><td>src/app/(app)/output/daily/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>slot 構築時 areaEmoji/areaName を null</td></tr>
+            <tr><td>39-2</td><td>② /transport の日付タブ列削除、ヘッダー ▾ → 📅 に変更</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>39-3</td><td>③ 利用予定編集モーダル「出欠種類」削除、「当日の出欠記録 + 履歴」のみ残す</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>39-4</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

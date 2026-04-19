@@ -227,11 +227,12 @@ export default function DailyOutputPage() {
 
       if (entry.pickup_time) {
         const isSelf = entry.pickup_method === 'self';
-        const emoji = spec.pickup.areaLabel
+        /* Phase 39: 保護者送迎は場所情報を出さない（送迎担当不要なので場所を見せても混乱の元） */
+        const emoji = !isSelf && spec.pickup.areaLabel
           ? areaEmojiByLabel.get(spec.pickup.areaLabel) ?? null
           : null;
         const areaId = spec.pickup.areaLabel ? areaIdByLabel.get(spec.pickup.areaLabel) ?? null : null;
-        const areaName = spec.pickup.areaLabel
+        const areaName = !isSelf && spec.pickup.areaLabel
           ? spec.pickup.areaLabel.replace(/^\S+\s+/, '').trim() || null
           : null;
         list.push({
@@ -253,11 +254,12 @@ export default function DailyOutputPage() {
 
       if (entry.dropoff_time) {
         const isSelf = entry.dropoff_method === 'self';
-        const emoji = spec.dropoff.areaLabel
+        /* Phase 39: 保護者送迎は場所情報を出さない */
+        const emoji = !isSelf && spec.dropoff.areaLabel
           ? areaEmojiByLabel.get(spec.dropoff.areaLabel) ?? null
           : null;
         const areaId = spec.dropoff.areaLabel ? areaIdByLabel.get(spec.dropoff.areaLabel) ?? null : null;
-        const areaName = spec.dropoff.areaLabel
+        const areaName = !isSelf && spec.dropoff.areaLabel
           ? spec.dropoff.areaLabel.replace(/^\S+\s+/, '').trim() || null
           : null;
         list.push({
