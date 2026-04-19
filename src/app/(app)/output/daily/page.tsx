@@ -446,57 +446,54 @@ export default function DailyOutputPage() {
         dangerouslySetInnerHTML={{
           __html: `
             @media print {
-              /* Phase 45 final: シンプル再構築。前版の display:block/min-width 操作が
-                 一部環境でコンテンツを描画外に追いやっていた疑いがあるため、最小限に絞る。 */
+              /* Phase 45 reset: Phase 33 で動いていた構成へ完全復元。
+                 灰色背景は許容（紙面内でうっすら出るが、コンテンツ可視性を最優先）。 */
               @page { size: A3 portrait; margin: 10mm; }
-
-              /* 余計な UI を消す */
+              html, body {
+                background: #fff !important;
+                height: auto !important;
+                overflow: visible !important;
+                min-width: 1100px !important;
+              }
+              body > div {
+                display: block !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                min-width: 1100px !important;
+              }
+              main {
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              [style*="var(--bg)"],
+              main {
+                background: #fff !important;
+                background-color: #fff !important;
+              }
               aside, header, .print-hide {
                 display: none !important;
               }
-
-              /* 印刷の色再現を有効化（これがないと色が薄くなる） */
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-
-              /* 灰色の出元を白で潰す（html/body/外周 div + 灰色 inline スタイル） */
-              html, body {
-                background: #fff !important;
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              body > div,
-              body > div > div,
-              [style*="var(--bg)"] {
-                background: #fff !important;
-                background-image: none !important;
-              }
-
-              /* 高さ・スクロール制約を解いてコンテンツが全部見えるように */
-              html, body, body > div, body > div > div,
-              .daily-output-root, .daily-output-root > div, .daily-output-root .flex-1 {
+              .daily-output-root,
+              .daily-output-root > div {
                 height: auto !important;
-                max-height: none !important;
                 overflow: visible !important;
+                padding: 0 !important;
+                background: #fff !important;
               }
-
-              /* ホワイトボード枠の見た目を紙面に馴染ませる */
               .whiteboard-frame {
                 box-shadow: none !important;
                 max-width: none !important;
                 margin: 0 !important;
-                border: none !important;
-                border-radius: 0 !important;
-                padding: 0 !important;
-                background: #fff !important;
               }
-
-              /* カードがページまたぎで切れないように */
               .transport-block {
                 page-break-inside: avoid;
                 break-inside: avoid;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
             }
 
