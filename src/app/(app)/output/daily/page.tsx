@@ -85,6 +85,8 @@ type TransportSlot = {
     id: string;
     name: string;
     areaEmoji: string | null;
+    /** Phase 38: emoji と並べてバッジ上に表示する場所名 (例: '自宅', '知多ガラス') */
+    areaName: string | null;
     grade: GradeType;
   }>;
   staffIds: string[];
@@ -229,12 +231,15 @@ export default function DailyOutputPage() {
           ? areaEmojiByLabel.get(spec.pickup.areaLabel) ?? null
           : null;
         const areaId = spec.pickup.areaLabel ? areaIdByLabel.get(spec.pickup.areaLabel) ?? null : null;
+        const areaName = spec.pickup.areaLabel
+          ? spec.pickup.areaLabel.replace(/^\S+\s+/, '').trim() || null
+          : null;
         list.push({
           time: fmtTime(entry.pickup_time),
           direction: 'pickup',
           areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
-          children: [{ id: child.id, name: child.name, areaEmoji: emoji, grade: child.grade_type }],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
           staffIds: isSelf ? [] : ta.pickup_staff_ids,
           /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する） */
           isUnassigned:
@@ -252,12 +257,15 @@ export default function DailyOutputPage() {
           ? areaEmojiByLabel.get(spec.dropoff.areaLabel) ?? null
           : null;
         const areaId = spec.dropoff.areaLabel ? areaIdByLabel.get(spec.dropoff.areaLabel) ?? null : null;
+        const areaName = spec.dropoff.areaLabel
+          ? spec.dropoff.areaLabel.replace(/^\S+\s+/, '').trim() || null
+          : null;
         list.push({
           time: fmtTime(entry.dropoff_time),
           direction: 'dropoff',
           areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
-          children: [{ id: child.id, name: child.name, areaEmoji: emoji, grade: child.grade_type }],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
           staffIds: isSelf ? [] : ta.dropoff_staff_ids,
           /* 保護者送迎は「未割当」扱いしない */
           isUnassigned:
@@ -875,9 +883,10 @@ function TransportBlock({
         maxWidth: '420px',
       }}
     >
-      {/* ヘッダー: 13:10発  榎江保育園(小)  / 大府緑公園  (複数エリア対応) */}
+      {/* Phase 38: ヘッダーは「時刻 発 + 担当者チップ」(旧: 場所名)。
+          場所名は児童バッジ上部に併記する形に移動した。 */}
       <div
-        className="px-3 py-2 flex items-baseline gap-2 flex-wrap"
+        className="px-3 py-2 flex items-center gap-2 flex-wrap"
         style={{ borderBottom: '1.5px solid var(--ink-2)' }}
       >
         <span className="text-2xl font-black leading-none" style={{ color: headerColor }}>
@@ -886,44 +895,11 @@ function TransportBlock({
         <span className="text-base font-black" style={{ color: headerColor }}>
           発
         </span>
-        {slot.areaLabels.length > 0 && (
-          <span className="text-base font-black" style={{ color: 'var(--ink)' }}>
-            {slot.areaLabels.join(' / ')}
-          </span>
-        )}
-      </div>
-
-      {/* 本体: 児童マーク ｜ 担当職員 を横並びで（児童最大4人想定） */}
-      <div className="p-3 flex items-center gap-3 flex-wrap">
-        {/* 児童マーク群（DnD 並び替え可能） */}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={slot.children.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-            <div className="flex flex-wrap gap-1.5">
-              {slot.children.map((c) => (
-                <SortableChildBadge key={c.id} child={c} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {/* 区切り（児童と職員の間に縦線）。担当が空のときは出さない */}
-        {(slot.isSelfTransport || slot.isUnassigned || slot.staffIds.length > 0) && (
-          <div
-            aria-hidden="true"
-            style={{
-              alignSelf: 'stretch',
-              width: 0,
-              borderLeft: '1.5px solid var(--rule)',
-              minHeight: '40px',
-            }}
-          />
-        )}
-
-        {/* 担当職員ボックス群 */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* 担当者表示 */}
+        <div className="flex flex-wrap gap-1.5 ml-1">
           {slot.isSelfTransport ? (
             <span
-              className="text-base font-black px-2 py-1 whitespace-nowrap"
+              className="text-base font-black px-2 py-0.5 whitespace-nowrap"
               style={{
                 background: 'var(--white)',
                 border: '2px dashed var(--ink-3)',
@@ -935,17 +911,10 @@ function TransportBlock({
               👪 保護者
             </span>
           ) : slot.isUnassigned ? (
-            <span
-              className="text-base font-black px-2 py-1"
-              style={{ color: 'var(--red)' }}
-            >
+            <span className="text-base font-black" style={{ color: 'var(--red)' }}>
               ⚠ 担当未割当
             </span>
-          ) : slot.staffIds.length === 0 ? (
-            <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              —
-            </span>
-          ) : (
+          ) : slot.staffIds.length === 0 ? null : (
             slot.staffIds.map((id) => (
               <span
                 key={id}
@@ -956,7 +925,7 @@ function TransportBlock({
                   borderRadius: '4px',
                   color: 'var(--ink)',
                   minWidth: '56px',
-                  padding: '4px 10px',
+                  padding: '2px 10px',
                   textAlign: 'center',
                 }}
               >
@@ -966,6 +935,19 @@ function TransportBlock({
           )}
         </div>
       </div>
+
+      {/* 本体: 児童バッジのみ。各バッジ上部に「emoji 場所名」を表示 */}
+      <div className="p-3">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={slot.children.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+            <div className="flex flex-wrap gap-2">
+              {slot.children.map((c) => (
+                <SortableChildBadge key={c.id} child={c} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
     </div>
   );
 }
@@ -974,14 +956,23 @@ function TransportBlock({
 function SortableChildBadge({
   child,
 }: {
-  child: { id: string; name: string; grade: GradeType };
+  child: { id: string; name: string; grade: GradeType; areaEmoji: string | null; areaName: string | null };
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
   });
   const col = getGradeColors(child.grade);
   const nameLines = splitChildName(child.name);
-  const style: React.CSSProperties = {
+  /* Phase 38: バッジ自身が場所アイコンを持つことで DnD 並び替え時に場所も追従する */
+  const wrapperStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    touchAction: 'none',
+    userSelect: 'none',
+    position: 'relative',
+  };
+  const badgeStyle: React.CSSProperties = {
     background: col.bg,
     border: `2px solid ${col.border}`,
     borderRadius: '999px',
@@ -989,31 +980,42 @@ function SortableChildBadge({
     minHeight: '64px',
     lineHeight: '1.1',
     padding: '4px 6px',
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
     cursor: 'grab',
-    touchAction: 'none',
-    userSelect: 'none',
   };
   return (
     <div
       ref={setNodeRef}
-      className="flex flex-col items-center justify-center child-mark"
-      style={style}
+      className="flex flex-col items-center child-mark"
+      style={wrapperStyle}
       title={child.name}
       {...attributes}
       {...listeners}
     >
-      {nameLines.map((line, i) => (
+      {(child.areaEmoji || child.areaName) && (
         <span
-          key={i}
-          className="text-sm font-black whitespace-nowrap"
-          style={{ color: col.text }}
+          aria-label="送迎エリア"
+          className="leading-none whitespace-nowrap text-center"
+          style={{
+            fontSize: '0.78rem',
+            marginBottom: '3px',
+            color: 'var(--ink-2)',
+            fontWeight: 700,
+          }}
         >
-          {line}
+          {child.areaEmoji ?? ''} {child.areaName ?? ''}
         </span>
-      ))}
+      )}
+      <div className="flex flex-col items-center justify-center" style={badgeStyle}>
+        {nameLines.map((line, i) => (
+          <span
+            key={i}
+            className="text-sm font-black whitespace-nowrap"
+            style={{ color: col.text }}
+          >
+            {line}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

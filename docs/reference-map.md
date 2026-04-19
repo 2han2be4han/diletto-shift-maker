@@ -488,3 +488,20 @@
   - getGradeColors: 背景 0.14→0.28、ボーダー 0.75→1.0 に濃化
 - `src/components/request/AdminRequestList.tsx`:
   - 詳細モーダルの日付一覧を DateRangeChips（連続日範囲圧縮 + 曜日付き chip）に変更
+
+---
+
+## Phase 38 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/app/(app)/output/daily/page.tsx`:
+  - TransportSlot.children に areaName 追加
+  - TransportBlock ヘッダーから場所名を撤去、代わりに担当者チップを移動配置
+  - 児童バッジ上部に「emoji 場所名」を併記（DnD で場所も追従）
+  - 旧: 「時刻 ｜ 場所」+ 「児童 ｜ 職員」 → 新: 「時刻 ｜ 担当者」 + 「児童(emoji 場所名)」
+- `src/app/(app)/transport/page.tsx`:
+  - fetchAll で attendance_status='absent' の schedule_entries を除外（/transport から欠席児童完全非表示）
+  - DateHeaderPicker コンポーネント新設: 「YYYY年M月D日（曜）▾」クリックで OS 標準カレンダー → setSelectedDate で日付遷移
+  - staffAreaMarksForDay: 30 分超で別便扱いし同マークを複数回出す（同便は dedup 維持）
+- `src/components/shift/ShiftGrid.tsx`:
+  - 有資格者の行を gold-pale で全幅ハイライト（職員名セル + 通常出勤セル両方）

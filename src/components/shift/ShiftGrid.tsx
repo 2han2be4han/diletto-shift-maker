@@ -200,11 +200,12 @@ export default function ShiftGrid({
         </thead>
         <tbody>
           {staff.map((s) => (
-            <tr key={s.id} className="group">
+            /* Phase 38: 有資格者の行は薄い黄色でハイライト（一覧で識別しやすく） */
+            <tr key={s.id} className="group" style={s.is_qualified ? { background: 'var(--gold-pale, #fdf6e3)' } : undefined}>
               <td
                 className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap"
                 style={{
-                  background: 'var(--white)',
+                  background: s.is_qualified ? 'var(--gold-pale, #fdf6e3)' : 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
                   borderRight: '2px solid var(--rule-strong)',
                   color: 'var(--ink)',
@@ -247,6 +248,12 @@ export default function ShiftGrid({
                 const baseTitle = type === 'normal' && cell ? `${cell.start_time}〜${cell.end_time}` : config.label;
                 const cellTitle = commentText ? `${baseTitle}\n⚠ ${commentText}` : baseTitle;
 
+                /* Phase 38: 有資格者の通常出勤セルも gold-pale で行ハイライトを継承 */
+                const cellBg = type !== 'normal'
+                  ? config.bg
+                  : s.is_qualified
+                  ? 'var(--gold-pale, #fdf6e3)'
+                  : getCellBg(d.dow);
                 return (
                   <td
                     key={d.dateStr}
@@ -254,7 +261,7 @@ export default function ShiftGrid({
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: '1px solid var(--rule)',
-                      background: type !== 'normal' ? config.bg : getCellBg(d.dow),
+                      background: cellBg,
                       position: 'relative',
                     }}
                     onClick={() => onCellClick(s.id, d.dateStr)}

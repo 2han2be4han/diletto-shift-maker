@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -149,7 +149,13 @@ export default function TransportPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      setScheduleEntries(eJson.entries ?? []);
+      /* Phase 38: 欠席児童 (attendance_status='absent') は送迎表から完全除外。
+         /output/daily と挙動を揃え、出席連動で送迎担当割当の対象外とする。 */
+      setScheduleEntries(
+        ((eJson.entries ?? []) as ScheduleEntryRow[]).filter(
+          (e) => e.attendance_status !== 'absent',
+        ),
+      );
       setShiftAssignments(aJson.assignments ?? []);
       setTransportAssignments(tJson.assignments ?? []);
       const settings: TenantSettings = tenantJson.tenant?.settings ?? {};
@@ -301,17 +307,36 @@ export default function TransportPage() {
   /**
    * Phase 26.1 / 27: 職員ごとに「この日担当しているエリア絵文字」を集計。
    * 迎/送で **別々** に持つ（同じ職員でも迎担当と送担当で違うエリアを持つため）。
+   *
+   * Phase 38 (②): 30 分超で別便扱い。同じ職員が同じエリアの 2 便を担当する場合、
+   *   時刻差 < 30 分なら 1 マーク（同便）、≧ 30 分なら 2 マーク（別便）にする。
+   *   旧仕様（単純 dedup）だと 17:00 と 18:30 の便が両方 🏠 でも 1 つに見えてしまった。
    */
   const staffAreaMarksForDay = useMemo(() => {
     const pickupResult = new Map<string, string[]>();
     const dropoffResult = new Map<string, string[]>();
     const dayEntries = scheduleEntries.filter((e) => e.date === selectedDate);
     const childById = new Map(children.map((c) => [c.id, c]));
+    const TRIP_GAP_MIN = 30;
 
-    const addMark = (target: Map<string, string[]>, staffId: string, mark: string | null) => {
-      if (!staffId || !mark) return;
+    const toMin = (t: string | null): number | null => {
+      if (!t) return null;
+      const m = /^(\d{1,2}):(\d{2})/.exec(t);
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+    };
+
+    /* 一旦 (staffId → [{time, mark}]) を作る */
+    const pickupRaw = new Map<string, Array<{ time: number; mark: string }>>();
+    const dropoffRaw = new Map<string, Array<{ time: number; mark: string }>>();
+    const pushRaw = (
+      target: Map<string, Array<{ time: number; mark: string }>>,
+      staffId: string,
+      mark: string | null,
+      time: number | null,
+    ) => {
+      if (!staffId || !mark || time === null) return;
       const arr = target.get(staffId) ?? [];
-      if (!arr.includes(mark)) arr.push(mark);
+      arr.push({ time, mark });
       target.set(staffId, arr);
     };
 
@@ -323,21 +348,45 @@ export default function TransportPage() {
       });
       const pickupEmoji = spec.pickup.areaLabel ? spec.pickup.areaLabel.trim().split(' ')[0] : null;
       const dropoffEmoji = spec.dropoff.areaLabel ? spec.dropoff.areaLabel.trim().split(' ')[0] : null;
+      const pickupMin = toMin(entry.pickup_time);
+      const dropoffMin = toMin(entry.dropoff_time);
 
       const pending = pendingChanges.get(entry.id);
       const existing = transportAssignments.find((t) => t.schedule_entry_id === entry.id);
       const pickupIds = pending?.pickupStaffIds ?? existing?.pickup_staff_ids ?? [];
       const dropoffIds = pending?.dropoffStaffIds ?? existing?.dropoff_staff_ids ?? [];
 
-      /* Phase 27 fix: 保護者送迎（method='self'）は担当不要。stale な staff_ids が
-         残っていても迎/送マークに反映しない（🧩 保護者の絵文字が他職員に付く問題対策） */
+      /* Phase 27 fix: 保護者送迎（method='self'）は担当不要 */
       if (entry.pickup_method !== 'self') {
-        pickupIds.forEach((sid) => addMark(pickupResult, sid, pickupEmoji));
+        pickupIds.forEach((sid) => pushRaw(pickupRaw, sid, pickupEmoji, pickupMin));
       }
       if (entry.dropoff_method !== 'self') {
-        dropoffIds.forEach((sid) => addMark(dropoffResult, sid, dropoffEmoji));
+        dropoffIds.forEach((sid) => pushRaw(dropoffRaw, sid, dropoffEmoji, dropoffMin));
       }
     }
+
+    /* (time, mark) を時刻順にソートし、同マーク連続で時刻差 < 30 分は 1 便にまとめる */
+    const compress = (
+      raw: Map<string, Array<{ time: number; mark: string }>>,
+      out: Map<string, string[]>,
+    ) => {
+      for (const [staffId, items] of raw.entries()) {
+        items.sort((a, b) => a.time - b.time);
+        const acc: string[] = [];
+        const lastTimeByMark = new Map<string, number>();
+        for (const it of items) {
+          const lt = lastTimeByMark.get(it.mark);
+          if (lt === undefined || it.time - lt >= TRIP_GAP_MIN) {
+            acc.push(it.mark);
+          }
+          lastTimeByMark.set(it.mark, it.time);
+        }
+        out.set(staffId, acc);
+      }
+    };
+    compress(pickupRaw, pickupResult);
+    compress(dropoffRaw, dropoffResult);
+
     return { pickup: pickupResult, dropoff: dropoffResult };
   }, [scheduleEntries, selectedDate, children, pickupAreas, dropoffAreas, pendingChanges, transportAssignments]);
 
@@ -683,7 +732,14 @@ export default function TransportPage() {
       <div className="px-2 py-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>{year}年{month}月</h2>
+            {/* Phase 38: 「年月日(曜日)」ラベル + クリックで OS 標準のカレンダーを開いて日付遷移 */}
+            <DateHeaderPicker
+              year={year}
+              month={month}
+              selectedDate={selectedDate}
+              workDays={workDays}
+              onChange={setSelectedDate}
+            />
             {confirmed && <Badge variant="success">確定済み</Badge>}
             {generated && !confirmed && <Badge variant="warning">未確定</Badge>}
             {generated && unassignedTotal > 0 && (
@@ -945,3 +1001,68 @@ function ToastBanner({
     </div>
   );
 }
+
+
+/* Phase 38: 「年月日(曜日)」表示 + クリックでネイティブカレンダーを開く日付ピッカー。
+   ヘッダーの長い日付タブ列が伸びても、ここから直接日付ジャンプ可能。 */
+function DateHeaderPicker({
+  year,
+  month,
+  selectedDate,
+  workDays,
+  onChange,
+}: {
+  year: number;
+  month: number;
+  selectedDate: string;
+  workDays: string[];
+  onChange: (d: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+
+  let label = `${year}年${month}月`;
+  if (selectedDate) {
+    const dt = new Date(selectedDate);
+    if (!isNaN(dt.getTime())) {
+      label = `${year}年${month}月${dt.getDate()}日（${DOW[dt.getDay()]}）`;
+    }
+  }
+
+  const minDate = workDays[0] ?? `${year}-${String(month).padStart(2, '0')}-01`;
+  const maxDate = workDays[workDays.length - 1] ?? minDate;
+
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => {
+          const el = inputRef.current;
+          if (!el) return;
+          if (typeof el.showPicker === 'function') el.showPicker();
+          else el.click();
+        }}
+        className="text-lg font-bold cursor-pointer hover:text-[var(--accent)] transition-colors"
+        style={{ color: 'var(--ink)', background: 'transparent', border: 'none', padding: 0 }}
+        title="日付を選択して遷移"
+      >
+        {label} ▾
+      </button>
+      <input
+        ref={inputRef}
+        type="date"
+        value={selectedDate}
+        min={minDate}
+        max={maxDate}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v) onChange(v);
+        }}
+        className="absolute inset-0 opacity-0 pointer-events-none"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
