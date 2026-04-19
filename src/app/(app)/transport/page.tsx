@@ -200,6 +200,17 @@ export default function TransportPage() {
     if (!selectedDate && workDays[0]) setSelectedDate(workDays[0]);
   }, [workDays, selectedDate]);
 
+  /* 月が切り替わったとき、選択中の日付が新しい月の外なら初日へリセット。
+     MonthSelector は ?month のみ更新して ?date を据え置くため、
+     旧月の日付が残ると currentDayEntries が空になり「4月→5月に遷移しない」症状が出る。 */
+  useEffect(() => {
+    if (workDays.length === 0) return;
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}-`;
+    if (selectedDate && !selectedDate.startsWith(monthPrefix)) {
+      setSelectedDate(workDays[0]);
+    }
+  }, [year, month, workDays, selectedDate]);
+
   /* Phase 49: selectedDate 変更時に URL (history) も更新。pushState ではなく replaceState で
      履歴を汚さない（戻るボタンで1日ずつ遡る必要がないため）。
      Phase 54: 同時に sessionStorage にも退避。 */

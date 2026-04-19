@@ -7,6 +7,29 @@
 
 ---
 
+## 送迎表が月遷移しない（selectedDate が旧月のまま固定）
+
+- **発生日**: 2026-04-19
+- **発生箇所**: `src/app/(app)/transport/page.tsx` — `selectedDate` state と `MonthSelector` の連携
+- **エラー内容**: 4月→5月へ `MonthSelector` で切り替えても送迎表の日別ビューが空表示になり、選択日が旧月のまま固定される
+- **原因**:
+  1. `selectedDate` は `useState` 初期値でのみ URL `?date=` から読み取られる（以降は URL と片方向同期のみ）
+  2. `MonthSelector` は `?month` のみ更新して `?date` を旧月のまま残す
+  3. 結果として `year/month` は新月になるが `selectedDate` は旧月の日付が残り、`currentDayEntries` が `e.date === selectedDate` のフィルタで全滅する
+- **解決方法**: 月変更時に `selectedDate` が新しい月の範囲外なら `workDays[0]`（新月の初日）にリセットする `useEffect` を追加。
+  ```tsx
+  useEffect(() => {
+    if (workDays.length === 0) return;
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}-`;
+    if (selectedDate && !selectedDate.startsWith(monthPrefix)) {
+      setSelectedDate(workDays[0]);
+    }
+  }, [year, month, workDays, selectedDate]);
+  ```
+- **再発防止**: URL クエリを複数 state の初期値にだけ使う場合、それらの整合性（例: month と date が同じ月を指すか）をランタイムで再検証する useEffect を必ず添える。`useState(initFromUrl)` は「初回のみ」という制約を見落としやすい
+
+---
+
 ## node_modules 未インストール状態での `tsc --noEmit` 大量エラー
 
 - **発生日**: 2026-04-17
