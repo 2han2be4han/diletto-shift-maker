@@ -779,6 +779,16 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 41: 出欠/時刻 UI を attendanceStatus に一元化（2026-04-19 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>41-1</td><td>UI gate と保存判定を attendance==='attend' → attendanceStatus !== 'absent' に置換</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>欠席以外なら時間入力可</td></tr>
+            <tr><td>41-2</td><td>旧 attendance state と setAttendance 呼び出しを撤去</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>二重管理解消</td></tr>
+            <tr><td>41-3</td><td>typecheck + build + コミット</td><td>npm scripts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

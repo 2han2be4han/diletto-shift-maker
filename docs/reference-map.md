@@ -532,3 +532,14 @@
   - entry_id がない（空セル）場合に POST /api/schedule-entries で空 entry (times=null) を auto-create → その id で attendance 更新
   - 旧アラート「先に時間などを保存してください」を撤廃。1 操作で完結
   - cells に未反映の場合は fetchAll() で同期
+
+---
+
+## Phase 41 変更一覧（2026-04-19）
+
+### UI 変更
+- `src/app/(app)/schedule/page.tsx`:
+  - 旧 attendance state (attend/absent/off) を撤去
+  - 時間/送迎 UI と handleSave の保存判定を attendanceStatus !== 'absent' に統一
+  - cell ロード時の setAttendance 分岐 (L207-213) も削除
+  - ルール: 「欠席以外は時間入力可、欠席なら times=null で保存して /transport から除外」

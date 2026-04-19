@@ -118,7 +118,9 @@ export default function SchedulePage() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
 
-  const [attendance, setAttendance] = useState<'attend' | 'absent' | 'off'>('attend');
+  /* Phase 41: 旧 attendance state (attend/absent/off) を撤廃。
+     時間/送迎 UI の表示・保存可否はすべて attendanceStatus に統一する。
+     ルール: 「欠席 (absent) 以外は時間入力可能」 */
   /* Phase 25: 当日の出欠記録（DB永続） */
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('planned');
   const [attendanceBusy, setAttendanceBusy] = useState(false);
@@ -203,13 +205,6 @@ export default function SchedulePage() {
       setDropoffHour(h); setDropoffMin(m);
     } else {
       setDropoffHour('16'); setDropoffMin('00');
-    }
-    if (cellData && !cellData.pickup_time && !cellData.dropoff_time) {
-      setAttendance('off');
-    } else if (cellData?.pickup_time) {
-      setAttendance('attend');
-    } else {
-      setAttendance('absent');
     }
     setPickupMethod(cellData?.pickup_method || 'pickup');
     setDropoffMethod(cellData?.dropoff_method || 'dropoff');
@@ -309,15 +304,15 @@ export default function SchedulePage() {
 
   const handleSave = async () => {
     if (!selectedCell) return;
-    /* Phase 24: method に関わらず出席なら時刻を保存（self のときも時刻は記録する） */
-    const pickup =
-      attendance === 'attend'
-        ? `${pickupHour.padStart(2, '0')}:${pickupMin.padStart(2, '0')}`
-        : null;
-    const dropoff =
-      attendance === 'attend'
-        ? `${dropoffHour.padStart(2, '0')}:${dropoffMin.padStart(2, '0')}`
-        : null;
+    /* Phase 41: 「欠席以外なら時刻を保存」に統一。
+       absent のときだけ pickup/dropoff を null にして送迎対象外にする。 */
+    const isPresent = attendanceStatus !== 'absent';
+    const pickup = isPresent
+      ? `${pickupHour.padStart(2, '0')}:${pickupMin.padStart(2, '0')}`
+      : null;
+    const dropoff = isPresent
+      ? `${dropoffHour.padStart(2, '0')}:${dropoffMin.padStart(2, '0')}`
+      : null;
 
     try {
       const res = await fetch('/api/schedule-entries', {
@@ -448,12 +443,9 @@ export default function SchedulePage() {
       >
         {selectedCell && selectedChild && (
           <div className="flex flex-col gap-5">
-            {/* Phase 39: 「出欠種類 (出席/欠席/お休み)」セクションを撤去。
-                同じ意味の「当日の出欠記録 (予定/出席/欠席/遅刻/早退)」+ 履歴のみを残す。
-                attendance state は load 時の値を保持し handleSave に渡すので、
-                既存エントリ（お休み=null 時刻）の挙動は維持される。 */}
-
-            {attendance === 'attend' && (
+            {/* Phase 41: 時間/送迎 UI は「欠席以外」で表示。
+                attendanceStatus に統一して旧 attendance state の二重管理を撤廃。 */}
+            {attendanceStatus !== 'absent' && (
               <>
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
