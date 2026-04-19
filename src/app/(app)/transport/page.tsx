@@ -94,6 +94,46 @@ export default function TransportPage() {
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingAssignment>>(new Map());
   const [saving, setSaving] = useState(false);
 
+  /* Phase 47 (③): 未保存の編集内容を localStorage に永続化し、リロードしても復元できるようにする。
+     キーは月単位（テナント切替時は他テナントの未保存値が混ざる懸念があるが、
+     現状 1 ブラウザ = 1 テナント運用なのでキー設計はシンプルに保つ）。 */
+  const pendingStorageKey = `shiftpuzzle:transport:pending:${year}-${String(month).padStart(2, '0')}`;
+  /* マウント直後に localStorage から pending を復元（fetchAll のクリアより前に効くよう、初回のみ実行） */
+  const restoredFromStorageRef = useRef(false);
+  useEffect(() => {
+    if (restoredFromStorageRef.current) return;
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(pendingStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, PendingAssignment>;
+        const restored = new Map<string, PendingAssignment>(Object.entries(parsed));
+        if (restored.size > 0) setPendingChanges(restored);
+      }
+    } catch {
+      /* 破損キャッシュは無視 */
+    } finally {
+      restoredFromStorageRef.current = true;
+    }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [pendingStorageKey]);
+  /* pending が変わるたびに localStorage に書き戻す（空 Map のときはキー削除） */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!restoredFromStorageRef.current) return; /* 復元前の上書きを防ぐ */
+    try {
+      if (pendingChanges.size === 0) {
+        window.localStorage.removeItem(pendingStorageKey);
+      } else {
+        const obj: Record<string, PendingAssignment> = {};
+        for (const [k, v] of pendingChanges.entries()) obj[k] = v;
+        window.localStorage.setItem(pendingStorageKey, JSON.stringify(obj));
+      }
+    } catch {
+      /* quota 超過などは無視 */
+    }
+  }, [pendingChanges, pendingStorageKey]);
+
   /* 再生成のローディング状態。連打防止・進捗可視化に使用。 */
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState<{ current: number; total: number } | null>(null);
@@ -169,8 +209,8 @@ export default function TransportPage() {
       setPickupCooldownMinutes(settings.transport_pickup_cooldown_minutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES);
       setColumnOrder(settings.transport_column_order ?? DEFAULT_TRANSPORT_COLUMN_ORDER);
       setTenantSettings(settings);
-      /* 再取得時は pending は破棄（保存直後のクリーンアップも兼ねる） */
-      setPendingChanges(new Map());
+      /* Phase 47 (③): pending は fetchAll では消さない（localStorage からの復元値を保護）。
+         クリアが必要なタイミング（保存後・生成後・確定後）は呼び出し側で setPendingChanges を明示する。 */
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -495,6 +535,8 @@ export default function TransportPage() {
         totalAssigned += assignments.length;
         totalUnassigned += unassignedCount ?? 0;
       }
+      /* Phase 47 (③): 再生成は DB を上書きするので pending を全破棄（ローカルキャッシュも消える） */
+      setPendingChanges(new Map());
       await fetchAll();
 
       /* 結果通知: alert の代わりに控えめなトーストを使う（21st.dev 風） */
@@ -725,6 +767,8 @@ export default function TransportPage() {
         })),
       }),
     });
+    /* Phase 47 (③): 確定後は pending を破棄（confirmed は読み取り専用になるため） */
+    setPendingChanges(new Map());
     await fetchAll();
   };
 
@@ -786,6 +830,17 @@ export default function TransportPage() {
             )}
           </div>
           <div className="flex gap-2">
+            {/* Phase 47: 週次印刷ページへの導線（A3 1週間レイアウト） */}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const m = `${year}-${String(month).padStart(2, '0')}`;
+                window.open(`/output/weekly-transport?month=${m}`, '_blank');
+              }}
+              title="A3 1ページ = 1週間 のフォーマットで印刷"
+            >
+              🖨 週次印刷
+            </Button>
             {generated && !confirmed && (
               <Button variant="primary" onClick={handleConfirm} disabled={unassignedTotal > 0}>
                 {unassignedTotal > 0 ? '未割当あり（確定不可）' : '送迎表確定'}

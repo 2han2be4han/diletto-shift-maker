@@ -71,10 +71,33 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
 
   return (
     <>
+      {/* Phase 47: 休み希望一覧の印刷 CSS。A4 縦、ヘッダー・代理入力ボタン非表示 */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page { size: A4 portrait; margin: 10mm; }
+              .request-print-title { display: block !important; font-size: 14pt; font-weight: 700; margin-bottom: 6mm; }
+              table { font-size: 9pt !important; }
+              th, td { padding: 3px 4px !important; }
+              tr:hover { background: inherit !important; }
+            }
+            @media screen { .request-print-title { display: none; } }
+          `,
+        }}
+      />
+      <h1 className="request-print-title print-only">{targetMonth} 休み希望一覧</h1>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <Badge variant="success">提出 {submittedCount}名</Badge>
         <Badge variant="error">未提出 {notSubmittedCount}名</Badge>
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>対象月 {targetMonth}</span>
+        <Button
+          variant="secondary"
+          onClick={() => window.print()}
+          className="print-hide ml-auto"
+        >
+          🖨 印刷
+        </Button>
       </div>
 
       <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
@@ -82,8 +105,11 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
           <thead>
             <tr>
               {['職員名', '雇用', 'ステータス', '公休', '有給', '出勤可', '特記', '提出日', '代理入力'].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap"
-                  style={{ background: 'var(--ink)', color: '#fff' }}>
+                <th
+                  key={h}
+                  className={`px-3 py-2 text-left font-semibold whitespace-nowrap${h === '代理入力' ? ' print-hide' : ''}`}
+                  style={{ background: 'var(--ink)', color: '#fff' }}
+                >
                   {h}
                 </th>
               ))}
@@ -160,7 +186,7 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
                     {phRow?.submitted_at ? new Date(phRow.submitted_at).toLocaleDateString('ja-JP') : '-'}
                   </td>
                   <td
-                    className="px-3 py-2 text-center"
+                    className="px-3 py-2 text-center print-hide"
                     style={{ borderBottom: '1px solid var(--rule)' }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -232,7 +258,10 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
         size="lg"
       >
         {proxyTarget && (
-          <div className="flex flex-col gap-3">
+          /* Phase 47: MyRequestCalendar が内部で max-w-lg で自己制約しているため、
+             ラッパーも max-w-lg で揃えないと「閉じる」だけがモーダル幅いっぱいに広がって不揃いになる。
+             className w-full + max-w-lg で左寄せの一貫した縦レイアウトに。 */
+          <div className="flex flex-col gap-3 w-full max-w-lg">
             <MyRequestCalendar
               myStaffId={proxyTarget.staff.id}
               myStaffName={proxyTarget.staff.name}

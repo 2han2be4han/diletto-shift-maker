@@ -61,21 +61,25 @@ export function generateTransportAssignments(
   input: GenerateTransportInput
 ): GenerateTransportResult {
   const { tenantId, date, scheduleEntries, staff, shiftAssignments } = input;
-  const minEndTime = input.minEndTime ?? DEFAULT_TRANSPORT_MIN_END_TIME;
+  /* Phase 47 (②): minEndTime によるグローバルな退勤時刻フィルタは廃止。
+     旧仕様だと「16:30 までしか勤務しない職員」がお迎え便にも出てこないバグがあった。
+     代わりに送り便側だけで「退勤時刻 > 便発時刻」（厳密）を後段で判定する。
+     props は API 互換のため残置。 */
+  void input.minEndTime;
+  void DEFAULT_TRANSPORT_MIN_END_TIME;
   const children = input.children ?? [];
   const pickupAreas = input.pickupAreas ?? [];
   const dropoffAreas = input.dropoffAreas ?? [];
   const pickupCooldownMin = input.pickupCooldownMinutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES;
   const childById = new Map(children.map((c) => [c.id, c]));
 
-  /* ① 出勤している職員のみ抽出（Phase 26: さらに退勤時刻 >= minEndTime で絞る） */
+  /* ① 出勤している職員のみ抽出（end_time が記録されている職員）。
+     退勤時刻ガードは送り便のみ selectStaff 内で適用する。 */
   const workingStaff = staff.filter((s) => {
     const shift = shiftAssignments.find(
       (sa) => sa.staff_id === s.id && sa.date === date && sa.assignment_type === 'normal'
     );
-    if (!shift || !shift.end_time) return false;
-    /* 退勤時刻が 16:31 以降でなければ送迎候補から外す */
-    return compareTime(shift.end_time, minEndTime) >= 0;
+    return !!(shift && shift.end_time);
   });
 
   /* 職員ごとの送迎担当回数（均等分散用、トリップ単位）。
@@ -305,6 +309,15 @@ function selectStaff({
 
     /* ② 送迎時間が勤務時間内か */
     if (!isTimeInRange(time, shift.start_time, shift.end_time)) return false;
+
+    /* Phase 47 (②): 送り便は退勤時刻ジャストの職員を除外（厳密 end_time > dropoff_time）。
+       16:30 発の送り便に 16:30 退勤の職員を当てると、退勤後に時間外運転を強いることになる。
+       事業所が「+1 分」設定をしなくても、ロジック側で自動的に弾く。
+       お迎え便にはこのガードを掛けない（早朝出勤のお迎え担当は退勤時刻と無関係）。 */
+    if (direction === 'dropoff' && timeMin !== null) {
+      const endMin = normalizeTimeMinutes(shift.end_time);
+      if (endMin === null || endMin <= timeMin) return false;
+    }
 
     /* ③ エリア一致（エリア指定がある場合）。
        Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。

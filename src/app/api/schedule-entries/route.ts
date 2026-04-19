@@ -34,6 +34,18 @@ export async function POST(request: NextRequest) {
   const entries: Array<Record<string, unknown>> = Array.isArray(body?.entries) ? body.entries : [];
   if (entries.length === 0) return NextResponse.json({ error: 'entries が空です' }, { status: 400 });
 
+  /* Phase 47 (④): PDF 再インポート時の「マージ追記」を防ぐためのレンジ上書きモード。
+     replaceRange={from,to} が指定されたら、そのレンジ内の planned エントリを先に削除してから upsert。
+     - 出欠記録済み (attendance_status != 'planned') の行は履歴保護のため削除しない
+     - tenant_id は requireRole から取得する値を使い、リクエスト側からの上書きを許さない */
+  const replaceRange =
+    body?.replaceRange && typeof body.replaceRange === 'object'
+      ? {
+          from: typeof body.replaceRange.from === 'string' ? body.replaceRange.from : null,
+          to: typeof body.replaceRange.to === 'string' ? body.replaceRange.to : null,
+        }
+      : null;
+
   const rows = entries.map((e) => ({
     tenant_id: gate.staff.tenant_id,
     child_id: String(e.child_id ?? ''),
@@ -49,6 +61,20 @@ export async function POST(request: NextRequest) {
   }));
 
   const supabase = await createClient();
+
+  if (replaceRange?.from && replaceRange?.to) {
+    /* レンジ上書き: planned のみ削除（出欠記録済みは残す）。
+       関連 transport_assignments は schedule_entry_id の FK ON DELETE CASCADE を前提とする。 */
+    const { error: delErr } = await supabase
+      .from('schedule_entries')
+      .delete()
+      .eq('tenant_id', gate.staff.tenant_id)
+      .gte('date', replaceRange.from)
+      .lte('date', replaceRange.to)
+      .or('attendance_status.is.null,attendance_status.eq.planned');
+    if (delErr) return NextResponse.json({ error: `レンジ削除失敗: ${delErr.message}` }, { status: 500 });
+  }
+
   const { data, error } = await supabase
     .from('schedule_entries')
     .upsert(rows, { onConflict: 'tenant_id,child_id,date' })

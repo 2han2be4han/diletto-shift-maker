@@ -316,9 +316,15 @@ export default function ShiftPage() {
     return { understaffedDays, noQualifiedDays, totalWarnings: warnings.length };
   }, [cells, warnings]);
 
-  /* Phase 26: ヘッダー右側のアクション（再生成 / シフト確定 / 編集モード切替） */
+  /* Phase 26: ヘッダー右側のアクション（再生成 / シフト確定 / 編集モード切替）
+     Phase 47: 印刷ボタン追加（cells があるときのみ表示） */
   const headerActions = (
     <div className="flex items-center gap-2">
+      {cells.length > 0 && (
+        <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">
+          🖨 印刷
+        </Button>
+      )}
       {cells.length > 0 && !confirmed && (
         <Button variant="secondary" onClick={handleGenerateWithGuard}>再生成</Button>
       )}
@@ -345,7 +351,52 @@ export default function ShiftPage() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden shift-print-root">
+      {/* Phase 47: シフト印刷専用 CSS。A3 横で 31 日収納 + 行を縦に長く（読みやすさ優先）。
+         - min-width 強制リセットで横幅を A3 に収める
+         - 行の上下 padding を厚めに取って 1 行を縦に伸ばす
+         - 氏名列だけ幅確保、日付列は均等縮小 */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page { size: A3 landscape; margin: 6mm; }
+              .shift-print-root { overflow: visible !important; height: auto !important; }
+              .shift-print-root .flex-1 { overflow: visible !important; padding: 0 !important; }
+              .shift-print-root table {
+                font-size: 8pt !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                table-layout: fixed !important;
+              }
+              .shift-print-root th,
+              .shift-print-root td {
+                min-width: 0 !important;
+                /* 縦に長く: 上下 padding を 6px に厚めに、左右は詰める */
+                padding: 6px 2px !important;
+                font-size: 8pt !important;
+                line-height: 1.25 !important;
+                overflow: hidden;
+              }
+              /* 氏名列は幅確保 */
+              .shift-print-root thead th:first-child,
+              .shift-print-root tbody td:first-child {
+                width: 110px !important;
+                min-width: 110px !important;
+                padding: 6px 4px !important;
+              }
+              .shift-print-root .group { cursor: default !important; }
+              .shift-print-root tr:hover { background: inherit !important; }
+              .shift-print-root .group-hover\\:\\!bg-\\[var\\(--accent-pale-solid\\)\\]:hover {
+                background: inherit !important;
+              }
+              .shift-print-title { display: block !important; font-size: 13pt; font-weight: 700; margin-bottom: 4mm; }
+            }
+            @media screen { .shift-print-title { display: none; } }
+          `,
+        }}
+      />
+      <h1 className="shift-print-title print-only">{year}年{month}月 シフト表</h1>
       <Header title="シフト表" showMonthSelector actions={headerActions} />
 
       {/* Phase 37: ヘッダーと日付バーの間の上余白を撤去 (pt-0)、左右と下のみ余白を維持 */}

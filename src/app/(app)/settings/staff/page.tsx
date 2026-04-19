@@ -426,6 +426,31 @@ export default function StaffSettingsPage() {
     }
   };
 
+  /* Phase 47: admin によるパスワード再発行。
+     既にログイン済 (user_id != null) の職員に Resend で recovery リンクを送る。
+     未ログインの場合は招待フロー (handleResendInvite) を使うべきで、API 側でガードされる。 */
+  const handleResetPassword = async (
+    e: React.MouseEvent,
+    target: StaffRow
+  ) => {
+    e.stopPropagation();
+    if (!confirm(`${target.name} さんのパスワードを再発行しますか？\n本人にメールが送信されます。`)) return;
+    setError('');
+    setInfo('');
+    setResendingId(target.id);
+    try {
+      const res = await fetch(`/api/staff/${target.id}/reset-password`, { method: 'POST' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? 'パスワード再発行に失敗しました');
+      setInfo(`${target.name} さんにパスワード再発行メールを送信しました`);
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'パスワード再発行に失敗しました');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   /* Phase 27-D: 迎/送 別々にトグル */
   const handleAreaToggle = (direction: 'pickup' | 'dropoff', area: string) => {
     if (!editing) return;
@@ -498,13 +523,15 @@ export default function StaffSettingsPage() {
                   ↕
                 </th>
                 {[
-                  { label: '氏名', minWidth: '140px' },
-                  { label: 'メール', minWidth: '180px' },
+                  /* Phase 47: メール列を撤去（モーダル編集で参照可、一覧では情報過多）。
+                     資格列を旧メール位置（氏名の右隣）に移動して視認性アップ。
+                     氏名列は未ログインバッジ + 再送/PW再発行ボタンが入るため余裕を持たせる。 */
+                  { label: '氏名', minWidth: '220px' },
+                  { label: '資格', minWidth: '180px' },
                   { label: 'ロール', minWidth: '80px' },
                   { label: '雇用', minWidth: '70px' },
                   { label: '勤務時間', minWidth: '130px' },
                   { label: '対応エリア', minWidth: '200px' },
-                  { label: '資格', minWidth: '180px' },
                 ].map((col) => (
                   <th
                     key={col.label}
@@ -519,7 +546,7 @@ export default function StaffSettingsPage() {
             <tbody>
               {staffList.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  <td colSpan={7} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                     職員が登録されていません
                   </td>
                 </tr>
@@ -589,42 +616,89 @@ export default function StaffSettingsPage() {
                       </svg>
                     </div>
                   </td>
-                  <td className="px-3 py-2 font-medium whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
-                    {s.name}
-                    {s.is_active === false && (
-                      <span
-                        className="ml-2 text-xs px-1.5 py-0.5 rounded"
-                        style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
-                      >
-                        退職
-                      </span>
-                    )}
-                    {!s.user_id && s.is_active !== false && (
-                      <>
-                        <span className="ml-2 text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleResendInvite(e, s)}
-                          disabled={resendingId === s.id}
-                          className="ml-2 text-xs font-medium transition-colors"
-                          style={{
-                            background: 'transparent',
-                            color: 'var(--accent)',
-                            border: '1px solid var(--accent)',
-                            borderRadius: '4px',
-                            padding: '2px 8px',
-                            cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
-                            opacity: resendingId === s.id ? 0.6 : 1,
-                          }}
-                          title="招待メールを再送"
-                        >
-                          {resendingId === s.id ? '送信中...' : '再送'}
-                        </button>
-                      </>
-                    )}
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink)' }}>
+                    {/* Phase 47: 名前 1 段目 / 退職バッジ・未ログイン・操作ボタンを 2 段目に縦並びで整える。
+                        旧実装は 1 行に詰め込んでいたため、長い名前で右端が切れたり最初の文字が欠ける問題があった。 */}
+                    <div className="flex flex-col gap-1">
+                      <div className="font-medium whitespace-nowrap">{s.name}</div>
+                      {(s.is_active === false || !s.user_id || s.user_id) && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {s.is_active === false && (
+                            <span
+                              className="text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
+                            >
+                              退職
+                            </span>
+                          )}
+                          {!s.user_id && s.is_active !== false && (
+                            <>
+                              <span className="text-xs" style={{ color: 'var(--gold)' }}>未ログイン</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleResendInvite(e, s)}
+                                disabled={resendingId === s.id}
+                                className="text-xs font-medium transition-colors"
+                                style={{
+                                  background: 'transparent',
+                                  color: 'var(--accent)',
+                                  border: '1px solid var(--accent)',
+                                  borderRadius: '4px',
+                                  padding: '2px 8px',
+                                  cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
+                                  opacity: resendingId === s.id ? 0.6 : 1,
+                                }}
+                                title="招待メールを再送"
+                              >
+                                {resendingId === s.id ? '送信中...' : '再送'}
+                              </button>
+                            </>
+                          )}
+                          {s.user_id && s.is_active !== false && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleResetPassword(e, s)}
+                              disabled={resendingId === s.id}
+                              className="text-xs font-medium transition-colors"
+                              style={{
+                                background: 'transparent',
+                                color: 'var(--ink-2)',
+                                border: '1px solid var(--rule-strong)',
+                                borderRadius: '4px',
+                                padding: '2px 8px',
+                                cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
+                                opacity: resendingId === s.id ? 0.6 : 1,
+                              }}
+                              title="パスワード再発行メールを送信"
+                            >
+                              {resendingId === s.id ? '送信中...' : 'PW再発行'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)', color: 'var(--ink-3)' }}>
-                    {s.email}
+                  {/* Phase 47: メール列撤去 → 資格列を氏名の右隣に移動（旧メール位置） */}
+                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
+                    {s.qualifications.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {s.qualifications.map((q) => (
+                          <span
+                            key={q}
+                            className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
+                            style={{
+                              background: countable.includes(q) ? 'var(--green-pale)' : 'var(--bg)',
+                              color: countable.includes(q) ? 'var(--green)' : 'var(--ink-3)',
+                              fontSize: '0.7rem',
+                            }}
+                          >
+                            {q}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--ink-3)' }}>-</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap" style={{ borderBottom: '1px solid var(--rule)' }}>
                     <Badge variant={s.role === 'admin' ? 'error' : s.role === 'editor' ? 'info' : 'neutral'}>
@@ -646,27 +720,6 @@ export default function StaffSettingsPage() {
                       const dropoffIds = s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0 ? s.dropoff_transport_areas : s.transport_areas;
                       return <TransportAreasPopover pickup={resolveAreas(pickupIds, 'pickup')} dropoff={resolveAreas(dropoffIds, 'dropoff')} />;
                     })()}
-                  </td>
-                  <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', fontSize: '0.8rem' }}>
-                    {s.qualifications.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {s.qualifications.map((q) => (
-                          <span
-                            key={q}
-                            className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
-                            style={{
-                              background: countable.includes(q) ? 'var(--green-pale)' : 'var(--bg)',
-                              color: countable.includes(q) ? 'var(--green)' : 'var(--ink-3)',
-                              fontSize: '0.7rem',
-                            }}
-                          >
-                            {q}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span style={{ color: 'var(--ink-3)' }}>-</span>
-                    )}
                   </td>
                 </tr>
                 );
@@ -727,6 +780,28 @@ export default function StaffSettingsPage() {
                     }}
                   >
                     {resendingId === s.id ? '送信中...' : '再送'}
+                  </button>
+                </div>
+              )}
+              {/* Phase 47: モバイル版にもパスワード再発行ボタン */}
+              {s.user_id && s.is_active !== false && (
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    onClick={(e) => handleResetPassword(e, s)}
+                    disabled={resendingId === s.id}
+                    className="text-xs font-medium transition-colors"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--ink-2)',
+                      border: '1px solid var(--rule-strong)',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      cursor: resendingId === s.id ? 'not-allowed' : 'pointer',
+                      opacity: resendingId === s.id ? 0.6 : 1,
+                    }}
+                  >
+                    {resendingId === s.id ? '送信中...' : 'パスワード再発行'}
                   </button>
                 </div>
               )}

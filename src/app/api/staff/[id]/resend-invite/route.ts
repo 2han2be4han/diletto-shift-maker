@@ -83,9 +83,13 @@ export async function POST(
     .maybeSingle();
   const tenantName = tenantRow?.name ?? '事業所';
 
-  /* 6. 招待リンク生成 */
+  /* 6. 招待リンク生成
+     Phase 47: 初回招待 (POST /api/staff/invite) と同じ redirectTo を使う。
+     再送が許される条件は user_id IS NULL（未パスワード設定）なので、
+     初回と同じく /auth/confirm 経由でパスワード設定画面へ誘導する必要がある。
+     旧実装は /auth/callback?next=/dashboard で、未設定のままダッシュボードに飛ぶバグがあった。 */
   const siteUrl = request.nextUrl.origin;
-  const redirectTo = `${siteUrl}/auth/callback?next=/dashboard`;
+  const redirectTo = `${siteUrl}/auth/confirm?next=/auth/set-password`;
 
   const linkResult = await generateInviteLink(admin, {
     email: target.email,

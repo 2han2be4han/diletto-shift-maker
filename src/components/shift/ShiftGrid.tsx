@@ -200,12 +200,15 @@ export default function ShiftGrid({
         </thead>
         <tbody>
           {staff.map((s) => (
-            /* Phase 38: 有資格者の行は薄い黄色でハイライト（一覧で識別しやすく） */
-            <tr key={s.id} className="group" style={s.is_qualified ? { background: 'var(--gold-pale, #fdf6e3)' } : undefined}>
+            /* Phase 38: 有資格者の行は薄い黄色でハイライト（一覧で識別しやすく）
+               Phase 47: group-hover で行全体を accent-pale にハイライト（インライン背景を !important で上書き） */
+            <tr key={s.id} className="group cursor-pointer transition-colors" style={s.is_qualified ? { background: 'var(--gold-pale, #fdf6e3)' } : undefined}>
               <td
-                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap"
+                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap group-hover:!bg-[var(--accent-pale-solid)] transition-colors"
                 style={{
-                  background: s.is_qualified ? 'var(--gold-pale, #fdf6e3)' : 'var(--white)',
+                  /* Phase 47: sticky セルは必ず不透明色で塗る。--gold-pale は α=0.07 で
+                     横スクロール中に下層 data cell の文字が透けるバグの原因だった。 */
+                  background: s.is_qualified ? 'var(--gold-pale-solid)' : 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
                   borderRight: '2px solid var(--rule-strong)',
                   color: 'var(--ink)',
@@ -257,7 +260,7 @@ export default function ShiftGrid({
                 return (
                   <td
                     key={d.dateStr}
-                    className="px-0.5 py-1 text-center cursor-pointer transition-colors hover:bg-[var(--accent-pale)] relative"
+                    className="px-0.5 py-1 text-center cursor-pointer transition-colors group-hover:!bg-[var(--accent-pale)] relative"
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: '1px solid var(--rule)',

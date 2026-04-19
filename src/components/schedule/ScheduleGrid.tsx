@@ -160,9 +160,11 @@ export default function ScheduleGrid({
         </thead>
         <tbody>
           {children.map((child) => (
-            <tr key={child.id} className="group">
+            /* Phase 47: 行ホバー UX に統一。group-hover でインライン背景を持つセルも一括ハイライト。
+               インライン background は CSS class より優先されるため、!important 付き Tailwind が必要。 */
+            <tr key={child.id} className="group cursor-pointer transition-colors">
               <td
-                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap"
+                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap group-hover:!bg-[var(--accent-pale-solid)] transition-colors"
                 style={{
                   background: 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
@@ -194,7 +196,7 @@ export default function ScheduleGrid({
                 return (
                   <td
                     key={d.dateStr}
-                    className="px-1 py-1 text-center cursor-pointer transition-colors hover:bg-[var(--accent-pale)]"
+                    className="px-1 py-1 text-center cursor-pointer transition-colors group-hover:!bg-[var(--accent-pale)]"
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: '1px solid var(--rule)',

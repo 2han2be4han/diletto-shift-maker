@@ -16,9 +16,20 @@
   /* --- 透過バリアント --- */
   --accent-pale: rgba(26, 62, 184, 0.07);
   --accent-mid: rgba(26, 62, 184, 0.15);
+  /* Phase 47: スティッキー左列用の不透明アクセントペール。
+     accent-pale は α=0.07 と透過が強く、横スクロール中の sticky セル背景に使うと
+     下層を通過する data cell の文字が透けて見えてしまう。
+     白背景に accent-pale を被せた色を 1 色固体で持つことで、視覚的にほぼ同じ色合いを保ちつつ
+     スクロール時の文字滲みを防ぐ。 */
+  --accent-pale-solid: #eff1fa;
   --green-pale: rgba(42, 122, 82, 0.07);
   --red-pale: rgba(155, 51, 51, 0.06);
   --gold-pale: rgba(138, 97, 32, 0.07);
+  /* Phase 47: スティッキー左列用の不透明バリアント（accent-pale-solid と同様の理由）。
+     有資格者ハイライト・未割当行ハイライトを sticky セルに使うときに、α<0.1 の透過色だと
+     下層 data cell の文字が透けるため、白に乗せた色を 1 色固体で持っておく。 */
+  --gold-pale-solid: #fdf6e3;
+  --red-pale-solid: #f8eded;
   --rule: rgba(0, 0, 0, 0.1);
   --rule-strong: rgba(0, 0, 0, 0.2);
 
@@ -46,4 +57,49 @@ body {
   font-size: 16px;
   line-height: 1.75;
   font-weight: 400;
+}
+
+/* =====================================================================
+   Phase 47: 印刷共通スタイル（全ページ共通の最低限ルール）
+   - サイドバー・ヘッダー・印刷ボタン等を非表示
+   - 灰色背景を白へ、ハイライト透過色は印刷時に消す
+   - 各ページ固有の @page サイズ・グリッド調整は当該ページの <style> で上書き
+   ===================================================================== */
+@media print {
+  html, body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body > div,
+  main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  /* サイドバー・トップヘッダー・操作系ボタンは印刷から除外 */
+  aside,
+  header,
+  .print-hide {
+    display: none !important;
+  }
+  /* インク節約: ホバーやゼブラ用の透過色は印刷時に白に統一 */
+  .group-hover\:\!bg-\[var\(--accent-pale-solid\)\]:hover {
+    background: #fff !important;
+  }
+  /* 印刷時のみ表示するブロック（画面では non-print-only で隠す） */
+  .print-only {
+    display: block !important;
+  }
+  /* 色付き背景・絵文字を紙にも忠実に出す */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+@media screen {
+  .print-only {
+    display: none !important;
+  }
 }

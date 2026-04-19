@@ -95,6 +95,55 @@ function formatHourMinute(t: string | null): string {
   return `${parts[0]}:${parts[1]}`;
 }
 
+/**
+ * Phase 47 (①): その行が属する「便（トリップ）」のマーク集合を計算する。
+ * ルール:
+ *  - 同じ direction
+ *  - 担当職員が 1 人以上重なる
+ *  - 時刻差が 30 分未満
+ * を満たす行同士は「同じ便」とみなし、それぞれの行のエリアマークをすべて合体して表示する。
+ *
+ * これにより:
+ *  - 16:00 🌳 と 16:00 🏭 を同じ職員が担当 → 両行とも 🌳🏭 表記（=同じ便で複数エリア回る）
+ *  - 13:20 🐻 と 14:30 ✏（70 分差） → 別便扱い、🐻 行は 🐻 のみ、✏ 行は ✏ のみ
+ * となり、ユーザーの「マーク合体」と「別便分離」の両ルールが満たされる。
+ */
+function computeTripMarks(
+  row: TransportChild,
+  all: TransportChild[],
+  direction: 'pickup' | 'dropoff',
+): string[] {
+  const myTime = direction === 'pickup' ? row.pickupTime : row.dropoffTime;
+  const myStaff = direction === 'pickup' ? row.pickupStaffIds : row.dropoffStaffIds;
+  const myEmoji = splitAreaLabel(
+    direction === 'pickup' ? row.pickupAreaLabel : row.dropoffAreaLabel,
+  ).emoji;
+  const myMin = timeToMinutes(myTime);
+  /* 時刻も担当も無いときは行のマークだけ返す */
+  if (myMin === null || myStaff.filter((id) => !!id).length === 0) {
+    return myEmoji ? [myEmoji] : [];
+  }
+  const out: string[] = [];
+  for (const other of all) {
+    const oTime = direction === 'pickup' ? other.pickupTime : other.dropoffTime;
+    const oStaff = direction === 'pickup' ? other.pickupStaffIds : other.dropoffStaffIds;
+    const oEmoji = splitAreaLabel(
+      direction === 'pickup' ? other.pickupAreaLabel : other.dropoffAreaLabel,
+    ).emoji;
+    if (!oEmoji) continue;
+    const oMin = timeToMinutes(oTime);
+    if (oMin === null) continue;
+    if (Math.abs(oMin - myMin) >= 30) continue; /* 30 分以上離れたら別便 */
+    /* 担当職員に 1 人以上の共通があるか */
+    const overlap = oStaff.some((id) => id && myStaff.includes(id));
+    if (!overlap) continue;
+    if (!out.includes(oEmoji)) out.push(oEmoji);
+  }
+  /* 自分のマークが out に含まれていなければ先頭に追加（時間/担当が一致しないケースの保険） */
+  if (myEmoji && !out.includes(myEmoji)) out.unshift(myEmoji);
+  return out;
+}
+
 /** エリアラベル "🏠 藤江" から絵文字と名前を分離 */
 function splitAreaLabel(label: string | null): { emoji: string | null; name: string | null } {
   if (!label) return { emoji: null, name: null };
@@ -150,13 +199,27 @@ export default function TransportDayView({
   /* 児童名 + 並び替え可能列数 = 合計列数（展開行の colSpan 用） */
   const colSpan = 1 + effectiveOrder.length;
 
-  /* Phase 26: 候補職員を「出勤中 かつ endTime >= minEndTime」で絞り込み */
-  const minEndMin = timeToMinutes(transportMinEndTime) ?? 0;
-  const eligibleStaff = availableStaff.filter((s) => {
-    if (!s.endTime) return false;
-    const em = timeToMinutes(s.endTime);
-    return em !== null && em >= minEndMin;
-  });
+  /* Phase 47 (②): 送迎の担当候補ロジックを方向別に分離。
+     - お迎え便: その日に出勤している職員すべてを候補とする（退勤時刻ガードなし）。
+       旧実装は transportMinEndTime（事業所設定値）で迎/送どちらも一律に弾いていたため、
+       16:31 より前に退勤する職員がお迎えにも出てこないバグがあった。
+     - お送り便: その便の発時刻より後に退勤する職員のみ候補（行ごとに動的フィルタ）。
+       16:30 発の便に 16:30 退勤の職員は危険なので、退勤時刻 > 便発時刻（厳密）で判定。
+       テナント側の設定がなくてもロジック側で自動的に効く。 */
+  const pickupEligibleStaff = availableStaff.filter((s) => !!s.endTime);
+  const dropoffEligibleFor = (dropoffTime: string | null) => {
+    const tripMin = timeToMinutes(dropoffTime);
+    return availableStaff.filter((s) => {
+      if (!s.endTime) return false;
+      const em = timeToMinutes(s.endTime);
+      if (em === null) return false;
+      /* 便時刻不明なら出勤者全員を候補に（フィルタしない） */
+      if (tripMin === null) return true;
+      return em > tripMin;
+    });
+  };
+  /* transportMinEndTime は Phase 47 で参照しなくなったが、props は互換維持のため残す */
+  void transportMinEndTime;
 
   /* Phase 27 (layout revised): ダーク帯 + 方向別アクセントカラーでセクション感を出す。
      迎=accent(青)、送=green(緑)でヘッダーにドット記号を入れて視線を誘導。 */
@@ -224,7 +287,7 @@ export default function TransportDayView({
       accent: PICK_ACCENT,
       renderCell: (child, isExpanded) => (
         <td
-          className="px-1 py-1.5 align-top"
+          className="px-1 py-1.5 align-top group-hover:!bg-[var(--accent-pale)] transition-colors"
           style={{
             borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
             borderRight: cellBorderRight,
@@ -235,10 +298,12 @@ export default function TransportDayView({
           ) : (
             <StaffSelect
               staffIds={child.pickupStaffIds}
-              availableStaff={eligibleStaff}
+              availableStaff={pickupEligibleStaff}
               onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
               disabled={disabled}
               direction="pickup"
+              rowAreaEmoji={splitAreaLabel(child.pickupAreaLabel).emoji}
+              tripMarks={computeTripMarks(child, children, 'pickup')}
             />
           )}
         </td>
@@ -275,7 +340,7 @@ export default function TransportDayView({
       accent: DROP_ACCENT,
       renderCell: (child, isExpanded) => (
         <td
-          className="px-1 py-1.5 align-top"
+          className="px-1 py-1.5 align-top group-hover:!bg-[var(--accent-pale)] transition-colors"
           style={{
             borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
             borderRight: cellBorderRight,
@@ -286,10 +351,12 @@ export default function TransportDayView({
           ) : (
             <StaffSelect
               staffIds={child.dropoffStaffIds}
-              availableStaff={eligibleStaff}
+              availableStaff={dropoffEligibleFor(child.dropoffTime)}
               onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
               disabled={disabled}
               direction="dropoff"
+              rowAreaEmoji={splitAreaLabel(child.dropoffAreaLabel).emoji}
+              tripMarks={computeTripMarks(child, children, 'dropoff')}
             />
           )}
         </td>
@@ -320,8 +387,21 @@ export default function TransportDayView({
       <table className="w-full border-collapse" style={{ fontSize: '0.82rem' }}>
         <thead>
           <tr>
-            {/* 児童名は常時先頭固定。ドラッグ対象外 */}
-            <th className="text-left" style={{ ...headerBase, minWidth: '115px' }}>児童名</th>
+            {/* 児童名は常時先頭固定。ドラッグ対象外。
+                Phase 47 (⑥): 横スクロール時に左端に張り付くよう position:sticky を適用。
+                ヘッダーセルなので z-index は他列ヘッダー (z=2 相当) より高くする必要あり。 */}
+            <th
+              className="text-left"
+              style={{
+                ...headerBase,
+                minWidth: '140px',
+                position: 'sticky',
+                left: 0,
+                zIndex: 3,
+              }}
+            >
+              児童名
+            </th>
             {effectiveOrder.map((key, idx) => {
               const m = colMeta[key];
               const draggable = !!onColumnReorder && !disabled;
@@ -388,26 +468,40 @@ export default function TransportDayView({
           </tr>
         </thead>
         <tbody>
-          {children.map((child) => {
+          {children.map((child, rowIdx) => {
             const isExpanded = expandedId === child.scheduleEntryId;
             const hasAnyLocation =
               !!(child.pickupLocation || child.dropoffLocation ||
                  child.pickupAreaLabel || child.dropoffAreaLabel);
+            /* Phase 47 (⑦): 行ごとの色分け（ゼブラ）。未割当行は赤系優先。
+               Phase 47 (⑥): 児童名セルが sticky なので、行と同じ不透明色を持たせて
+               下層列が透けないようにする必要がある。
+               未割当ハイライトには --red-pale-solid を使う（--red-pale は α=0.06 で透ける）。 */
+            const rowBg = child.isUnassigned
+              ? 'var(--red-pale-solid)'
+              : rowIdx % 2 === 0
+                ? 'var(--white)'
+                : 'var(--bg)';
             return (
               <React.Fragment key={child.scheduleEntryId}>
-                <tr
-                  style={{
-                    background: child.isUnassigned ? 'var(--red-pale)' : 'transparent',
-                  }}
-                >
+                {/* Phase 47: 行 hover で行全体をアクセント色にハイライト。
+                    インライン background（zebra/未割当赤）と sticky 児童名セルを
+                    一括で上書きするため、group-hover:!bg-... を全 td に当てる方式。 */}
+                <tr className="group transition-colors" style={{ background: rowBg }}>
                   {/* 児童名（クリックで詳細展開）。並び替え対象外で常に先頭
-                      Phase 28 fix: 未割当バッジをフル幅下に独立配置して改行・切れを防ぐ */}
+                      Phase 28 fix: 未割当バッジをフル幅下に独立配置して改行・切れを防ぐ
+                      Phase 47 (⑤): 児童名を太字 + サイズ大きく（1.05rem, 700）
+                      Phase 47 (⑥): position:sticky で横スクロール時に左端固定 */}
                   <td
-                    className="px-1.5 py-2 font-medium align-top"
+                    className="px-2 py-2 align-top group-hover:!bg-[var(--accent-pale-solid)] transition-colors"
                     style={{
                       borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
                       borderRight: cellBorderRight,
                       color: child.isUnassigned ? 'var(--red)' : 'var(--ink)',
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 1,
+                      background: rowBg,
                     }}
                   >
                     <div className="flex flex-col items-start gap-1">
@@ -415,7 +509,7 @@ export default function TransportDayView({
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : child.scheduleEntryId)}
                         className="inline-flex items-center gap-1.5 py-1 rounded transition-colors hover:bg-[var(--accent-pale)] text-left"
-                        style={{ color: 'inherit', fontWeight: 'inherit' }}
+                        style={{ color: 'inherit' }}
                         aria-expanded={isExpanded}
                         title={hasAnyLocation ? '場所を確認（地図が開けます）' : '場所の詳細を開く'}
                       >
@@ -429,7 +523,12 @@ export default function TransportDayView({
                         >
                           ▶
                         </span>
-                        <span className="break-words">{child.name}</span>
+                        <span
+                          className="break-words"
+                          style={{ fontSize: '1.05rem', fontWeight: 700, lineHeight: 1.25 }}
+                        >
+                          {child.name}
+                        </span>
                       </button>
                       {child.isUnassigned && (
                         <span
@@ -485,7 +584,7 @@ function TimeCell({
 }) {
   return (
     <td
-      className="px-1 py-2 text-center align-middle font-semibold"
+      className="px-1 py-2 text-center align-middle font-semibold group-hover:!bg-[var(--accent-pale)] transition-colors"
       style={{
         borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
         borderRight: '1px solid var(--rule)',
@@ -524,7 +623,7 @@ function LocationCellInline({
 
   return (
     <td
-      className="px-1.5 py-2 align-middle"
+      className="px-1.5 py-2 align-middle group-hover:!bg-[var(--accent-pale)] transition-colors"
       style={{
         borderBottom: isExpanded ? 'none' : '1px solid var(--rule)',
         borderRight: '1px solid var(--rule)',
@@ -873,6 +972,8 @@ function StaffSelect({
   onChange,
   disabled,
   direction,
+  rowAreaEmoji,
+  tripMarks,
 }: {
   staffIds: string[];
   availableStaff: TransportStaff[];
@@ -880,6 +981,14 @@ function StaffSelect({
   disabled: boolean;
   /** Phase 27: 迎担当=pickup のマークのみ表示、送担当=dropoff のマークのみ表示 */
   direction: 'pickup' | 'dropoff';
+  /** Phase 47 (①): この行（=この便）のエリア絵文字。
+      旧実装は職員の 1 日全エリアを集計表示していたため、
+      別便でも同じ職員担当だと "🐻✏" のように合体表示されてしまっていた。
+      行ごとに「この便のエリア」だけを出すことで、別便であることが視覚的にわかる。 */
+  rowAreaEmoji: string | null;
+  /** Phase 47 (①再修正): この行と同じ便（=同じ職員・同方向・30 分以内）の全マーク集合。
+      これにより 16:00 に 🌳 と 🏭 を同じ職員が回るケースは両行とも 🌳🏭 と表示される。 */
+  tripMarks?: string[];
 }) {
   const handleChange = (index: number, newId: string) => {
     const updated = [...staffIds];
@@ -906,20 +1015,14 @@ function StaffSelect({
      80px + 右パディング縮小で 3 文字（「あやせ」「ヨハン」「中條さ」など）が見切れず表示される。 */
   const SELECT_WIDTH = 80;
 
-  /* 全担当者のマークを集約（重複排除、表示順保持） */
-  const aggregatedMarks = (() => {
-    const out: string[] = [];
-    for (const id of staffIds) {
-      if (!id) continue;
-      const s = availableStaff.find((x) => x.id === id);
-      if (!s) continue;
-      const ms = (direction === 'pickup' ? s.pickupAreaMarks : s.dropoffAreaMarks) ?? [];
-      for (const m of ms) {
-        if (!out.includes(m)) out.push(m);
-      }
-    }
-    return out;
-  })();
+  /* Phase 47 (①再修正): tripMarks（同便の全エリア集合）を優先。
+     未指定の場合は行のエリアマーク 1 個にフォールバック。 */
+  const rowMarks: string[] =
+    tripMarks && tripMarks.length > 0
+      ? tripMarks
+      : rowAreaEmoji
+        ? [rowAreaEmoji]
+        : [];
 
   /* Phase 28 F案: select 幅を 60px まで縮めた分、マーク slot を 4.5em まで拡張。
      4〜5 マークまで欠けずに表示でき、それ以上は先頭 4 個だけ見せて tooltip で全件確認 */
@@ -937,13 +1040,13 @@ function StaffSelect({
           letterSpacing: '-0.02em',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
-          opacity: aggregatedMarks.length > 0 ? 0.9 : 0,
+          opacity: rowMarks.length > 0 ? 0.9 : 0,
         }}
-        title={aggregatedMarks.length > 0 ? `この日の担当エリア: ${aggregatedMarks.join(' ')}` : undefined}
-        aria-label={aggregatedMarks.length > 0 ? `担当エリア ${aggregatedMarks.join(' ')}` : undefined}
-        aria-hidden={aggregatedMarks.length === 0}
+        title={rowMarks.length > 0 ? `この便のエリア: ${rowMarks.join(' ')}` : undefined}
+        aria-label={rowMarks.length > 0 ? `担当エリア ${rowMarks.join(' ')}` : undefined}
+        aria-hidden={rowMarks.length === 0}
       >
-        {aggregatedMarks.slice(0, 4).join('')}
+        {rowMarks.slice(0, 4).join('')}
       </span>
       {staffIds.map((id, i) => {
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
@@ -980,7 +1083,7 @@ function StaffSelect({
                 const selected = availableStaff.find((s) => s.id === id);
                 const parts: string[] = [];
                 if (selected) parts.push(selected.name);
-                if (aggregatedMarks.length > 0) parts.push(`この日の担当エリア: ${aggregatedMarks.join(' ')}`);
+                if (rowMarks.length > 0) parts.push(`この便のエリア: ${rowMarks.join(' ')}`);
                 return parts.length > 0 ? parts.join('\n') : undefined;
               })()}
             >

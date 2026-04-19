@@ -67,3 +67,32 @@ export async function generateInviteLink(
     error: magicRes.error?.message ?? (inviteErrorMessage || 'リンク生成に失敗しました'),
   };
 }
+
+/**
+ * Phase 47: パスワード再発行用のリカバリーリンクを生成する。
+ * Supabase の type:'recovery' を使用。メール送信は Supabase 側で行わない（Resend で送る前提）。
+ *
+ * 対象は user_id != null（既にログイン済の職員）のみ。未ログインなら招待フローを使う。
+ */
+export type GenerateRecoveryLinkParams = {
+  email: string;
+  redirectTo: string;
+};
+
+export async function generateRecoveryLink(
+  admin: AdminClient,
+  params: GenerateRecoveryLinkParams,
+): Promise<GenerateInviteLinkResult> {
+  const res = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email: params.email,
+    options: { redirectTo: params.redirectTo },
+  });
+  if (res.data?.properties?.action_link) {
+    return { ok: true, actionLink: res.data.properties.action_link };
+  }
+  return {
+    ok: false,
+    error: res.error?.message ?? 'リカバリーリンクの生成に失敗しました',
+  };
+}

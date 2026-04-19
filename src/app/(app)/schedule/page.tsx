@@ -357,10 +357,16 @@ export default function SchedulePage() {
       alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
       return;
     }
+    /* Phase 47 (④): PDF 内に含まれる日付レンジを replaceRange として送る。
+       同レンジの planned エントリは API 側で削除されてから upsert されるため、
+       「同月 2 回インポートで前回データが残る」マージ追記バグが解消する。 */
+    const dates = rows.map((r) => r.date).filter((d): d is string => !!d).sort();
+    const replaceRange =
+      dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null;
     const res = await fetch('/api/schedule-entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: rows }),
+      body: JSON.stringify({ entries: rows, replaceRange }),
     });
     if (!res.ok) {
       alert('インポートに失敗しました: ' + ((await res.json()).error ?? ''));
@@ -380,12 +386,92 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden schedule-print-root">
+      {/* Phase 47: 利用予定印刷 CSS。A3 横 1 枚に強制収納。
+         縦方向で 2 ページに分かれていたのを以下で 1 ページ化:
+         - 行 padding を 0 まで圧縮
+         - 児童名セルの 2 段表示（grade_label）を非表示
+         - line-height 1.0 で最大圧縮
+         - tbody { page-break-inside: avoid } で改ページ抑止 */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page { size: A3 landscape; margin: 5mm; }
+              .schedule-print-root { overflow: visible !important; height: auto !important; }
+              .schedule-print-root .flex-1 { overflow: visible !important; padding: 0 !important; }
+              .schedule-print-root .px-6 { padding-left: 0 !important; padding-right: 0 !important; }
+              .schedule-print-root table {
+                font-size: 6.5pt !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+              }
+              /* 縦圧縮: 改ページ禁止 */
+              .schedule-print-root table,
+              .schedule-print-root thead,
+              .schedule-print-root tbody,
+              .schedule-print-root tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              .schedule-print-root th,
+              .schedule-print-root td {
+                min-width: 0 !important;
+                padding: 0 1px !important;
+                font-size: 6.5pt !important;
+                line-height: 1.05 !important;
+                overflow: hidden;
+              }
+              /* 氏名セルの grade_label（2 段目の小さい字）を印刷で隠して 1 段化 */
+              .schedule-print-root tbody td:first-child > div:nth-child(2) {
+                display: none !important;
+              }
+              /* セル内 flex-col（迎/時刻/送/時刻 の 4 段）を 1 行 横並びに圧縮。
+                 これが効かないと縦が伸びて 2 ページ目に溢れていた。 */
+              .schedule-print-root tbody td .flex.flex-col {
+                flex-direction: row !important;
+                flex-wrap: wrap !important;
+                gap: 0 4px !important;
+                line-height: 1.0 !important;
+              }
+              .schedule-print-root tbody td .flex.flex-col > span {
+                white-space: nowrap !important;
+                font-size: 6pt !important;
+              }
+              /* 日付ヘッダの "営/休" + 月/日 + 曜日 の 3 段も 1 段化（曜日のみ残す） */
+              .schedule-print-root thead th > div:first-child,
+              .schedule-print-root thead th > div:last-child {
+                display: none !important;
+              }
+              /* 行高を強制圧縮 */
+              .schedule-print-root tbody tr {
+                height: 16px !important;
+              }
+              .schedule-print-root thead th:first-child,
+              .schedule-print-root tbody td:first-child {
+                width: 60px !important;
+                min-width: 60px !important;
+                padding: 0 3px !important;
+              }
+              .schedule-print-root tr:hover { background: inherit !important; }
+              .schedule-print-root .group-hover\\:\\!bg-\\[var\\(--accent-pale-solid\\)\\]:hover {
+                background: inherit !important;
+              }
+              .schedule-print-title { display: block !important; font-size: 11pt; font-weight: 700; margin-bottom: 2mm; }
+            }
+            @media screen { .schedule-print-title { display: none; } }
+          `,
+        }}
+      />
+      <h1 className="schedule-print-title print-only">{year}年{month}月 利用予定</h1>
       <Header
         title={`${year}年${month}月利用予定`}
         showMonthSelector
         actions={
           <>
+            <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">🖨 印刷</Button>
             <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
             <Button variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
           </>
