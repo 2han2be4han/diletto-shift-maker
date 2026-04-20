@@ -56,6 +56,8 @@ function formatHM(raw: string | null | undefined): string {
 }
 
 export default function ScheduleGrid({
+  year,
+  month,
   children,
   cells,
   onCellClick,
