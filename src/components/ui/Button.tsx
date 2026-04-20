@@ -28,7 +28,10 @@ const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
     padding: '10px 24px',
   },
   secondary: {
-    background: 'transparent',
+    /* Phase 58-fix: 背景 transparent だと --bg 領域で border だけになり
+       「+シフト追加」「再生成」「印刷」等が背景に溶け込んで見にくい。
+       solid white + border-strong でカード風の存在感を出す。 */
+    background: 'var(--white)',
     color: 'var(--ink-2)',
     border: '1px solid var(--rule-strong)',
     borderRadius: '4px',

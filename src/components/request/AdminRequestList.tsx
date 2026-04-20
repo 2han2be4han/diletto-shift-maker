@@ -91,13 +91,7 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
         <Badge variant="success">提出 {submittedCount}名</Badge>
         <Badge variant="error">未提出 {notSubmittedCount}名</Badge>
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>対象月 {targetMonth}</span>
-        <Button
-          variant="secondary"
-          onClick={() => window.print()}
-          className="print-hide ml-auto"
-        >
-          🖨 印刷
-        </Button>
+        {/* Phase 58-fix: 印刷ボタンは Header に移動 */}
       </div>
 
       <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
@@ -255,13 +249,14 @@ export default function AdminRequestList({ staff, initialRequests, targetMonth }
           refetch();
         }}
         title={proxyTarget ? `${proxyTarget.staff.name} の休み希望（代理入力）` : ''}
-        size="lg"
+        /* Phase 58-fix: MyRequestCalendar 内部の max-w-lg に合わせて size=md。
+           以前は size=lg で枠だけ広く中身が左寄せの違和感が出ていた。 */
+        size="md"
       >
         {proxyTarget && (
-          /* Phase 47: MyRequestCalendar が内部で max-w-lg で自己制約しているため、
-             ラッパーも max-w-lg で揃えないと「閉じる」だけがモーダル幅いっぱいに広がって不揃いになる。
-             className w-full + max-w-lg で左寄せの一貫した縦レイアウトに。 */
-          <div className="flex flex-col gap-3 w-full max-w-lg">
+          /* Phase 58-fix: Modal size=md (max-w-lg) に合わせて w-full のみ。
+             max-w-lg は冗長なので削除。「閉じる」もモーダル幅いっぱいで揃う。 */
+          <div className="flex flex-col gap-3 w-full">
             <MyRequestCalendar
               myStaffId={proxyTarget.staff.id}
               myStaffName={proxyTarget.staff.name}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
+import MonthStepper from '@/components/ui/MonthStepper';
 import ScheduleGrid from '@/components/schedule/ScheduleGrid';
 import PdfImportModal from '@/components/schedule/PdfImportModal';
 import ExcelPasteModal from '@/components/schedule/ExcelPasteModal';
@@ -467,8 +468,7 @@ export default function SchedulePage() {
       />
       <h1 className="schedule-print-title print-only">{year}年{month}月 利用予定</h1>
       <Header
-        title={`${year}年${month}月利用予定`}
-        showMonthSelector
+        title="利用予定"
         actions={
           <>
             <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">🖨 印刷</Button>
@@ -477,6 +477,9 @@ export default function SchedulePage() {
           </>
         }
       />
+      <div className="px-6 pt-3">
+        <MonthStepper />
+      </div>
 
       <div className="px-6 flex-1 overflow-hidden flex flex-col mt-2">
         {error && (

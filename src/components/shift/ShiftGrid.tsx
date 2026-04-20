@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { getDaysInMonth, getDay } from 'date-fns';
 import type { ShiftAssignmentType, ShiftRequestCommentRow } from '@/types';
 import { calculateCoverage } from '@/lib/logic/qualifiedCoverage';
+import { todayStr } from '@/lib/date/isToday';
+import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
 
 /**
  * シフトグリッド（職員×日付）
@@ -154,8 +157,17 @@ export default function ShiftGrid({
     );
   });
 
-  const getDowColor = (dow: number) => {
-    if (dow === 0) return 'var(--red)';
+  /* Phase 56: 今日列の視覚ハイライト + マウント時の自動スクロール */
+  const today = todayStr();
+  const todayInMonth = dates.some((d) => d.dateStr === today);
+  const todayHeaderRef = useRef<HTMLTableCellElement | null>(null);
+  useEffect(() => {
+    if (!todayInMonth) return;
+    todayHeaderRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [todayInMonth, today]);
+
+  const getDowColor = (dow: number, isHoliday = false) => {
+    if (isHoliday || dow === 0) return 'var(--red)';
     if (dow === 6) return 'var(--accent)';
     return 'var(--ink-2)';
   };
@@ -193,24 +205,35 @@ export default function ShiftGrid({
               const dayWarnings = warningMap.get(d.dateStr) || [];
               const hasWarning = dayWarnings.length > 0;
               const isUnderstaffed = dayWarnings.some((w) => w.type === 'understaffed');
+              const isTodayCol = d.dateStr === today;
+              const holiday = isJpHoliday(d.dateStr);
+              const holidayName = holiday ? jpHolidayName(d.dateStr) : null;
+              const titleBits: string[] = [];
+              if (isTodayCol) titleBits.push('今日');
+              if (holidayName) titleBits.push(holidayName);
+              for (const w of dayWarnings) titleBits.push(w.message);
 
               return (
                 <th
                   key={d.dateStr}
+                  ref={isTodayCol ? todayHeaderRef : undefined}
                   className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
                   style={{
                     borderBottom: '2px solid var(--rule-strong)',
-                    borderRight: '1px solid var(--rule)',
+                    borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                    borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
                     minWidth: '56px',
-                    background: isUnderstaffed
+                    background: isTodayCol
+                      ? 'var(--accent-pale-solid)'
+                      : isUnderstaffed
                       ? 'var(--red-pale)'
                       : hasWarning
                       ? 'var(--gold-pale)'
                       : getCellBg(d.dow),
-                    color: getDowColor(d.dow),
+                    color: isTodayCol ? 'var(--accent)' : getDowColor(d.dow, holiday),
                     boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                   }}
-                  title={dayWarnings.map((w) => w.message).join('\n')}
+                  title={titleBits.join('\n') || undefined}
                 >
                   <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{DOW_SHORT[d.dow]}</div>
                   <div style={{ fontSize: '0.85rem' }}>{d.day}</div>
@@ -297,13 +320,15 @@ export default function ShiftGrid({
                   : s.is_qualified
                   ? 'var(--gold-pale, #fdf6e3)'
                   : getCellBg(d.dow);
+                const isTodayCol = d.dateStr === today;
                 return (
                   <td
                     key={d.dateStr}
                     className="px-0.5 py-1 text-center cursor-pointer transition-colors group-hover:!bg-[var(--accent-pale)] relative"
                     style={{
                       borderBottom: '1px solid var(--rule)',
-                      borderRight: '1px solid var(--rule)',
+                      borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                      borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
                       background: cellBg,
                       position: 'relative',
                     }}

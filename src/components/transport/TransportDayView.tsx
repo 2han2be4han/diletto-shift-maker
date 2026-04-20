@@ -50,6 +50,10 @@ type TransportStaff = {
   pickupAreaMarks: string[];
   /** Phase 27: 送で担当しているエリア絵文字。重複なし */
   dropoffAreaMarks: string[];
+  /** Phase 59: 運転手フラグ。左スロット候補に限定する判定用 */
+  isDriver: boolean;
+  /** Phase 59: 付き添いフラグ。右スロット候補に含める判定用 */
+  isAttendant: boolean;
 };
 
 type TransportDayViewProps = {
@@ -64,6 +68,8 @@ type TransportDayViewProps = {
     staffIds: string[]
   ) => void;
   disabled?: boolean;
+  /** Phase 58: 当日が「保存済み」か。false = 自動割り当て状態で StaffSelect をグレー表示 */
+  dayLocked?: boolean;
   /** Phase 28: 列の並び順（児童名は常に先頭固定なので含めない）。未指定は DEFAULT_TRANSPORT_COLUMN_ORDER */
   columnOrder?: TransportColumnKey[];
   /** Phase 28: 列を並び替えたときに呼ばれる。テナント設定へ保存する親側で処理 */
@@ -160,6 +166,7 @@ export default function TransportDayView({
   transportMinEndTime,
   onStaffChange,
   disabled = false,
+  dayLocked = false,
   columnOrder,
   onColumnReorder,
   onAddCustomArea,
@@ -301,6 +308,7 @@ export default function TransportDayView({
               availableStaff={pickupEligibleStaff}
               onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
               disabled={disabled}
+              dayLocked={dayLocked}
               direction="pickup"
               rowAreaEmoji={splitAreaLabel(child.pickupAreaLabel).emoji}
               tripMarks={computeTripMarks(child, children, 'pickup')}
@@ -354,6 +362,7 @@ export default function TransportDayView({
               availableStaff={dropoffEligibleFor(child.dropoffTime)}
               onChange={(ids) => onStaffChange(child.scheduleEntryId, 'dropoff', ids)}
               disabled={disabled}
+              dayLocked={dayLocked}
               direction="dropoff"
               rowAreaEmoji={splitAreaLabel(child.dropoffAreaLabel).emoji}
               tripMarks={computeTripMarks(child, children, 'dropoff')}
@@ -987,6 +996,7 @@ function StaffSelect({
   availableStaff,
   onChange,
   disabled,
+  dayLocked = false,
   direction,
   rowAreaEmoji,
   tripMarks,
@@ -996,6 +1006,8 @@ function StaffSelect({
   availableStaff: TransportStaff[];
   onChange: (ids: string[]) => void;
   disabled: boolean;
+  /** Phase 58: 「保存済み」= true。false なら自動割り当て状態 → 背景をグレーで「仮」表示 */
+  dayLocked?: boolean;
   /** Phase 27: 迎担当=pickup のマークのみ表示、送担当=dropoff のマークのみ表示 */
   direction: 'pickup' | 'dropoff';
   /** Phase 47 (①): この行（=この便）のエリア絵文字。
@@ -1077,6 +1089,14 @@ function StaffSelect({
         const takenByOthers = new Set(
           staffIds.filter((sid, idx) => idx !== i && sid !== ''),
         );
+        /* Phase 59: スロット別フィルタ。
+           左（i=0, 主担当/運転手枠）= is_driver=true のみ。
+           右（i=1, 副担当枠）= is_driver=true OR is_attendant=true（運転手or付き添い）。
+           どちらのフラグも false の職員は候補から完全に消える。 */
+        const candidateStaff = availableStaff.filter((s) => {
+          if (i === 0) return s.isDriver;
+          return s.isDriver || s.isAttendant;
+        });
         return (
           <div key={i} className="inline-flex items-center gap-1">
             <select
@@ -1092,7 +1112,15 @@ function StaffSelect({
                 border: `1px solid ${isMissing ? 'var(--red)' : id ? 'var(--rule)' : 'var(--red)'}`,
                 borderRadius: '6px',
                 color: id ? (isMissing ? 'var(--red)' : 'var(--ink)') : 'var(--red)',
-                background: id ? (isMissing ? 'var(--red-pale)' : 'var(--white)') : 'var(--red-pale)',
+                /* Phase 58: 未保存（自動割り当て状態）なら背景を薄グレーに。
+                   保存すると白に戻り、ユーザーが「手を入れて確定した」ことが一目で分かる。 */
+                background: id
+                  ? isMissing
+                    ? 'var(--red-pale)'
+                    : dayLocked
+                    ? 'var(--white)'
+                    : 'rgba(0,0,0,0.04)'
+                  : 'var(--red-pale)',
                 /* Phase 28 F案: 表示名が SELECT_WIDTH を超える場合は省略（native select の text-overflow） */
                 textOverflow: 'ellipsis',
                 overflow: 'hidden',
@@ -1109,9 +1137,9 @@ function StaffSelect({
                 return parts.length > 0 ? parts.join('\n') : undefined;
               })()}
             >
-              <option value="">未選択</option>
+              <option value="">{i === 0 && candidateStaff.length === 0 ? '運転手なし' : '未選択'}</option>
               {isMissing && <option value={id}>（候補外）</option>}
-              {availableStaff
+              {candidateStaff
                 .filter((s) => !takenByOthers.has(s.id))
                 .map((s) => {
                   /* Phase 28 F案: セル幅 60px に収めるため option 表示は短縮名のみ。

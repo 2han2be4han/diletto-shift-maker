@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Header from '@/components/layout/Header';
+import MonthStepper from '@/components/ui/MonthStepper';
 import Badge from '@/components/ui/Badge';
 import { getCurrentStaff, hasRoleAtLeast } from '@/lib/auth/getCurrentStaff';
 import { createClient } from '@/lib/supabase/server';
@@ -7,6 +8,7 @@ import type { ShiftRequestRow, StaffRow } from '@/types';
 import MyRequestCalendar from '@/components/request/MyRequestCalendar';
 import AdminRequestList from '@/components/request/AdminRequestList';
 import ShiftChangeRequestSection from '@/components/request/ShiftChangeRequestSection';
+import RequestPrintButton from '@/components/request/PrintButton';
 
 /**
  * 休み希望ページ
@@ -56,7 +58,11 @@ export default async function RequestPage({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Header title="休み希望" showMonthSelector />
+      <Header title="休み希望" actions={showAdminView ? <RequestPrintButton /> : undefined} />
+
+      <div className="px-6 pt-3">
+        <MonthStepper />
+      </div>
 
       <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center gap-3 mb-4 flex-wrap">

@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
+import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
 import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
 import { createClient } from '@/lib/supabase/server';
+
+type Status = 'empty' | 'incomplete' | 'complete';
+type CardKey = 'schedule' | 'shift' | 'transport' | 'request';
 
 /**
  * ダッシュボード
@@ -33,19 +37,81 @@ export default async function DashboardPage() {
     pendingCommentsCount = count ?? 0;
   }
 
-  const STAFF_CARDS: { href: string; title: string; desc: string; icon: string }[] = [
-    { href: '/request', title: '休み希望を出す', desc: '今月・来月の休み希望をカレンダーから登録', icon: '✋' },
-    { href: '/shift', title: 'シフト表を見る', desc: '自分の出勤予定と全体のシフトを確認', icon: '📋' },
-    { href: '/transport', title: '送迎表を見る', desc: '今日・明日の送迎担当を確認', icon: '🚗' },
+  /* Phase 60: 各ページの月次完成状態をカードに表示する。対象月は「来月」固定（作業対象月）。 */
+  const now = new Date();
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const targetMonthStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+  const monthFrom = `${targetMonthStr}-01`;
+  const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+  const monthTo = `${targetMonthStr}-${String(lastDay).padStart(2, '0')}`;
+
+  const cardStatus: Record<CardKey, Status> = {
+    schedule: 'empty',
+    shift: 'empty',
+    transport: 'empty',
+    request: 'empty',
+  };
+
+  if (staff) {
+    /* schedule: 当月 entries があれば complete */
+    const { data: entries } = await supabase
+      .from('schedule_entries')
+      .select('id')
+      .gte('date', monthFrom)
+      .lte('date', monthTo);
+    const entryIds = (entries ?? []).map((e) => e.id);
+    cardStatus.schedule = entryIds.length > 0 ? 'complete' : 'empty';
+
+    /* shift */
+    const { data: sRows } = await supabase
+      .from('shift_assignments')
+      .select('is_confirmed')
+      .gte('date', monthFrom)
+      .lte('date', monthTo);
+    const sList = sRows ?? [];
+    cardStatus.shift =
+      sList.length === 0 ? 'empty' : sList.every((r) => r.is_confirmed === true) ? 'complete' : 'incomplete';
+
+    /* transport */
+    if (entryIds.length > 0) {
+      const { data: tRows } = await supabase
+        .from('transport_assignments')
+        .select('is_confirmed, is_unassigned')
+        .in('schedule_entry_id', entryIds);
+      const tList = tRows ?? [];
+      if (tList.length === 0) cardStatus.transport = 'empty';
+      else {
+        const ok = tList.every((r) => r.is_confirmed === true) && !tList.some((r) => r.is_unassigned === true);
+        cardStatus.transport = ok ? 'complete' : 'incomplete';
+      }
+    }
+
+    /* request: 全職員 vs 当月提出済み staff */
+    const { data: activeStaff } = await supabase.from('staff').select('id').eq('is_active', true);
+    const totalStaff = (activeStaff ?? []).length;
+    if (totalStaff > 0) {
+      const { data: reqRows } = await supabase
+        .from('shift_requests')
+        .select('staff_id')
+        .eq('month', targetMonthStr);
+      const submitted = new Set((reqRows ?? []).map((r) => r.staff_id));
+      cardStatus.request = submitted.size >= totalStaff ? 'complete' : 'incomplete';
+    }
+  }
+
+  const STAFF_CARDS: { href: string; title: string; desc: string; icon: string; key?: CardKey }[] = [
+    { href: '/request', title: '休み希望を出す', desc: '今月・来月の休み希望をカレンダーから登録', icon: '✋', key: 'request' },
+    { href: '/shift', title: 'シフト表を見る', desc: '自分の出勤予定と全体のシフトを確認', icon: '📋', key: 'shift' },
+    { href: '/transport', title: '送迎表を見る', desc: '今日・明日の送迎担当を確認', icon: '🚗', key: 'transport' },
     { href: '/output/daily', title: '日次出力', desc: '当日の送迎・出勤をホワイトボード風に表示', icon: '📄' },
   ];
 
-  const ADMIN_CARDS: { href: string; title: string; desc: string; icon: string }[] = [
+  const ADMIN_CARDS: { href: string; title: string; desc: string; icon: string; key?: CardKey }[] = [
     { href: '/schedule', title: '利用予定', desc: 'PDFインポート・カレンダー確認', icon: '📅' },
-    { href: '/shift', title: 'シフト表', desc: 'シフト生成・調整・確定', icon: '📋' },
-    { href: '/transport', title: '送迎表', desc: '担当割り当て・確定', icon: '🚗' },
+    { href: '/shift', title: 'シフト表', desc: 'シフト生成・調整・確定', icon: '📋', key: 'shift' },
+    { href: '/transport', title: '送迎表', desc: '担当割り当て・確定', icon: '🚗', key: 'transport' },
     { href: '/output/daily', title: '日次出力', desc: '当日の送迎・出勤をホワイトボード風に表示', icon: '📄' },
-    { href: '/request', title: '休み希望一覧', desc: '全職員の提出状況を確認', icon: '✋' },
+    { href: '/request', title: '休み希望一覧', desc: '全職員の提出状況を確認', icon: '✋', key: 'request' },
     { href: '/settings/tenant', title: '設定', desc: 'テナント・職員・児童の管理', icon: '⚙️' },
   ];
 
@@ -102,27 +168,36 @@ export default async function DashboardPage() {
 
         {/* カードグリッド */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {cards.map((c) => (
-            <Link
-              key={c.href}
-              href={c.href}
-              className="p-5 transition-shadow hover:shadow-lg"
-              style={{
-                background: 'var(--white)',
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                border: '1px solid var(--rule)',
-              }}
-            >
-              <div className="text-3xl mb-3">{c.icon}</div>
-              <div className="text-base font-bold mb-1" style={{ color: 'var(--ink)' }}>
-                {c.title}
-              </div>
-              <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
-                {c.desc}
-              </div>
-            </Link>
-          ))}
+          {cards.map((c) => {
+            const status = c.key ? cardStatus[c.key] : null;
+            return (
+              <Link
+                key={c.href}
+                href={c.href}
+                className="p-5 transition-shadow hover:shadow-lg relative"
+                style={{
+                  background: 'var(--white)',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  border: '1px solid var(--rule)',
+                }}
+              >
+                {/* Phase 60: 各カード右上に月次状態バッジ（対象月は来月） */}
+                {status && (
+                  <div className="absolute top-3 right-3">
+                    <MonthStatusBadge status={status} month={targetMonthStr} compact />
+                  </div>
+                )}
+                <div className="text-3xl mb-3">{c.icon}</div>
+                <div className="text-base font-bold mb-1" style={{ color: 'var(--ink)' }}>
+                  {c.title}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                  {c.desc}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </>

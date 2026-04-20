@@ -99,6 +99,10 @@ export type StaffRow = {
   dropoff_transport_areas: string[];
   qualifications: string[];
   is_qualified: boolean;
+  /** Phase 59: 運転手フラグ。送迎担当の左スロット（主担当枠）候補に限定。自動割り当ても運転手のみから選出 */
+  is_driver: boolean;
+  /** Phase 59: 付き添いフラグ。右スロット（副担当枠）候補として運転手と並ぶ（左には出ない） */
+  is_attendant: boolean;
   /** Phase 24: 一覧・シフト表の表示順。NULL は name フォールバック */
   display_order: number | null;
   /** Phase 25: 在職フラグ。false=退職。退職者はログイン不可 */

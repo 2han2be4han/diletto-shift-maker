@@ -47,7 +47,26 @@
       "Bash(echo \"---exit=$?---\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/settings/children)",
       "Bash(npx eslint *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/transport)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/transport)",
+      "Bash(grep -E \"\\\\.\\(md|ts\\)$\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/settings/children)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/settings/tenant)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/settings/staff)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/transport)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/api/children)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/api/tenant)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5000/api/staff)",
+      "Bash(curl -s http://localhost:5000/api/tenant)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/api/transport/child-order)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/output/daily)",
+      "Bash(git restore *)",
+      "Bash(curl -s \"http://localhost:5000/api/transport-assignments?from=2026-04-01&to=2026-04-30\" -o /tmp/ta.json -w \"%{http_code}\\\\n\")",
+      "Read(//tmp/**)",
+      "Bash(grep -l \"skip ci\\\\|skip.ci\\\\|\\\\\\\\[skip\" .github/workflows/*)",
+      "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__get_deployment_build_logs",
+      "mcp__3b6ed07f-f29c-4157-9134-0382b224ed88__get_deployment"
     ]
   }
 }

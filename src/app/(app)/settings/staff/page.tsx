@@ -203,6 +203,9 @@ const emptyStaff = (): EditableStaff => ({
   dropoff_transport_areas: [],
   qualifications: [],
   is_qualified: false,
+  /* Phase 59: 運転手/付き添いフラグ。新規はどちらも false でユーザーが個別設定 */
+  is_driver: false,
+  is_attendant: false,
   display_order: null,
   is_active: true,
   retired_at: null,
@@ -308,6 +311,9 @@ export default function StaffSettingsPage() {
       dropoff_transport_areas: s.dropoff_transport_areas ?? [],
       qualifications: s.qualifications,
       is_qualified: s.is_qualified,
+      /* Phase 59: 送迎役割フラグ（旧データに無ければ false） */
+      is_driver: s.is_driver ?? false,
+      is_attendant: s.is_attendant ?? false,
       display_order: s.display_order,
       is_active: s.is_active,
       retired_at: s.retired_at,
@@ -339,6 +345,9 @@ export default function StaffSettingsPage() {
             dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
+            /* Phase 59: 送迎役割フラグ */
+            is_driver: editing.is_driver,
+            is_attendant: editing.is_attendant,
             display_name: editing.display_name,
           }),
         });
@@ -363,6 +372,9 @@ export default function StaffSettingsPage() {
             dropoff_transport_areas: editing.dropoff_transport_areas,
             qualifications: editing.qualifications,
             is_qualified: editing.is_qualified,
+            /* Phase 59: 送迎役割フラグ */
+            is_driver: editing.is_driver,
+            is_attendant: editing.is_attendant,
             display_name: editing.display_name,
           }),
         });
@@ -855,30 +867,11 @@ export default function StaffSettingsPage() {
       >
         {editing && (
           <div className="flex flex-col gap-4">
+            {/* Phase 59-fix: 氏名 + メールを 1 行、表示名は下の行で full-width（長いヘルプ文で高さ不揃いになる問題を回避） */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>氏名</label>
                 <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="outline-none" style={inputStyle} />
-              </div>
-              {/* Phase 28 F案: 送迎表の担当セル用・短縮表示名（目安 3 文字） */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
-                  表示名 <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>（送迎表用・短めがおすすめ・任意）</span>
-                </label>
-                <input
-                  type="text"
-                  value={editing.display_name ?? ''}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setEditing({ ...editing, display_name: v.trim() ? v : null });
-                  }}
-                  className="outline-none"
-                  style={inputStyle}
-                  placeholder={editing.name ? editing.name.replace(/\s+/g, '').slice(0, 3) : '例）濱田亜'}
-                />
-                <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
-                  未入力なら氏名の先頭3文字を自動で使います。送迎表のセルは 3 文字程度が読みやすいですが、長くても入力は可能（超過分は送迎表で省略表示されます）。
-                </p>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>メール</label>
@@ -890,6 +883,61 @@ export default function StaffSettingsPage() {
                   style={inputStyle}
                   disabled={!editing.isNew}
                 />
+              </div>
+            </div>
+
+            {/* Phase 28 F案: 送迎表の担当セル用・短縮表示名（目安 3 文字）。full-width に分離 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                表示名 <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>（送迎表用・短めがおすすめ・任意）</span>
+              </label>
+              <input
+                type="text"
+                value={editing.display_name ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEditing({ ...editing, display_name: v.trim() ? v : null });
+                }}
+                className="outline-none"
+                style={inputStyle}
+                placeholder={editing.name ? editing.name.replace(/\s+/g, '').slice(0, 3) : '例）濱田亜'}
+              />
+              <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                未入力なら氏名の先頭3文字を自動で使います。送迎表のセルは 3 文字程度が読みやすいですが、長くても入力は可能（超過分は送迎表で省略表示されます）。
+              </p>
+            </div>
+
+            {/* Phase 59: 送迎役割を先頭付近に配置して目立たせる（運転手フラグが運用の要になるため） */}
+            <div
+              className="flex flex-col gap-2 p-3 rounded"
+              style={{ background: 'var(--accent-pale)', border: '1.5px solid var(--accent)' }}
+            >
+              <label className="text-sm font-bold" style={{ color: 'var(--accent)' }}>🚐 送迎役割</label>
+              <p className="text-xs" style={{ color: 'var(--ink-2)' }}>
+                左スロット（主担当）= 運転手のみ / 右スロット（副担当）= 運転手 or 付き添い。両方オフなら送迎担当候補に出ません。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { key: 'is_driver' as const, label: '🚗 運転手', color: 'var(--accent)' },
+                  { key: 'is_attendant' as const, label: '🧑‍🤝‍🧑 付き添い', color: 'var(--green, #2f8f57)' },
+                ]).map(({ key, label, color }) => {
+                  const on = editing[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setEditing({ ...editing, [key]: !on })}
+                      className="text-sm font-semibold px-4 py-2 rounded transition-colors"
+                      style={{
+                        background: on ? color : 'var(--white)',
+                        color: on ? '#fff' : 'var(--ink-2)',
+                        border: `1.5px solid ${on ? color : 'var(--rule)'}`,
+                      }}
+                    >
+                      {on ? '✓ ' : ''}{label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

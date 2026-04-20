@@ -618,3 +618,131 @@
 - `src/app/(app)/output/daily/page.tsx`:
   - body > div { background: #fff }, body > div > div { background: #fff } を print CSS に追加
   - 原因: AppShell.tsx 最外周 div の inline style="background: var(--bg)" が紙面内に灰色として透けていた
+
+---
+
+## Phase 56 変更一覧（2026-04-20）
+
+### 新規ファイル
+- `src/lib/date/isToday.ts`: todayStr() / isToday(s) ユーティリティ（JST 基準, format(new Date(), 'yyyy-MM-dd')）
+- `src/hooks/useTransportDate.ts`: 送迎表の (year, month, date, setDate) を URL 唯一の真実から派生させるフック
+  - URL ?month + ?date を読み、整合性チェック（date.slice(0,7) === month）
+  - フォールバック順: 有効な urlDate → sessionStorage[lastDate:YYYY-MM] → 今日(当月) → 月初
+  - setDate = router.replace（state を持たない）
+  - sessionStorage キー: `shift-puzzle.transport.lastDate:${YYYY-MM}`（月ごとに分離）
+
+### 削除（旧 split-brain 同期コード）
+- `src/app/(app)/transport/page.tsx`:
+  - useState<selectedDate> 削除
+  - sessionStorage 復元 useEffect 削除（旧 SESSION_DATE_KEY = 'shift-puzzle.transport.lastDate'）
+  - selectedDate→URL 同期 useEffect 削除（history.replaceState 直接呼び）
+  - フォールバック useEffect 削除（!selectedDate 検出）
+  - defaultNextMonthStr 関数も削除（useTransportDate 内部に移動）
+  - useSearchParams import 削除
+
+### UI 変更
+- `src/app/(app)/transport/page.tsx`:
+  - DateHeaderPicker 横に「今日」バッジ（isToday 時）or 「→ 今日へ」ジャンプボタン（当月かつ非選択時）
+- `src/components/shift/ShiftGrid.tsx`:
+  - 今日列の th/td に accent border + accent-pale-solid 背景
+  - todayHeaderRef で scrollIntoView({ inline: 'center' }) を mount 時実行
+- `src/components/schedule/ScheduleGrid.tsx`:
+  - 同上（th, td, dailyCounts 行に統一適用）
+
+---
+
+## Phase 57 変更一覧（2026-04-21）
+
+### 新規コンポーネント
+- `src/components/ui/DatePopover.tsx`: 自前カレンダーポップオーバー。
+  - Props: value, onChange, dayStates (Map<YYYY-MM-DD, {locked?, unassigned?}>), anchorRef, open, onClose, allowMonthBrowse
+  - 今日 = accent リング、選択中 = accent 塗り、🔒 = accent ドット、⚠ = red ドット
+  - 凡例 + 「今日へ」ボタン、Esc/外クリックで閉じる
+- `src/components/ui/DateStepper.tsx`: ⟪前月 ⟨前日 [日付📅] 翌日⟩ 翌月⟫ + 「今日へ」
+  - DatePopover を内蔵。onChange(YYYY-MM-DD) を親に伝える
+  - 月境界跨ぎで日付クリップ（31日→30日など）
+- `src/components/ui/MonthStepper.tsx`: ⟪前年 ⟨前月 [月📅] 翌月⟩ 翌年⟫ + 「今月へ」
+  - URL ?month=YYYY-MM を直接書く（内部で useSearchParams + router.push）
+  - 月変更時に ?date= を削除
+
+### Header の変更
+- `src/components/layout/Header.tsx`: showMonthSelector prop 廃止（互換 deprecated 残存）。MonthSelector import 削除
+- `src/components/layout/MonthSelector.tsx`: 依然存在するが Header からは使われない（将来的に削除候補）
+
+### 各ページの変更
+- `src/app/(app)/transport/page.tsx`:
+  - DateHeaderPicker 関数削除
+  - Phase 56 の今日バッジ/今日へボタン削除（DateStepper に統合）
+  - Header actions に 週次印刷ボタン移動
+  - dayStates useMemo 追加（transportAssignments から is_locked / is_unassigned を派生）
+  - ページ本体に DateStepper 配置
+- `src/app/(app)/shift/page.tsx`: Header から showMonthSelector 除去、本体に MonthStepper
+- `src/app/(app)/schedule/page.tsx`: 同上。タイトルから「YYYY年M月」削除（MonthStepper に表示あり）
+- `src/app/(app)/request/page.tsx`: 同上
+- `src/app/(app)/output/weekly-transport/page.tsx`: 同上
+
+### 設計不変条件
+- ヘッダーにはページ名 + ページ固有アクション + 通知ベルのみ。月/日ナビは置かない
+- 月/日ナビはページ本体の先頭行に専用コンポーネント（MonthStepper/DateStepper）で配置
+- URL ?month=YYYY-MM / ?date=YYYY-MM-DD が唯一の真実
+- MonthStepper 月変更時に ?date= を自動削除（useTransportDate フォールバックに委ねる）
+
+---
+
+## Phase 58 変更一覧（2026-04-21）
+
+### 依存追加
+- `@holiday-jp/holiday_jp` ^2.5.1（MIT）: 日本の祝日判定（振替休日含む）
+
+### 新規ファイル
+- `src/lib/date/holidays.ts`: isJpHoliday(dateStr) / jpHolidayName(dateStr)
+- `src/components/ui/MonthStatusBadge.tsx`: 完成状態バッジ（empty/incomplete/complete × gray/gold/green）
+- `src/app/api/status/month/route.ts`: GET /api/status/month?month=YYYY-MM → { transport, shift } 状態を返す（viewer ロール許可）
+
+### UI 変更
+- `src/components/ui/DatePopover.tsx`: 祝日セルを赤表示 + tooltip に祝日名
+- `src/components/shift/ShiftGrid.tsx`: 日付列ヘッダの祝日対応（getDowColor に isHoliday 引数）
+- `src/components/schedule/ScheduleGrid.tsx`: 同上 + 「祝」表示（「営」「休」と並ぶ）
+- `src/components/layout/Sidebar.tsx`:
+  - /api/status/month をフェッチ（URL ?month 追従 / 無ければ来月）
+  - 送迎表/シフト表 menu item に状態ドット（開時=右端、ミニ時=アイコン右上）
+- `src/app/(app)/transport/page.tsx`:
+  - Header actions に MonthStatusBadge
+  - 「未割当 N件」バッジ削除
+- `src/app/(app)/shift/page.tsx`: headerActions の先頭に MonthStatusBadge
+
+---
+
+## Phase 59 変更一覧（2026-04-21）
+
+### 依存追加
+なし（既存 Supabase schema を拡張）
+
+### Migration
+- `supabase/migrations/0037_staff_driver_attendant.sql`: staff テーブルに is_driver / is_attendant (boolean, default false) 追加
+
+### 型
+- `src/types/index.ts` StaffRow に is_driver / is_attendant 追加
+- `src/components/transport/TransportDayView.tsx` TransportStaff 型に isDriver / isAttendant 追加
+
+### API
+- `src/app/api/staff/route.ts` POST: is_driver/is_attendant を insert payload に
+- `src/app/api/staff/[id]/route.ts` PATCH: allowed 配列に is_driver/is_attendant
+- `src/app/api/staff/invite/route.ts` POST: body 型 + insert payload に is_driver/is_attendant
+
+### UI / ロジック
+- `src/app/(app)/settings/staff/page.tsx`:
+  - emptyStaff() / handleEdit() / handleSave() で is_driver/is_attendant の初期値・ペイロード対応
+  - 編集モーダル先頭付近に「🚐 送迎役割」ブロック（accent 背景で目立たせ）追加
+  - 氏名/メールのグリッドを再構成し、表示名はヘルプ文を含めて full-width 分離
+- `src/components/transport/TransportDayView.tsx` StaffSelect:
+  - slot i===0 は is_driver のみ候補、i===1 は is_driver || is_attendant を候補に
+  - 運転手ゼロ時の左スロット placeholder を「運転手なし」に切替
+- `src/lib/logic/generateTransport.ts` selectStaff: 候補フィルタ先頭に `if (!s.is_driver) return false` を追加。自動割り当ては運転手限定
+- `src/app/(app)/transport/page.tsx`: availableStaffForDay の TransportStaff に isDriver/isAttendant を populate。ヘッダー「👤 出勤 N人」バッジ横に「⚠ 運転手不在」警告バッジ（当日出勤あり & 運転手 0 人時）
+
+### 設計方針・確認済み仕様
+- デフォルト: 両フラグ false。管理者が settings/staff で個別設定する（暫定的に全員 driver=true にする移行は行わない）
+- 既存 is_locked=true 行は温存。migration 後に再生成しても非ロック日のみ新ルールで上書き
+- 運転手不在日の手動オーバーライドはスコープ外（警告バッジで通知するのみ）
+- 2 人目自動割り当ては Phase 59 スコープ外（現状 AUTO_ASSIGN_STAFF_COUNT=1）

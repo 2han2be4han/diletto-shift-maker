@@ -1,9 +1,28 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { StaffRole } from '@/types';
+
+type MonthStatus = 'empty' | 'incomplete' | 'complete' | null;
+
+const STATUS_COLOR: Record<Exclude<MonthStatus, null>, string> = {
+  empty: 'var(--ink-3)',
+  incomplete: 'var(--gold, #d4a017)',
+  complete: 'var(--green, #2f8f57)',
+};
+const STATUS_LABEL: Record<Exclude<MonthStatus, null>, string> = {
+  empty: '未着手',
+  incomplete: '未完成',
+  complete: '完成',
+};
+
+function defaultNextMonthStr(): string {
+  const d = new Date();
+  const t = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+}
 
 /**
  * サイドバーナビゲーション
@@ -47,9 +66,53 @@ const MAX_WIDTH = 360;
 
 export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isResizing = useRef(false);
   const isAdmin = role === 'admin';
   const canSeeBilling = isAdmin;
+
+  /* Phase 58: 送迎表/シフト表の完成状態を取得。URL ?month に追従、無ければ来月。
+     ルートが /transport や /shift の時は URL から読める。他ページでは来月固定。 */
+  const urlMonth = searchParams.get('month');
+  const targetMonth = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
+  const [monthStatus, setMonthStatus] = useState<{
+    transport: MonthStatus;
+    shift: MonthStatus;
+    schedule: MonthStatus;
+    request: MonthStatus;
+  }>({ transport: null, shift: null, schedule: null, request: null });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/status/month?month=${targetMonth}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        setMonthStatus({
+          transport: json.transport ?? null,
+          shift: json.shift ?? null,
+          schedule: json.schedule ?? null,
+          request: json.request ?? null,
+        });
+      } catch {
+        /* noop */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetMonth, pathname]);
+
+  /* Phase 60-fix: 利用予定（/schedule）は「完成」概念が曖昧なのでステータス表示対象外 */
+  const statusFor = (href: string): MonthStatus =>
+    href === '/transport'
+      ? monthStatus.transport
+      : href === '/shift'
+      ? monthStatus.shift
+      : href === '/request'
+      ? monthStatus.request
+      : null;
 
   /* デスクトップでの表示幅 */
   const desktopWidth = isOpen ? width : MINI_WIDTH;
@@ -108,27 +171,72 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
         style={!isOpen ? { scrollbarWidth: 'thin' } : undefined}
       >
         <ul className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                className={navItemClass}
-                title={!isOpen ? item.label : undefined}
-                style={{
-                  color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-2)',
-                  background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
-                }}
-              >
-                <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
-                {isOpen && (
-                  <span className="ml-3 text-sm font-medium whitespace-nowrap">
-                    {item.label}
+          {NAV_ITEMS.map((item) => {
+            const status = statusFor(item.href);
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                  className={navItemClass}
+                  title={
+                    !isOpen
+                      ? status
+                        ? `${item.label}（${targetMonth}: ${STATUS_LABEL[status]}）`
+                        : item.label
+                      : status
+                      ? `${targetMonth}: ${STATUS_LABEL[status]}`
+                      : undefined
+                  }
+                  style={{
+                    color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-2)',
+                    background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
+                    position: 'relative',
+                  }}
+                >
+                  <span className="text-xl w-7 flex items-center justify-center shrink-0 relative">
+                    {item.icon}
+                    {/* Phase 58: ミニサイドバー時は右上にドット */}
+                    {!isOpen && status && (
+                      <span
+                        aria-hidden
+                        style={{
+                          position: 'absolute',
+                          top: '-2px',
+                          right: '-2px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: STATUS_COLOR[status],
+                          boxShadow: '0 0 0 1.5px var(--white)',
+                        }}
+                      />
+                    )}
                   </span>
-                )}
-              </Link>
-            </li>
-          ))}
+                  {isOpen && (
+                    <>
+                      <span className="ml-3 text-sm font-medium whitespace-nowrap flex-1">
+                        {item.label}
+                      </span>
+                      {status && (
+                        <span
+                          aria-hidden
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: STATUS_COLOR[status],
+                            marginLeft: '6px',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         {/* 設定セクション（admin のみ） */}

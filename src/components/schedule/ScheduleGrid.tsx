@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { format, getDaysInMonth, getDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { todayStr } from '@/lib/date/isToday';
+import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
 
 /**
  * 利用予定グリッド（児童×日付）
@@ -87,9 +89,18 @@ export default function ScheduleGrid({
     dailyCounts.set(d.dateStr, count);
   });
 
-  /* 曜日に応じた列ヘッダーの色 */
-  const getDowStyle = (dow: number): React.CSSProperties => {
-    if (dow === 0) return { color: 'var(--red)', background: 'rgba(155,51,51,0.04)' };
+  /* Phase 56: 今日列の視覚ハイライト + マウント時の自動スクロール */
+  const today = todayStr();
+  const todayInMonth = dates.some((d) => d.dateStr === today);
+  const todayHeaderRef = useRef<HTMLTableCellElement | null>(null);
+  useEffect(() => {
+    if (!todayInMonth) return;
+    todayHeaderRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [todayInMonth, today]);
+
+  /* 曜日に応じた列ヘッダーの色（祝日は日曜と同じ赤扱い） */
+  const getDowStyle = (dow: number, isHoliday = false): React.CSSProperties => {
+    if (isHoliday || dow === 0) return { color: 'var(--red)', background: 'rgba(155,51,51,0.04)' };
     if (dow === 6) return { color: 'var(--accent)', background: 'rgba(26,62,184,0.04)' };
     return {};
   };
@@ -130,32 +141,42 @@ export default function ScheduleGrid({
             >
               氏名
             </th>
-            {dates.map((d) => (
-              <th
-                key={d.dateStr}
-                className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
-                style={{
-                  borderBottom: '2px solid var(--rule-strong)',
-                  borderRight: '1px solid var(--rule)',
-                  minWidth: '80px',
-                  ...getDowStyle(d.dow),
-                  /* Phase 27-fix: sticky 背景は getStickyBg（不透明ベース）で上書きし、
-                     土日の tint が透けてデータ行が重なる不具合を防ぐ */
-                  background: getStickyBg(d.dow),
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
-                }}
-              >
-                <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '2px' }}>
-                  {d.dow === 0 || d.dow === 6 ? '休' : '営'}
-                </div>
-                <div style={{ fontSize: '0.85rem' }}>
-                  {month}/{d.day}
-                </div>
-                <div style={{ fontSize: '0.65rem' }}>
-                  ({DOW_SHORT[d.dow]})
-                </div>
-              </th>
-            ))}
+            {dates.map((d) => {
+              const isTodayCol = d.dateStr === today;
+              const holiday = isJpHoliday(d.dateStr);
+              const holidayName = holiday ? jpHolidayName(d.dateStr) : null;
+              const titleBits: string[] = [];
+              if (isTodayCol) titleBits.push('今日');
+              if (holidayName) titleBits.push(holidayName);
+              return (
+                <th
+                  key={d.dateStr}
+                  ref={isTodayCol ? todayHeaderRef : undefined}
+                  className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
+                  style={{
+                    borderBottom: '2px solid var(--rule-strong)',
+                    borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                    borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
+                    minWidth: '80px',
+                    ...getDowStyle(d.dow, holiday),
+                    background: isTodayCol ? 'var(--accent-pale-solid)' : getStickyBg(d.dow),
+                    color: isTodayCol ? 'var(--accent)' : holiday ? 'var(--red)' : undefined,
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
+                  }}
+                  title={titleBits.join('\n') || undefined}
+                >
+                  <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '2px' }}>
+                    {holiday ? '祝' : d.dow === 0 || d.dow === 6 ? '休' : '営'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem' }}>
+                    {month}/{d.day}
+                  </div>
+                  <div style={{ fontSize: '0.65rem' }}>
+                    ({DOW_SHORT[d.dow]})
+                  </div>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -193,13 +214,15 @@ export default function ScheduleGrid({
                 if (isAbsent) bg = 'var(--red-pale)';
                 else if (isOff) bg = 'rgba(0,0,0,0.04)';
 
+                const isTodayCol = d.dateStr === today;
                 return (
                   <td
                     key={d.dateStr}
                     className="px-1 py-1 text-center cursor-pointer transition-colors group-hover:!bg-[var(--accent-pale)]"
                     style={{
                       borderBottom: '1px solid var(--rule)',
-                      borderRight: '1px solid var(--rule)',
+                      borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                      borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
                       background: bg,
                     }}
                     onClick={() => onCellClick(child.id, d.dateStr)}
@@ -285,16 +308,18 @@ export default function ScheduleGrid({
             </td>
             {dates.map((d) => {
               const count = dailyCounts.get(d.dateStr) || 0;
+              const isTodayCol = d.dateStr === today;
               return (
                 <td
                   key={d.dateStr}
                   className="sticky bottom-0 z-40 px-1 py-2 text-center font-bold"
                   style={{
                     borderTop: '2px solid var(--rule-strong)',
-                    borderRight: '1px solid var(--rule)',
+                    borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                    borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
                     color: count > 10 ? 'var(--red)' : count > 0 ? 'var(--green)' : 'var(--ink-3)',
                     fontWeight: count > 10 ? 800 : 700,
-                    background: getStickyBg(d.dow),
+                    background: isTodayCol ? 'var(--accent-pale-solid)' : getStickyBg(d.dow),
                     boxShadow: '0 -4px 4px rgba(0,0,0,0.02)',
                   }}
                 >

@@ -307,6 +307,9 @@ function selectStaff({
   const timeMin = normalizeTimeMinutes(time);
 
   const candidates = workingStaff.filter((s) => {
+    /* Phase 59: 自動割り当ては運転手のみ。
+       is_driver=false の職員は自動選出対象外。付き添いは右スロットで手動追加する運用。 */
+    if (!s.is_driver) return false;
     /* Phase 50: 分割シフト対応。同一 (staff, date) の全セグメントを集め、
        便時刻がいずれかのセグメントに収まるかで判定する。 */
     const segments = shiftAssignments.filter(

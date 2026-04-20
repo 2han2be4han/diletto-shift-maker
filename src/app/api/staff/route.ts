@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
       dropoff_transport_areas: sanitizeIdArray(body.dropoff_transport_areas ?? body.transport_areas),
       qualifications: body.qualifications ?? [],
       is_qualified: body.is_qualified ?? false,
+      /* Phase 59: 運転手/付き添いフラグ。新規作成時はデフォルト false */
+      is_driver: body.is_driver ?? false,
+      is_attendant: body.is_attendant ?? false,
       display_name: sanitizeDisplayName(body.display_name),
     })
     .select()

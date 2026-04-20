@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
 import Header from '@/components/layout/Header';
+import MonthStepper from '@/components/ui/MonthStepper';
 import Button from '@/components/ui/Button';
 import { staffDisplayName } from '@/lib/utils/displayName';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
@@ -243,14 +244,17 @@ export default function WeeklyTransportPrintPage() {
       />
 
       <Header
-        title={`${year}年${month}月 送迎表（週次印刷）`}
-        showMonthSelector
+        title="送迎表（週次印刷）"
         actions={
           <div className="weekly-print-toolbar flex items-center gap-2">
             <Button variant="primary" onClick={() => window.print()}>🖨 印刷</Button>
           </div>
         }
       />
+
+      <div className="weekly-print-toolbar px-6 pt-3">
+        <MonthStepper />
+      </div>
 
       <div className="weekly-scroll flex-1 overflow-auto px-6 py-4" style={{ background: 'var(--bg)' }}>
         {error && (

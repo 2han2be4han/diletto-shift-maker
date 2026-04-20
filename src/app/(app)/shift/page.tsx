@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
+import MonthStepper from '@/components/ui/MonthStepper';
+import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
 import ShiftGrid from '@/components/shift/ShiftGrid';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -143,7 +145,9 @@ export default function ShiftPage() {
           segment_order: a.segment_order ?? 0,
         }))
       );
-      setConfirmed(assigns.some((a) => a.is_confirmed));
+      /* Phase 58: 「月が確定済み」= 全行 is_confirmed=true。
+         .some だと部分確定で true になり、/api/status/month（全行 every）と食い違ってサイドバーと矛盾する。 */
+      setConfirmed(assigns.length > 0 && assigns.every((a) => a.is_confirmed));
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込み失敗');
     } finally {
@@ -326,6 +330,13 @@ export default function ShiftPage() {
      Phase 47: 印刷ボタン追加（cells があるときのみ表示） */
   const headerActions = (
     <div className="flex items-center gap-2">
+      {/* Phase 58: 月の完成状態 */}
+      {(() => {
+        const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+        const status: 'empty' | 'incomplete' | 'complete' =
+          cells.length === 0 ? 'empty' : confirmed ? 'complete' : 'incomplete';
+        return <MonthStatusBadge status={status} month={monthStr} />;
+      })()}
       {cells.length > 0 && (
         <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">
           🖨 印刷
@@ -403,7 +414,12 @@ export default function ShiftPage() {
         }}
       />
       <h1 className="shift-print-title print-only">{year}年{month}月 シフト表</h1>
-      <Header title="シフト表" showMonthSelector actions={headerActions} />
+      <Header title="シフト表" actions={headerActions} />
+
+      {/* Phase 57: 月ナビはヘッダーからページ本体に移動 */}
+      <div className="px-6 pt-3">
+        <MonthStepper />
+      </div>
 
       {/* Phase 37: ヘッダーと日付バーの間の上余白を撤去 (pt-0)、左右と下のみ余白を維持 */}
       <div className="flex-1 overflow-auto px-6 pb-6 pt-0">

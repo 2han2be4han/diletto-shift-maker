@@ -25,6 +25,8 @@ export async function PATCH(
     'name', 'email', 'role', 'employment_type',
     'default_start_time', 'default_end_time',
     'qualifications', 'is_qualified',
+    /* Phase 59: 送迎役割フラグ。両方 false の職員は担当候補に出ない（仕様通り） */
+    'is_driver', 'is_attendant',
     'is_active',
     'display_name',
   ] as const;

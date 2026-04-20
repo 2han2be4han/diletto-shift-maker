@@ -848,6 +848,82 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 56: 送迎表の日付状態ゼロベース書き直し + 今日ハイライト（2026-04-20 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>56-1</td><td>isToday / todayStr ユーティリティ新設（JST 基準）</td><td>src/lib/date/isToday.ts</td><td class="status-done">完了</td><td>100%</td><td>3画面共通化</td></tr>
+            <tr><td>56-2</td><td>useTransportDate フック新設（URL 唯一の真実、派生のみ、fallback = urlDate → sessionStorage[lastDate:YYYY-MM] → 今日(当月) → 月初）</td><td>src/hooks/useTransportDate.ts</td><td class="status-done">完了</td><td>100%</td><td>setDate = router.replace</td></tr>
+            <tr><td>56-3</td><td>transport/page.tsx から useState&lt;selectedDate&gt; と 4本の useEffect 削除</td><td>src/app/(app)/transport/page.tsx:177-215</td><td class="status-done">完了</td><td>100%</td><td>削除のみで約40行純減</td></tr>
+            <tr><td>56-4</td><td>transport/page.tsx に月整合クリーンアップ useEffect 1本追加（urlDate が月と不整合なら router.replace で削除）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>useTransportDate 内に統合</td></tr>
+            <tr><td>56-5</td><td>日付タブ onClick を setDate(date) に置換</td><td>src/app/(app)/transport/page.tsx DaySelector</td><td class="status-done">完了</td><td>100%</td><td>setSelectedDate 経由で setDate を呼ぶ</td></tr>
+            <tr><td>56-6</td><td>送迎表日付タブの今日ハイライト（accent アウトライン + 太字）</td><td>src/app/(app)/transport/page.tsx DaySelector</td><td class="status-done">完了</td><td>100%</td><td>「今日」バッジ + 「→ 今日へ」ジャンプとの視覚区別</td></tr>
+            <tr><td>56-7</td><td>シフト表の今日列ヘッダハイライト（accent-pale 背景 + 左右 accent 縦線）</td><td>src/components/shift/ShiftGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>56-8</td><td>利用表の今日列ヘッダハイライト（同上）</td><td>src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>56-9</td><td>シフト/利用表: 当月表示時に今日列を画面内に自動スクロール</td><td>src/components/shift/ShiftGrid.tsx, src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>scrollIntoView 初回のみ</td></tr>
+            <tr><td>56-10</td><td>整合性チェック（別視点）: pendingChanges が selectedDate 変更で消えないこと / viewer ロールで編集導線が出ないこと / fetchAll の月単位取得が影響を受けないこと / MonthSelector の push 履歴で戻るボタンが正しく動くこと</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td>CLAUDE.md §3 準拠</td></tr>
+            <tr><td>56-11</td><td>reference-map.md 更新（useTransportDate / isToday / todayStr の参照追加）</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>56-12</td><td>ローカル検証（npm run dev）: 月切替 / 不正 ?date / リロード / 戻る / 初回当月=今日 / 初回来月=月初 / 3画面今日視認 / pendingChanges 保持 / viewer 回帰無し</td><td>手動動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 57: 日付ナビ統一 + カスタムカレンダー（2026-04-21 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>57-1</td><td>Header から showMonthSelector 廃止。actions スロットのみ残す</td><td>src/components/layout/Header.tsx</td><td class="status-done">完了</td><td>100%</td><td>MonthSelector は component として残すが Header では使わない</td></tr>
+            <tr><td>57-2</td><td>DateStepper component 新設（⟪前月 ⟨前日 [日付📅] 翌日⟩ 翌月⟫ + 「今日へ」）</td><td>src/components/ui/DateStepper.tsx</td><td class="status-done">完了</td><td>100%</td><td>送迎表用</td></tr>
+            <tr><td>57-3</td><td>MonthStepper component 新設（⟪前年 ⟨前月 [月📅] 翌月⟩ 翌年⟫ + 「今月へ」）</td><td>src/components/ui/MonthStepper.tsx</td><td class="status-done">完了</td><td>100%</td><td>シフト/利用表/休み希望用</td></tr>
+            <tr><td>57-4</td><td>DatePopover component 新設（自前カレンダーポップオーバー、土日色分け、ドット表示）</td><td>src/components/ui/DatePopover.tsx</td><td class="status-done">完了</td><td>100%</td><td>ネイティブ input type=date を置換</td></tr>
+            <tr><td>57-5</td><td>DatePopover: dayStates prop でドット描画（🔒 accent 塗り / ⚠ red リング / 今日 accent リング）</td><td>src/components/ui/DatePopover.tsx</td><td class="status-done">完了</td><td>100%</td><td>凡例表示も</td></tr>
+            <tr><td>57-6</td><td>送迎表: DateHeaderPicker 削除 → DateStepper+DatePopover に置換、Phase 56 の今日バッジも統合、週次印刷を header actions に移動</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>57-7</td><td>送迎表 dayStates を transportAssignments から派生</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>useMemo</td></tr>
+            <tr><td>57-8</td><td>シフト/利用表/休み希望/weekly-transport: showMonthSelector を MonthStepper に置換、ページ固有アクションを header actions に</td><td>shift, schedule, request, weekly-transport</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>57-9</td><td>整合性チェック: URL ?month/?date 整合、pendingChanges 保持、viewer 制御、モバイル折り返し</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>57-10</td><td>reference-map.md 更新 + localhost:5000 検証</td><td>docs/*</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 58: 祝日表示 + 完成状態インジケータ（2026-04-21 着手）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>58-1</td><td>@holiday-jp/holiday_jp 導入 + src/lib/date/holidays.ts (isJpHoliday, holidayName)</td><td>package.json, 新規</td><td class="status-done">完了</td><td>100%</td><td>MIT ライセンス</td></tr>
+            <tr><td>58-2</td><td>祝日赤表示 + tooltip: DatePopover / ShiftGrid / ScheduleGrid の日付列ヘッダ</td><td>各コンポーネント</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-3</td><td>送迎表ページ本体から「未割当 N件」バッジ削除（ヘッダー/サイドバーに集約）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-4</td><td>/api/status/month?month=YYYY-MM 新設。transport/shift の {empty|incomplete|complete} を返す</td><td>src/app/api/status/month/route.ts</td><td class="status-done">完了</td><td>100%</td><td>tenant_id gate 必須</td></tr>
+            <tr><td>58-5</td><td>サイドバー menu item（送迎表・シフト表）に状態ドット（gray/gold/green）+ tooltip</td><td>src/components/layout/Sidebar.tsx</td><td class="status-done">完了</td><td>100%</td><td>URL ?month 追従、無ければ来月</td></tr>
+            <tr><td>58-6</td><td>送迎表ヘッダーにバッジ（未完成/完成）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-7</td><td>シフト表ヘッダーにバッジ（未完成/完成）</td><td>src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-8</td><td>利用表は祝日のみ反映。完成バッジは対象外（判定基準曖昧のため）</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-9</td><td>整合性確認: 月切替で状態が追従、viewer ロールでも表示、祝日が日曜と色衝突しない</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>58-10</td><td>reference-map.md / progress.html 更新</td><td>docs/*</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 59: 運転手 / 付き添いロール（2026-04-21 完了）</div>
+    <table>
+        <thead><tr><th>#</th><th>タスク</th><th>対象</th><th>ステータス</th><th>完了率</th><th>備考</th></tr></thead>
+        <tbody>
+            <tr><td>59-1</td><td>migration 0037: staff.is_driver / is_attendant 追加</td><td>supabase/migrations/0037_staff_driver_attendant.sql</td><td class="status-done">完了</td><td>100%</td><td>両方 default false</td></tr>
+            <tr><td>59-2</td><td>types 拡張: StaffRow と TransportStaff にフラグ追加</td><td>src/types/index.ts, src/components/transport/TransportDayView.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>59-3</td><td>API 3 本（POST/PATCH/invite）で is_driver/is_attendant を受け付け</td><td>src/app/api/staff/*</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>59-4</td><td>settings/staff モーダルに「🚐 送迎役割」ブロック（accent 背景で目立たせ、上部配置）+ 氏名/メール/表示名レイアウト整理</td><td>src/app/(app)/settings/staff/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>59-5</td><td>StaffSelect スロット別フィルタ: 左=is_driver のみ、右=is_driver OR is_attendant</td><td>src/components/transport/TransportDayView.tsx</td><td class="status-done">完了</td><td>100%</td><td>運転手ゼロ時は placeholder が「運転手なし」に</td></tr>
+            <tr><td>59-6</td><td>generateTransport.selectStaff: 候補フィルタ先頭で !is_driver を除外（自動割り当ては運転手限定）</td><td>src/lib/logic/generateTransport.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>59-7</td><td>送迎表ヘッダーに「⚠ 運転手不在」警告バッジ（当日出勤あり & 運転手 0 人時）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>59-8</td><td>reference-map.md / progress.html 更新 + typecheck クリーン確認</td><td>docs/*</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Phase 60 以降の候補</h2>
+    <ul>
+        <li><strong>状態バッジのインタラクティブ化</strong>: 👥出勤 クリックで一覧、⚠未割当 クリックで絞り込み</li>
+        <li><strong>送迎表 mini カレンダーに「要再生成」状態追加</strong>: schedule_entries/shift_assignments の更新日時が transport_assignments より新しい日を検出</li>
+        <li><strong>送迎 2 人目自動化</strong>: AUTO_ASSIGN_STAFF_COUNT=2 にして、1 人目=運転手・2 人目=運転手or付き添いで補完するアルゴリズム</li>
+        <li><strong>運転手不在日の手動オーバーライド</strong>: 例外的に付き添いを左スロットに置けるスイッチ（現状は警告バッジのみ）</li>
+    </ul>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

@@ -6,6 +6,7 @@ import { ja } from 'date-fns/locale';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import type { ShiftRequestRow, ShiftRequestType, ShiftRequestCommentRow } from '@/types';
+import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
 
 /**
  * 自分の休み希望カレンダー（Phase 36 拡張）
@@ -280,6 +281,11 @@ export default function MyRequestCalendar({
             const config = status !== 'none' ? STATUS_CONFIG[status] : null;
             const isWeekend = d.dow === 0 || d.dow === 6;
             const isEditing = editingDay === d.dateStr;
+            /* Phase 58: 祝日も赤扱い */
+            const holiday = isJpHoliday(d.dateStr);
+            const holidayName = holiday ? jpHolidayName(d.dateStr) : null;
+            const numberColor =
+              holiday || d.dow === 0 ? 'var(--red)' : d.dow === 6 ? 'var(--accent)' : 'var(--ink)';
 
             /* AM休/PM休 は半月色塗りで視覚区別 */
             let cellBg: string | undefined;
@@ -289,7 +295,7 @@ export default function MyRequestCalendar({
               cellBg = `linear-gradient(to bottom, transparent 0 50%, ${STATUS_CONFIG.pm_off.bg} 50% 100%)`;
             } else if (config) {
               cellBg = config.bg;
-            } else if (isWeekend) {
+            } else if (holiday || isWeekend) {
               cellBg = 'rgba(0,0,0,0.02)';
             }
 
@@ -303,10 +309,11 @@ export default function MyRequestCalendar({
                     border: config ? `1.5px solid ${config.color}` : '1.5px solid transparent',
                     minHeight: '52px',
                   }}
+                  title={holidayName ?? undefined}
                 >
                   <span
                     className="text-sm font-semibold"
-                    style={{ color: d.dow === 0 ? 'var(--red)' : d.dow === 6 ? 'var(--accent)' : 'var(--ink)' }}
+                    style={{ color: numberColor }}
                   >
                     {d.day}
                   </span>

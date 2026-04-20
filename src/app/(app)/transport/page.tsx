@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
+import { useTransportDate } from '@/hooks/useTransportDate';
+import DateStepper from '@/components/ui/DateStepper';
+import type { DayState } from '@/components/ui/DatePopover';
+import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
 import TransportDayView from '@/components/transport/TransportDayView';
@@ -28,13 +31,6 @@ import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
  * - 既存の transport_assignments を取得
  * - 「割り当て生成」で /api/transport/generate を呼び、結果を DB に upsert
  */
-
-/** Phase 25: URL ?month=YYYY-MM。デフォルトは来月 */
-function defaultNextMonthStr(): string {
-  const d = new Date();
-  const t = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
-}
 
 type UiTransportEntry = {
   scheduleEntryId: string;
@@ -62,14 +58,9 @@ type PendingAssignment = {
 };
 
 export default function TransportPage() {
-  const searchParams = useSearchParams();
-  const urlMonth = searchParams.get('month');
-  const urlDate = searchParams.get('date');
-  const { year, month } = useMemo(() => {
-    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
-    const [y, m] = source.split('-').map(Number);
-    return { year: y, month: m };
-  }, [urlMonth]);
+  /* Phase 56: 日付状態は useTransportDate で URL 唯一の真実として扱う。
+     selectedDate の useState/useEffect 同期は廃止（drift を構造的に不可能にする）。 */
+  const { year, month, date: selectedDate, setDate: setSelectedDate } = useTransportDate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -163,6 +154,32 @@ export default function TransportPage() {
 
   /* Phase 28: 当月の全日を対象にする（土日も含む。放デイは土曜利用があるため）。
      ※変数名は workDays のまま残置（他で使われているため）。 */
+  /* Phase 57: カレンダーポップオーバー用。日付ごとの状態（編集中 / 🔒保存済 / ⚠未割当）を派生。
+     scheduleEntries と transportAssignments を join して、entry.date キーに集約。
+     さらに pendingChanges をオーバレイし、未保存編集がある日は editing=true とする
+     （保存済マークを隠して「編集中」を優先表示。「編集 = 自動ロック解除」の UI 表現）。 */
+  const dayStates = useMemo<Map<string, DayState>>(() => {
+    const m = new Map<string, DayState>();
+    const entryDateById = new Map<string, string>();
+    for (const e of scheduleEntries) entryDateById.set(e.id, e.date);
+    for (const t of transportAssignments) {
+      const date = entryDateById.get(t.schedule_entry_id);
+      if (!date) continue;
+      const cur = m.get(date) ?? {};
+      if (t.is_locked) cur.locked = true;
+      if (t.is_unassigned) cur.unassigned = true;
+      m.set(date, cur);
+    }
+    for (const entryId of pendingChanges.keys()) {
+      const date = entryDateById.get(entryId);
+      if (!date) continue;
+      const cur = m.get(date) ?? {};
+      cur.editing = true;
+      m.set(date, cur);
+    }
+    return m;
+  }, [scheduleEntries, transportAssignments, pendingChanges]);
+
   const workDays = useMemo(() => {
     const days: string[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
@@ -172,47 +189,8 @@ export default function TransportPage() {
     return days;
   }, [year, month, daysInMonth]);
 
-  /* Phase 49: URL ?date=YYYY-MM-DD と同期。
-     他ページに遷移して戻ってきた時も同じ日から再開できるようにする。 */
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) return urlDate;
-    return workDays[0] ?? '';
-  });
-
-  /* Phase 54: URL に ?date= が無い場合は sessionStorage の直前日付を復元。
-     SSR ハイドレーションとの不整合を避けるため useState 初期値では触らず、mount 後に適用。
-     別月に切り替えた場合は採用しない（月の範囲外の日付になるため）。 */
-  const SESSION_DATE_KEY = 'shift-puzzle.transport.lastDate';
-  useEffect(() => {
-    if (urlDate) return;
-    if (typeof window === 'undefined') return;
-    const saved = window.sessionStorage.getItem(SESSION_DATE_KEY);
-    if (!saved || !/^\d{4}-\d{2}-\d{2}$/.test(saved)) return;
-    const [sy, sm] = saved.split('-').map(Number);
-    if (sy !== year || sm !== month) return;
-    /* 既にユーザー操作で他の日付になっている場合は上書きしない（初期ロード時のみ） */
-    setSelectedDate((prev) => (prev === (workDays[0] ?? '') ? saved : prev));
-    /* 依存配列は初期ロードの年月だけ参照。selectedDate は意図的に外す */
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month]);
-
-  useEffect(() => {
-    if (!selectedDate && workDays[0]) setSelectedDate(workDays[0]);
-  }, [workDays, selectedDate]);
-
-  /* Phase 49: selectedDate 変更時に URL (history) も更新。pushState ではなく replaceState で
-     履歴を汚さない（戻るボタンで1日ずつ遡る必要がないため）。
-     Phase 54: 同時に sessionStorage にも退避。 */
-  useEffect(() => {
-    if (!selectedDate) return;
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('date') !== selectedDate) {
-      params.set('date', selectedDate);
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-    }
-    window.sessionStorage.setItem(SESSION_DATE_KEY, selectedDate);
-  }, [selectedDate]);
+  /* Phase 56: selectedDate は useTransportDate が URL から派生。
+     ここに同期 useEffect は不要（drift 不可能な構造）。 */
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -510,6 +488,9 @@ export default function TransportPage() {
         endTime: latestEndTime,
         pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
         dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],
+        /* Phase 59: 運転手/付き添いフラグを StaffSelect のスロット別フィルタに伝える */
+        isDriver: s.is_driver,
+        isAttendant: s.is_attendant,
       };
     });
   }, [staff, shiftAssignments, selectedDate, staffAreaMarksForDay]);
@@ -920,62 +901,21 @@ export default function TransportPage() {
 
       {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
 
-      <Header title="送迎表" showMonthSelector />
-
-      <div className="px-2 py-3 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            {/* Phase 38: 「年月日(曜日)」ラベル + クリックで OS 標準のカレンダーを開いて日付遷移 */}
-            <DateHeaderPicker
-              year={year}
-              month={month}
-              selectedDate={selectedDate}
-              workDays={workDays}
-              onChange={setSelectedDate}
-            />
-            {confirmed && <Badge variant="success">確定済み</Badge>}
-            {generated && !confirmed && <Badge variant="warning">未確定</Badge>}
-            {/* Phase 55: 当日の出勤スタッフ数（シフトに入っていて end_time が設定されている職員） */}
+      <Header
+        title="送迎表"
+        actions={
+          <>
+            {/* Phase 58: 月の完成状態バッジ（送迎表は全行 is_confirmed かつ 未割当ゼロで complete） */}
             {(() => {
-              const onDutyCount = availableStaffForDay.filter((s) => !!s.endTime).length;
-              return (
-                <span
-                  className="text-xs font-semibold px-2 py-1 rounded"
-                  style={{
-                    background: 'var(--bg)',
-                    color: 'var(--ink-2)',
-                    border: '1px solid var(--rule)',
-                  }}
-                  title="この日にシフトが入っている職員数（分割シフトは1名としてカウント）"
-                >
-                  👤 出勤 {onDutyCount}人
-                </span>
-              );
+              const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+              const status: 'empty' | 'incomplete' | 'complete' =
+                transportAssignments.length === 0
+                  ? 'empty'
+                  : confirmed && unassignedTotal === 0
+                  ? 'complete'
+                  : 'incomplete';
+              return <MonthStatusBadge status={status} month={monthStr} />;
             })()}
-            {generated && unassignedTotal > 0 && (
-              <Badge variant="error">未割当 {unassignedTotal}件</Badge>
-            )}
-            {/* Phase 45: 当日がロック済み (保存済み) なら 🔒 を表示。再生成でスキップされる目印 */}
-            {transportAssignments.some(
-              (t) =>
-                t.is_locked &&
-                scheduleEntries.some((e) => e.id === t.schedule_entry_id && e.date === selectedDate),
-            ) && (
-              <span
-                className="text-xs font-semibold px-2 py-1 rounded"
-                style={{
-                  background: 'var(--accent-pale)',
-                  color: 'var(--accent)',
-                  border: '1px solid var(--accent)',
-                }}
-                title="この日は手動で保存済みです。再生成でスキップされます。"
-              >
-                🔒 保存済(再生成スキップ)
-              </span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {/* Phase 47: 週次印刷ページへの導線（A3 1週間レイアウト） */}
             <Button
               variant="secondary"
               onClick={() => {
@@ -986,6 +926,111 @@ export default function TransportPage() {
             >
               🖨 週次印刷
             </Button>
+          </>
+        }
+      />
+
+      {/* Phase 57: 日付ナビ専用行（ヘッダーからは月ナビを撤去し、ここに集約） */}
+      <div className="px-4 pt-3">
+        <DateStepper value={selectedDate} onChange={setSelectedDate} dayStates={dayStates} />
+      </div>
+
+      <div className="px-2 py-3 overflow-y-auto">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            {/* Phase 58-fix: 確定/未確定バッジは Header の MonthStatusBadge に集約したため削除（重複防止） */}
+            {/* Phase 58-fix: 送迎表の当日利用人数（schedule_entries ベース、attendance_status='absent' は除外） */}
+            {(() => {
+              const dayEntries = scheduleEntries.filter(
+                (e) => e.date === selectedDate && e.attendance_status !== 'absent',
+              );
+              return (
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded"
+                  style={{
+                    background: 'var(--bg)',
+                    color: 'var(--ink-2)',
+                    border: '1px solid var(--rule)',
+                  }}
+                  title="この日の利用児童数（欠席除く）"
+                >
+                  🧒 利用 {dayEntries.length}人
+                </span>
+              );
+            })()}
+            {/* Phase 55: 当日の出勤スタッフ数（シフトに入っていて end_time が設定されている職員） */}
+            {(() => {
+              const onDuty = availableStaffForDay.filter((s) => !!s.endTime);
+              const driverCount = onDuty.filter((s) => s.isDriver).length;
+              return (
+                <>
+                  <span
+                    className="text-xs font-semibold px-2 py-1 rounded"
+                    style={{
+                      background: 'var(--bg)',
+                      color: 'var(--ink-2)',
+                      border: '1px solid var(--rule)',
+                    }}
+                    title="この日にシフトが入っている職員数（分割シフトは1名としてカウント）"
+                  >
+                    👤 出勤 {onDuty.length}人
+                  </span>
+                  {/* Phase 59: 運転手不在警告。自動割り当てが成立しない・左スロットが空になる */}
+                  {onDuty.length > 0 && driverCount === 0 && (
+                    <span
+                      className="text-xs font-bold px-2 py-1 rounded"
+                      style={{
+                        background: 'var(--red-pale)',
+                        color: 'var(--red)',
+                        border: '1.5px solid var(--red)',
+                      }}
+                      title="この日は運転手（is_driver=true）の出勤がありません。自動割り当てが成立しない・左スロットが空になります。人員調整してください。"
+                    >
+                      ⚠ 運転手不在
+                    </span>
+                  )}
+                </>
+              );
+            })()}
+            {/* Phase 58: 「未割当 N件」バッジ削除。完成状態はヘッダー/サイドバーに集約。
+                この行は当日の 🔒 / ✏️ など日単位の情報に特化 */}
+            {/* Phase 45+57: 当日がロック済み かつ 未保存編集なしなら 🔒 を表示。
+                編集中は「編集 = 自動ロック解除」の UX に合わせて非表示（保存で再度ロック状態へ）。
+                狭幅では「(再生成スキップ)」テキストを折り畳み、🔒 保存済 のみ表示。 */}
+            {pendingCountForDay === 0 &&
+              transportAssignments.some(
+                (t) =>
+                  t.is_locked &&
+                  scheduleEntries.some((e) => e.id === t.schedule_entry_id && e.date === selectedDate),
+              ) && (
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded"
+                  style={{
+                    background: 'var(--accent-pale)',
+                    color: 'var(--accent)',
+                    border: '1px solid var(--accent)',
+                  }}
+                  title="この日は手動で保存済みです。再生成でスキップされます。編集すれば自動で解除されます。"
+                >
+                  🔒 保存済<span className="hidden sm:inline">(再生成スキップ)</span>
+                </span>
+              )}
+            {/* Phase 57: 未保存編集がある日のみ。「編集 = 自動ロック解除」を視覚化 */}
+            {pendingCountForDay > 0 && (
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded"
+                style={{
+                  background: 'rgba(212,160,23,0.1)',
+                  color: 'var(--gold, #b8860b)',
+                  border: '1px solid var(--gold, #d4a017)',
+                }}
+                title="未保存の編集があります。保存するまで再生成では更新されません。"
+              >
+                ✏️ 編集中<span className="hidden sm:inline">（{pendingCountForDay}件未保存）</span>
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
             {/* Phase 51: 送迎表作成中にシフト外の職員を当日出勤扱いにして担当に立てるための導線 */}
             {(myRole === 'admin' || myRole === 'editor') && (
               <Button
@@ -1005,10 +1050,11 @@ export default function TransportPage() {
                 ＋ シフト追加
               </Button>
             )}
-            {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示 */}
-            {generated && !confirmed && myRole !== 'viewer' && (
-              <Button variant="primary" onClick={handleConfirm} disabled={unassignedTotal > 0}>
-                {unassignedTotal > 0 ? '未割当あり（確定不可）' : '送迎表確定'}
+            {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示
+                Phase 57: 未割当ありの時は確定ボタンを非表示（上の「未割当 N件」バッジと重複するため） */}
+            {generated && !confirmed && unassignedTotal === 0 && myRole !== 'viewer' && (
+              <Button variant="primary" onClick={handleConfirm}>
+                送迎表確定
               </Button>
             )}
             {myRole !== 'viewer' && (
@@ -1089,6 +1135,10 @@ export default function TransportPage() {
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
               onStaffChange={handleStaffChange}
+              /* Phase 58: 当日がロック済み（保存済み）かどうか。
+                 false = 自動割り当ての未保存状態 → StaffSelect は薄いグレーで「仮状態」を示す。
+                 true = 手動保存済み → StaffSelect は白。編集で pending が立つと呼び出し側で再計算。 */
+              dayLocked={dayStates.get(selectedDate)?.locked === true}
               /* Phase 55b: viewer は閲覧のみ。担当セル操作・列並び替え・保存系を全ロック。
                  確定済み月も従来通り読み取り専用。 */
               disabled={confirmed || myRole === 'viewer'}
@@ -1176,21 +1226,66 @@ export default function TransportPage() {
                 {staff
                   .filter((s) => s.is_active !== false)
                   .map((s) => {
-                    const hasShift = shiftAssignments.some(
-                      (sa) =>
-                        sa.staff_id === s.id &&
-                        sa.date === selectedDate &&
-                        sa.assignment_type === 'normal',
+                    const dayAssignments = shiftAssignments.filter(
+                      (sa) => sa.staff_id === s.id && sa.date === selectedDate,
                     );
+                    const hasShift = dayAssignments.some((sa) => sa.assignment_type === 'normal');
+                    /* Phase 57: 休み希望が反映された当日のシフト状態を警告表示。
+                       public_holiday / paid_leave / off のいずれかなら「⚠ 本来は休み」として注意喚起。
+                       選択自体は許可（admin/editor 判断で上書き出勤扱いにできる）。 */
+                    const leaveTypes = ['public_holiday', 'paid_leave', 'off'] as const;
+                    const leave = dayAssignments.find((sa) =>
+                      (leaveTypes as readonly string[]).includes(sa.assignment_type),
+                    );
+                    const leaveLabel =
+                      leave?.assignment_type === 'public_holiday'
+                        ? '公休'
+                        : leave?.assignment_type === 'paid_leave'
+                        ? '有給'
+                        : leave?.assignment_type === 'off'
+                        ? '休み'
+                        : null;
+                    let suffix = '';
+                    if (leaveLabel) suffix = `  ⚠ 本来は${leaveLabel}`;
+                    else if (hasShift) suffix = '（既にシフトあり → 分割追加）';
                     return (
                       <option key={s.id} value={s.id}>
-                        {s.name}
-                        {hasShift ? '（既にシフトあり → 分割追加）' : ''}
+                        {s.name}{suffix}
                       </option>
                     );
                   })}
               </select>
             </label>
+            {/* Phase 57: 選択中の職員が当日「休み扱い」なら警告表示（admin/editor 判断で続行は可） */}
+            {(() => {
+              if (!addShiftModal.staffId) return null;
+              const leaveTypes = ['public_holiday', 'paid_leave', 'off'];
+              const leave = shiftAssignments.find(
+                (sa) =>
+                  sa.staff_id === addShiftModal.staffId &&
+                  sa.date === selectedDate &&
+                  leaveTypes.includes(sa.assignment_type),
+              );
+              if (!leave) return null;
+              const label =
+                leave.assignment_type === 'public_holiday'
+                  ? '公休'
+                  : leave.assignment_type === 'paid_leave'
+                  ? '有給'
+                  : '休み';
+              return (
+                <div
+                  className="text-xs px-3 py-2 rounded"
+                  style={{
+                    background: 'rgba(212,160,23,0.1)',
+                    color: 'var(--gold, #b8860b)',
+                    border: '1px solid var(--gold, #d4a017)',
+                  }}
+                >
+                  ⚠ この職員は当日「{label}」扱いです。出勤として追加すると現在のシフトが上書きされます。
+                </div>
+              );
+            })()}
             <div className="flex gap-3">
               <label className="flex-1 flex flex-col gap-1">
                 <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>開始</span>
@@ -1350,84 +1445,4 @@ function ToastBanner({
   );
 }
 
-
-/* Phase 38: 「年月日(曜日)」表示 + クリックでネイティブカレンダーを開く日付ピッカー。
-   ヘッダーの長い日付タブ列が伸びても、ここから直接日付ジャンプ可能。 */
-function DateHeaderPicker({
-  year,
-  month,
-  selectedDate,
-  workDays,
-  onChange,
-}: {
-  year: number;
-  month: number;
-  selectedDate: string;
-  workDays: string[];
-  onChange: (d: string) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
-
-  let label = `${year}年${month}月`;
-  if (selectedDate) {
-    const dt = new Date(selectedDate);
-    if (!isNaN(dt.getTime())) {
-      label = `${year}年${month}月${dt.getDate()}日（${DOW[dt.getDay()]}）`;
-    }
-  }
-
-  const minDate = workDays[0] ?? `${year}-${String(month).padStart(2, '0')}-01`;
-  const maxDate = workDays[workDays.length - 1] ?? minDate;
-
-  return (
-    <div className="relative inline-flex items-center">
-      <button
-        type="button"
-        onClick={() => {
-          const el = inputRef.current;
-          if (!el) return;
-          if (typeof el.showPicker === 'function') el.showPicker();
-          else el.click();
-        }}
-        className="text-lg font-bold inline-flex items-center gap-2 cursor-pointer transition-all"
-        style={{
-          color: 'var(--ink)',
-          background: 'var(--white)',
-          border: '1.5px solid var(--accent)',
-          borderRadius: '8px',
-          padding: '6px 14px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--accent-pale)';
-          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.10)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--white)';
-          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
-        }}
-        title="日付を選択して遷移"
-        aria-label={`${label} の日付を変更`}
-      >
-        <span>{label}</span>
-        <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>📅</span>
-      </button>
-      <input
-        ref={inputRef}
-        type="date"
-        value={selectedDate}
-        min={minDate}
-        max={maxDate}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v) onChange(v);
-        }}
-        className="absolute inset-0 opacity-0 pointer-events-none"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-    </div>
-  );
-}
 

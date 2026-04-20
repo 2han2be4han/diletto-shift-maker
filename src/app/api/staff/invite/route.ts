@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
     role: StaffRole;
     employment_type?: EmploymentType;
     is_qualified?: boolean;
+    /** Phase 59 */
+    is_driver?: boolean;
+    is_attendant?: boolean;
     default_start_time?: string | null;
     default_end_time?: string | null;
     transport_areas?: string[];
@@ -74,6 +77,9 @@ export async function POST(request: NextRequest) {
         ? body.dropoff_transport_areas
         : (Array.isArray(body.transport_areas) ? body.transport_areas : []),
       qualifications: body.qualifications ?? [],
+      /* Phase 59: 招待時の運転手/付き添い初期値。未指定は false */
+      is_driver: body.is_driver ?? false,
+      is_attendant: body.is_attendant ?? false,
     })
     .select()
     .single();

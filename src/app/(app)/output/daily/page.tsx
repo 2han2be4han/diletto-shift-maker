@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, subDays } from 'date-fns';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import { defaultOutputDate, toDateString, nextBusinessDay } from '@/lib/dates/nextBusinessDay';
+import DateStepper from '@/components/ui/DateStepper';
+import { defaultOutputDate } from '@/lib/dates/nextBusinessDay';
+import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
 import type {
   StaffRow,
   ChildRow,
@@ -444,6 +445,12 @@ export default function DailyOutputPage() {
   const monthLabel = `${dateObj.getMonth() + 1}月`;
   const dayLabel = `${dateObj.getDate()}`;
   const weekLabel = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+  /* Phase 58-fix: 日次出力の見出しも土日祝で色変化 */
+  const dayOfWeek = dateObj.getDay();
+  const isHolidayDay = isJpHoliday(date);
+  const holidayName = isHolidayDay ? jpHolidayName(date) : null;
+  const headingColor =
+    isHolidayDay || dayOfWeek === 0 ? 'var(--red)' : dayOfWeek === 6 ? 'var(--accent)' : 'var(--ink)';
 
   return (
     <div className="flex flex-col h-full overflow-hidden daily-output-root">
@@ -523,38 +530,16 @@ export default function DailyOutputPage() {
       <Header
         title="日次出力"
         actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setDate(toDateString(subDays(new Date(date), 1)))}
-            >
-              ← 前日
-            </Button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="px-2 py-1 rounded text-sm"
-              style={{ border: '1px solid var(--rule)' }}
-            />
-            <Button
-              variant="secondary"
-              onClick={() => setDate(toDateString(addDays(new Date(date), 1)))}
-            >
-              翌日 →
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setDate(toDateString(nextBusinessDay(new Date())))}
-            >
-              今日/翌営業日
-            </Button>
-            <Button variant="primary" onClick={handlePrint}>
-              🖨 印刷 / PDF保存
-            </Button>
-          </>
+          <Button variant="primary" onClick={handlePrint}>
+            🖨 印刷 / PDF保存
+          </Button>
         }
       />
+
+      {/* Phase 58-fix: 日次出力も送迎表と同じ DateStepper に統一（土日祝色付き・祝日名併記） */}
+      <div className="px-6 pt-3">
+        <DateStepper value={date} onChange={setDate} />
+      </div>
 
       <div className="flex-1 overflow-auto p-3 lg:p-6" style={{ background: 'var(--white)' }}>
         {error && (
@@ -603,9 +588,15 @@ export default function DailyOutputPage() {
                   >
                     <span
                       className="text-2xl font-black whitespace-nowrap"
-                      style={{ color: 'var(--ink)' }}
+                      style={{ color: headingColor }}
+                      title={holidayName ?? undefined}
                     >
                       {monthLabel}{dayLabel}日({weekLabel})
+                      {holidayName && (
+                        <span className="text-sm font-semibold ml-2" style={{ color: 'var(--red)' }}>
+                          {holidayName}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div>
