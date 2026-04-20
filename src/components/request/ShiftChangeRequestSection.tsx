@@ -133,7 +133,7 @@ export default function ShiftChangeRequestSection({ myStaffId }: Props) {
 
   return (
     <div
-      className="mt-6 p-4 rounded"
+      className="p-4 rounded"
       style={{ background: 'var(--white)', border: '1px solid var(--rule)' }}
     >
       <h3 className="text-md font-bold mb-3" style={{ color: 'var(--ink)' }}>

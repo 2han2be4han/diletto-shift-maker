@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
   const gate = await requireRole('viewer');
   if (!gate.ok) return gate.response;
 
-  const from = request.nextUrl.searchParams.get('from');
-  const to = request.nextUrl.searchParams.get('to');
+  const fromStr = request.nextUrl.searchParams.get('from');
+  const toStr = request.nextUrl.searchParams.get('to');
+
+  /* Phase 60: 閲覧者・編集者の参照制限（過去2日前〜7日後） */
+  const { capRange } = await import('@/lib/date/dateLimit');
+  const { from, to } = capRange(fromStr, toStr, gate.staff.role);
 
   const supabase = await createClient();
   /* schedule_entries と JOIN して date を取得 */

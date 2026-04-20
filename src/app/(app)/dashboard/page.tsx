@@ -182,8 +182,8 @@ export default async function DashboardPage() {
                   border: '1px solid var(--rule)',
                 }}
               >
-                {/* Phase 60: 各カード右上に月次状態バッジ（対象月は来月） */}
-                {status && (
+                {/* Phase 60: 各カード右上に月次状態バッジ（対象月は来月） - 閲覧者は非表示 */}
+                {staff?.role !== 'viewer' && status && (
                   <div className="absolute top-3 right-3">
                     <MonthStatusBadge status={status} month={targetMonthStr} compact />
                   </div>

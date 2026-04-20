@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { format, getDaysInMonth } from 'date-fns';
 import { useTransportDate } from '@/hooks/useTransportDate';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
 import DateStepper from '@/components/ui/DateStepper';
 import type { DayState } from '@/components/ui/DatePopover';
 import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
@@ -905,8 +906,8 @@ export default function TransportPage() {
         title="送迎表"
         actions={
           <>
-            {/* Phase 58: 月の完成状態バッジ（送迎表は全行 is_confirmed かつ 未割当ゼロで complete） */}
-            {(() => {
+            {/* Phase 58: 月の完成状態バッジ - 閲覧者には非表示 */}
+            {myRole !== 'viewer' && (() => {
               const monthStr = `${year}-${String(month).padStart(2, '0')}`;
               const status: 'empty' | 'incomplete' | 'complete' =
                 transportAssignments.length === 0
@@ -938,7 +939,6 @@ export default function TransportPage() {
       <div className="px-2 py-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            {/* Phase 58-fix: 確定/未確定バッジは Header の MonthStatusBadge に集約したため削除（重複防止） */}
             {/* Phase 58-fix: 送迎表の当日利用人数（schedule_entries ベース、attendance_status='absent' は除外） */}
             {(() => {
               const dayEntries = scheduleEntries.filter(
@@ -992,11 +992,7 @@ export default function TransportPage() {
                 </>
               );
             })()}
-            {/* Phase 58: 「未割当 N件」バッジ削除。完成状態はヘッダー/サイドバーに集約。
-                この行は当日の 🔒 / ✏️ など日単位の情報に特化 */}
-            {/* Phase 45+57: 当日がロック済み かつ 未保存編集なしなら 🔒 を表示。
-                編集中は「編集 = 自動ロック解除」の UX に合わせて非表示（保存で再度ロック状態へ）。
-                狭幅では「(再生成スキップ)」テキストを折り畳み、🔒 保存済 のみ表示。 */}
+            {/* Phase 45+57: 当日がロック済み かつ 未保存編集なしなら 🔒 を表示。閲覧者にも表示。 */}
             {pendingCountForDay === 0 &&
               transportAssignments.some(
                 (t) =>
@@ -1015,7 +1011,7 @@ export default function TransportPage() {
                   🔒 保存済<span className="hidden sm:inline">(再生成スキップ)</span>
                 </span>
               )}
-            {/* Phase 57: 未保存編集がある日のみ。「編集 = 自動ロック解除」を視覚化 */}
+            {/* Phase 57: 未保存編集がある日のみ。閲覧者にも表示。 */}
             {pendingCountForDay > 0 && (
               <span
                 className="text-xs font-semibold px-2 py-1 rounded"
@@ -1032,7 +1028,7 @@ export default function TransportPage() {
           </div>
           <div className="flex gap-2">
             {/* Phase 51: 送迎表作成中にシフト外の職員を当日出勤扱いにして担当に立てるための導線 */}
-            {(myRole === 'admin' || myRole === 'editor') && (
+            {myRole !== 'viewer' && (myRole === 'admin' || myRole === 'editor') && (
               <Button
                 variant="secondary"
                 onClick={() =>
@@ -1050,8 +1046,7 @@ export default function TransportPage() {
                 ＋ シフト追加
               </Button>
             )}
-            {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示
-                Phase 57: 未割当ありの時は確定ボタンを非表示（上の「未割当 N件」バッジと重複するため） */}
+            {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示 */}
             {generated && !confirmed && unassignedTotal === 0 && myRole !== 'viewer' && (
               <Button variant="primary" onClick={handleConfirm}>
                 送迎表確定
@@ -1096,6 +1091,24 @@ export default function TransportPage() {
 
         {loading ? (
           <div className="py-20 text-center text-sm" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
+        ) : isDateOutOfRange(selectedDate, myRole) ? (
+          <div
+            className="py-24 text-center border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-4"
+            style={{
+              background: 'rgba(0,0,0,0.02)',
+              borderColor: 'var(--rule)',
+            }}
+          >
+            <span style={{ fontSize: '3rem', opacity: 0.3 }}>🔒</span>
+            <div className="flex flex-col gap-1">
+              <p className="font-bold" style={{ color: 'var(--ink-2)' }}>
+                閲覧制限エリア
+              </p>
+              <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
+                閲覧権限により、過去2日前から7日間先までの予定のみ参照可能です。
+              </p>
+            </div>
+          </div>
         ) : (
           <>
             {/* Phase 39: 日付タブ列は撤去（横長で煩雑）。日付遷移はヘッダーの DateHeaderPicker（📅）に集約 */}

@@ -23,17 +23,19 @@ const STORAGE_KEY = 'shift-puzzle.current-month';
 type MonthStepperProps = {
   /** ⟪ / ⟫（年送り）を表示するか。デフォルト false（シフト/利用表などでは不要との要望） */
   showYearJump?: boolean;
+  /** 初期表示月 (YYYY-MM)。指定がない場合は「今月」 */
+  defaultMonth?: string;
 };
 
-export default function MonthStepper({ showYearJump = false }: MonthStepperProps = {}) {
+export default function MonthStepper({ showYearJump = false, defaultMonth }: MonthStepperProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const urlMonth = searchParams.get('month');
   const isValid = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth);
-  const current = isValid ? urlMonth : nextMonthStr();
   const thisMonth = thisMonthStr();
+  const current = isValid ? urlMonth : (defaultMonth || thisMonth);
   const isCurrentMonth = current === thisMonth;
 
   const setMonth = (next: string) => {

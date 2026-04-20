@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { addMonths, getDay, getDaysInMonth, startOfMonth, subMonths } from 'date-fns';
 import { todayStr } from '@/lib/date/isToday';
 import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
+import { useCurrentStaff } from '@/components/layout/AppShell';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
 
 export type DayState = {
   locked?: boolean;
@@ -73,6 +75,8 @@ export default function DatePopover({
 
   const { year, month } = viewYm;
   const today = todayStr();
+  const { staff } = useCurrentStaff();
+  const role = staff?.role ?? 'viewer';
 
   const cells = useMemo(() => {
     const first = startOfMonth(new Date(year, month - 1, 1));
@@ -173,8 +177,12 @@ export default function DatePopover({
           const isWeekend = c.dow === 0 || c.dow === 6;
           const holiday = c.date ? isJpHoliday(c.date) : false;
           const holidayName = holiday && c.date ? jpHolidayName(c.date) : null;
+          const isDisabled = c.date ? isDateOutOfRange(c.date, role) : false;
+
           const color = isSelected
             ? 'var(--white)'
+            : isDisabled
+            ? 'var(--ink-3)'
             : holiday || c.dow === 0
             ? 'var(--red)'
             : c.dow === 6
@@ -185,8 +193,9 @@ export default function DatePopover({
             <button
               key={idx}
               type="button"
-              onClick={() => c.date && onChange(c.date)}
-              className="relative h-9 w-full rounded-md text-sm font-medium transition-all"
+              onClick={() => c.date && !isDisabled && onChange(c.date)}
+              disabled={isDisabled}
+              className="relative h-9 w-full rounded-md text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               style={{
                 background: isSelected ? 'var(--accent)' : 'transparent',
                 color,
@@ -194,14 +203,14 @@ export default function DatePopover({
                 fontWeight: isSelected || isToday ? 700 : 500,
               }}
               onMouseEnter={(e) => {
-                if (!isSelected) e.currentTarget.style.background = 'var(--accent-pale)';
+                if (!isSelected && !isDisabled) e.currentTarget.style.background = 'var(--accent-pale)';
               }}
               onMouseLeave={(e) => {
-                if (!isSelected) e.currentTarget.style.background = 'transparent';
+                if (!isSelected && !isDisabled) e.currentTarget.style.background = 'transparent';
               }}
               aria-pressed={isSelected}
-              aria-label={`${year}年${month}月${c.day}日${isToday ? '（今日）' : ''}${holidayName ? `（${holidayName}）` : ''}${isWeekend ? '' : ''}`}
-              title={holidayName ?? undefined}
+              aria-label={`${year}年${month}月${c.day}日${isToday ? '（今日）' : ''}${holidayName ? `（${holidayName}）` : ''}${isDisabled ? '（参照制限あり）' : ''}`}
+              title={isDisabled ? '閲覧制限により選択できません' : (holidayName ?? undefined)}
             >
               <span>{c.day}</span>
               {/* ドット: 編集中 = gold / 🔒保存済 = accent / ⚠未割当 = red（編集中は保存済を上書き非表示） */}
@@ -289,4 +298,3 @@ export default function DatePopover({
     </div>
   );
 }
-

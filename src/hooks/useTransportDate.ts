@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { todayStr } from '@/lib/date/isToday';
+import { useCurrentStaff } from '@/components/layout/AppShell';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
 
 /**
  * 送迎表の「表示月 + 選択日」を URL を唯一の真実として扱う派生フック。
@@ -40,30 +42,41 @@ export function useTransportDate(): UseTransportDate {
   const urlMonth = searchParams.get('month');
   const urlDate = searchParams.get('date');
 
+  const { staff } = useCurrentStaff();
+  const role = staff?.role ?? 'viewer';
+
   const { year, month, monthStr } = useMemo(() => {
     /* 年月の決定順: ?date= > ?month= > 来月デフォルト。
        ?date= があれば月情報はそこから導出できるため、URL に ?month= を重ねない（冗長防止）。 */
     let source: string;
     if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
-      source = urlDate.slice(0, 7);
+      /* Phase 60: 参照制限チェック（URL書き換えによる不正アクセス防止） */
+      if (isDateOutOfRange(urlDate, role)) {
+        source = todayStr().slice(0, 7);
+      } else {
+        source = urlDate.slice(0, 7);
+      }
     } else if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
       source = urlMonth;
     } else {
-      source = defaultNextMonthStr();
+      /* Phase 60: ロールに応じたデフォルト日付。管理者は来月、閲覧者・編集者は今月(今日) */
+      source = (role === 'admin') ? defaultNextMonthStr() : todayStr().slice(0, 7);
     }
     const [y, m] = source.split('-').map(Number);
-    return { year: y, month: m, monthStr: source };
-  }, [urlMonth, urlDate]);
+    return { year: y, month, monthStr: source };
+  }, [urlMonth, urlDate, role]);
 
   /* date は URL のみから決定論的に派生。SSR/初期レンダも同じ結果になる。 */
   const date = useMemo(() => {
     if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate) && urlDate.slice(0, 7) === monthStr) {
+      /* Phase 60: 参照制限チェック */
+      if (isDateOutOfRange(urlDate, role)) return todayStr();
       return urlDate;
     }
     const today = todayStr();
     if (today.slice(0, 7) === monthStr) return today;
     return `${monthStr}-01`;
-  }, [urlDate, monthStr]);
+  }, [urlDate, monthStr, role]);
 
   /* マウント時 & 月変更時の同期点（1本のみ）:
      - URL ?date が無効/未指定 & sessionStorage に当月保存値あり → URL に昇格
@@ -112,6 +125,13 @@ export function useTransportDate(): UseTransportDate {
   const setDate = useCallback(
     (newDate: string) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
+      
+      /* Phase 60: 参照制限チェック */
+      if (isDateOutOfRange(newDate, role)) {
+        alert('閲覧権限により、過去2日前から7日間先までの予定のみ参照可能です。');
+        return;
+      }
+
       const newMonthStr = newDate.slice(0, 7);
       /* 月ごとの sessionStorage を更新（跨いだ先の月のキーに保存） */
       try {
@@ -126,7 +146,7 @@ export function useTransportDate(): UseTransportDate {
       
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, role],
   );
 
   return { year, month, monthStr, date, setDate };

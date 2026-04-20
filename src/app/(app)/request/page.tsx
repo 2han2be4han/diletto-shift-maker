@@ -61,36 +61,48 @@ export default async function RequestPage({
       <Header title="休み希望" actions={showAdminView ? <RequestPrintButton /> : undefined} />
 
       <div className="px-6 pt-3">
-        <MonthStepper />
+        <div className="max-w-7xl mx-auto w-full">
+          <MonthStepper defaultMonth={defaultMonth} />
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
-            {target.getFullYear()}年{target.getMonth() + 1}月分
-          </h2>
-          <Badge variant="info">
-            {showAdminView ? '管理者ビュー' : 'あなたの希望入力'}
-          </Badge>
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
+              {target.getFullYear()}年{target.getMonth() + 1}月分
+            </h2>
+            <Badge variant="info">
+              {showAdminView ? '管理者ビュー' : 'あなたの希望入力'}
+            </Badge>
+          </div>
+
+          {showAdminView ? (
+            <>
+              <AdminRequestList
+                staff={allStaff}
+                initialRequests={allRequests}
+                targetMonth={targetMonth}
+              />
+              {/* Phase 25: シフト変更申請（全ロール共通） */}
+              <ShiftChangeRequestSection myStaffId={staff.id} />
+            </>
+          ) : (
+            <div className="flex flex-col xl:flex-row items-start gap-8">
+              <div className="flex-1 w-full xl:max-w-xl">
+                <MyRequestCalendar
+                  myStaffId={staff.id}
+                  myStaffName={staff.name}
+                  targetMonth={targetMonth}
+                  initialRequests={(myRequests as ShiftRequestRow[]) ?? []}
+                />
+              </div>
+              <div className="flex-1 w-full xl:max-w-md">
+                <ShiftChangeRequestSection myStaffId={staff.id} />
+              </div>
+            </div>
+          )}
         </div>
-
-        {showAdminView ? (
-          <AdminRequestList
-            staff={allStaff}
-            initialRequests={allRequests}
-            targetMonth={targetMonth}
-          />
-        ) : (
-          <MyRequestCalendar
-            myStaffId={staff.id}
-            myStaffName={staff.name}
-            targetMonth={targetMonth}
-            initialRequests={(myRequests as ShiftRequestRow[]) ?? []}
-          />
-        )}
-
-        {/* Phase 25: シフト変更申請（全ロール共通） */}
-        <ShiftChangeRequestSection myStaffId={staff.id} />
       </div>
     </div>
   );

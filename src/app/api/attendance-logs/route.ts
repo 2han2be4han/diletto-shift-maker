@@ -15,8 +15,12 @@ export async function GET(request: NextRequest) {
   if (!gate.ok) return gate.response;
 
   const entryId = request.nextUrl.searchParams.get('entry_id');
-  const from = request.nextUrl.searchParams.get('from');
-  const to = request.nextUrl.searchParams.get('to');
+  const fromStr = request.nextUrl.searchParams.get('from');
+  const toStr = request.nextUrl.searchParams.get('to');
+
+  /* Phase 60: 閲覧者・編集者の参照制限（過去2日前〜7日後） */
+  const { capRange } = await import('@/lib/date/dateLimit');
+  const { from, to } = capRange(fromStr, toStr, gate.staff.role);
 
   const supabase = await createClient();
   let q = supabase

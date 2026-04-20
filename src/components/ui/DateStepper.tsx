@@ -6,6 +6,8 @@ import { ja } from 'date-fns/locale';
 import DatePopover, { DayState } from './DatePopover';
 import { todayStr } from '@/lib/date/isToday';
 import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
+import { useCurrentStaff } from '@/components/layout/AppShell';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
 
 type DateStepperProps = {
   value: string; // YYYY-MM-DD
@@ -29,7 +31,6 @@ export default function DateStepper({ value, onChange, dayStates }: DateStepperP
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const today = todayStr();
-
   const dt = /^\d{4}-\d{2}-\d{2}$/.test(value) ? toDate(value) : new Date();
   const label = format(dt, 'yyyy年M月d日（E）', { locale: ja });
   const isToday = value === today;
@@ -39,10 +40,22 @@ export default function DateStepper({ value, onChange, dayStates }: DateStepperP
   const holidayName = holiday ? jpHolidayName(value) : null;
   const labelColor = holiday || dow === 0 ? 'var(--red)' : dow === 6 ? 'var(--accent)' : 'var(--ink)';
 
+  const { staff } = useCurrentStaff();
+  const role = staff?.role ?? 'viewer';
+
+  const nextDayStr = toStr(addDays(dt, 1));
+  const isNextDayDisabled = isDateOutOfRange(nextDayStr, role);
+
+  const nextMonthFirstDay = startOfMonth(addMonths(dt, 1));
+  const isNextMonthDisabled = isDateOutOfRange(toStr(nextMonthFirstDay), role);
+
+  const prevDayStr = toStr(subDays(dt, 1));
+  const isPrevDayDisabled = isDateOutOfRange(prevDayStr, role);
+
   /* 月境界までの差分で disabled 判定（翌月・前月ボタンは常に有効、前日・翌日は月境界でも効く設計でも良いが
      ここは UX 優先で常に有効にする = クリックで自然に月も跨ぐ） */
   const goPrevDay = () => onChange(toStr(subDays(dt, 1)));
-  const goNextDay = () => onChange(toStr(addDays(dt, 1)));
+  const goNextDay = () => !isNextDayDisabled && onChange(nextDayStr);
   const goPrevMonth = () => {
     const prev = subMonths(dt, 1);
     /* 日数の少ない月に移動した時は末日にクリップ */
@@ -51,6 +64,7 @@ export default function DateStepper({ value, onChange, dayStates }: DateStepperP
     onChange(toStr(target));
   };
   const goNextMonth = () => {
+    if (isNextMonthDisabled) return;
     const next = addMonths(dt, 1);
     const clip = Math.min(dt.getDate(), getDaysInMonth(next));
     const target = new Date(next.getFullYear(), next.getMonth(), clip);
@@ -64,7 +78,7 @@ export default function DateStepper({ value, onChange, dayStates }: DateStepperP
     border: '1px solid var(--rule)',
     borderRadius: '6px',
   };
-  const chevronBtn = 'w-8 h-8 inline-flex items-center justify-center text-sm font-semibold transition-colors';
+  const chevronBtn = 'w-8 h-8 inline-flex items-center justify-center text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
 
   const firstOfMonth = startOfMonth(dt);
   const lastOfMonth = endOfMonth(dt);
@@ -87,11 +101,12 @@ export default function DateStepper({ value, onChange, dayStates }: DateStepperP
         <button
           type="button"
           onClick={goPrevDay}
+          disabled={isPrevDayDisabled}
           className={chevronBtn}
           style={btnBase}
           aria-label="前の日"
           title={isSameDay(dt, firstOfMonth) ? '前月末日へ' : '前の日'}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-pale)'; e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseEnter={(e) => { if (!isPrevDayDisabled) { e.currentTarget.style.background = 'var(--accent-pale)'; e.currentTarget.style.color = 'var(--accent)'; } }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--white)'; e.currentTarget.style.color = 'var(--ink-2)'; }}
         >
           ‹

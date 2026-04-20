@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { format, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { useCurrentStaff } from '@/components/layout/AppShell';
 import type {
   ParsedScheduleEntry,
   ChildRow,
@@ -93,17 +94,16 @@ function ToggleGroup({
 }
 
 /** Phase 25: URL ?month=YYYY-MM を正。未指定時は来月 */
-function defaultNextMonthStr(): string {
+function defaultCurrentMonthStr(): string {
   const d = new Date();
-  const t = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export default function SchedulePage() {
   const searchParams = useSearchParams();
   const urlMonth = searchParams.get('month');
   const { year, month } = useMemo(() => {
-    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
+    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultCurrentMonthStr();
     const [y, m] = source.split('-').map(Number);
     return { year: y, month: m };
   }, [urlMonth]);
@@ -386,6 +386,9 @@ export default function SchedulePage() {
     border: 'none', borderBottom: '2px solid var(--accent)', outline: 'none',
   };
 
+  const { staff: currentStaff } = useCurrentStaff();
+  const myRole = currentStaff?.role ?? 'viewer';
+
   return (
     <div className="flex flex-col h-full overflow-hidden schedule-print-root">
       {/* Phase 47: 利用予定印刷 CSS。A3 横 1 枚に強制収納。
@@ -472,13 +475,17 @@ export default function SchedulePage() {
         actions={
           <>
             <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">🖨 印刷</Button>
-            <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
-            <Button variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
+            {myRole !== 'viewer' && (
+              <>
+                <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
+                <Button variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
+              </>
+            )}
           </>
         }
       />
       <div className="px-6 pt-3">
-        <MonthStepper />
+        <MonthStepper defaultMonth={defaultCurrentMonthStr()} />
       </div>
 
       <div className="px-6 flex-1 overflow-hidden flex flex-col mt-2">
@@ -502,6 +509,7 @@ export default function SchedulePage() {
             children={childrenForGrid}
             cells={cells}
             onCellClick={handleCellClick}
+            myRole={myRole}
           />
         )}
       </div>
@@ -652,8 +660,12 @@ export default function SchedulePage() {
             </div>
 
             <div className="flex gap-2 mt-2">
-              <Button variant="secondary" onClick={() => setSelectedCell(null)}>キャンセル</Button>
-              <Button variant="primary" onClick={handleSave}>保存</Button>
+              <Button variant="secondary" onClick={() => setSelectedCell(null)}>
+                {myRole === 'viewer' ? '閉じる' : 'キャンセル'}
+              </Button>
+              {myRole !== 'viewer' && (
+                <Button variant="primary" onClick={handleSave}>保存</Button>
+              )}
             </div>
           </div>
         )}

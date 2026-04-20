@@ -32,10 +32,9 @@ import type {
  */
 
 /** Phase 25: URL ?month=YYYY-MM。デフォルトは来月 */
-function defaultNextMonthStr(): string {
+function defaultCurrentMonthStr(): string {
   const d = new Date();
-  const t = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 type ShiftCell = {
@@ -54,7 +53,7 @@ export default function ShiftPage() {
   const searchParams = useSearchParams();
   const urlMonth = searchParams.get('month');
   const { year, month } = useMemo(() => {
-    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultNextMonthStr();
+    const source = urlMonth && /^\d{4}-\d{2}$/.test(urlMonth) ? urlMonth : defaultCurrentMonthStr();
     const [y, m] = source.split('-').map(Number);
     return { year: y, month: m };
   }, [urlMonth]);
@@ -330,8 +329,8 @@ export default function ShiftPage() {
      Phase 47: 印刷ボタン追加（cells があるときのみ表示） */
   const headerActions = (
     <div className="flex items-center gap-2">
-      {/* Phase 58: 月の完成状態 */}
-      {(() => {
+      {/* Phase 58: 月の完成状態 - 閲覧者には非表示 */}
+      {myRole !== 'viewer' && (() => {
         const monthStr = `${year}-${String(month).padStart(2, '0')}`;
         const status: 'empty' | 'incomplete' | 'complete' =
           cells.length === 0 ? 'empty' : confirmed ? 'complete' : 'incomplete';
@@ -342,13 +341,13 @@ export default function ShiftPage() {
           🖨 印刷
         </Button>
       )}
-      {cells.length > 0 && !confirmed && (
+      {myRole !== 'viewer' && cells.length > 0 && !confirmed && (
         <Button variant="secondary" onClick={handleGenerateWithGuard}>再生成</Button>
       )}
-      {cells.length > 0 && !confirmed && (
+      {myRole !== 'viewer' && cells.length > 0 && !confirmed && (
         <Button variant="primary" onClick={handleConfirm}>シフト確定</Button>
       )}
-      {confirmed && (
+      {myRole !== 'viewer' && confirmed && (
         <>
           <Button
             variant={editMode ? 'primary' : 'secondary'}
@@ -359,7 +358,7 @@ export default function ShiftPage() {
           <Button variant="secondary" onClick={handleUnconfirm}>確定解除</Button>
         </>
       )}
-      {cells.length === 0 && (
+      {myRole !== 'viewer' && cells.length === 0 && (
         <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
           シフト生成
         </Button>
@@ -418,7 +417,7 @@ export default function ShiftPage() {
 
       {/* Phase 57: 月ナビはヘッダーからページ本体に移動 */}
       <div className="px-6 pt-3">
-        <MonthStepper />
+        <MonthStepper defaultMonth={defaultCurrentMonthStr()} />
       </div>
 
       {/* Phase 37: ヘッダーと日付バーの間の上余白を撤去 (pt-0)、左右と下のみ余白を維持 */}
@@ -442,7 +441,7 @@ export default function ShiftPage() {
           </div>
         )}
 
-        {summary && summary.totalWarnings > 0 && (
+        {summary && summary.totalWarnings > 0 && myRole !== 'viewer' && (
           <div
             className="flex gap-3 mb-4 px-4 py-3 flex-wrap"
             style={{ background: 'var(--red-pale)', borderRadius: '8px', border: '1px solid rgba(155,51,51,0.15)' }}
@@ -484,9 +483,11 @@ export default function ShiftPage() {
             <p className="text-sm mb-6" style={{ color: 'var(--ink-3)' }}>
               利用予定と休み希望を元にシフトを自動生成します
             </p>
-            <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
-              シフト生成
-            </Button>
+            {myRole !== 'viewer' && (
+              <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
+                シフト生成
+              </Button>
+            )}
             {(staff.length === 0 || scheduleEntries.length === 0) && (
               <p className="text-xs mt-3" style={{ color: 'var(--red)' }}>
                 ※ 職員と利用予定が登録されている必要があります
@@ -556,8 +557,12 @@ export default function ShiftPage() {
             )}
 
             <div className="flex gap-2 mt-4">
-              <Button variant="secondary" className="flex-1" onClick={() => setEditingCell(null)}>キャンセル</Button>
-              <Button variant="primary" className="flex-1" onClick={handleSave}>保存する</Button>
+              <Button variant="secondary" className="flex-1" onClick={() => setEditingCell(null)}>
+                {myRole === 'viewer' ? '閉じる' : 'キャンセル'}
+              </Button>
+              {myRole !== 'viewer' && (
+                <Button variant="primary" className="flex-1" onClick={handleSave}>保存する</Button>
+              )}
             </div>
           </div>
         )}

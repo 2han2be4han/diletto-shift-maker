@@ -238,7 +238,7 @@ export default function MyRequestCalendar({
   };
 
   return (
-    <div className="max-w-lg">
+    <div className="w-full">
       <p className="text-sm mb-3" style={{ color: 'var(--ink-2)' }}>
         {myStaffName}さん、日付をタップして希望を選択してください。
       </p>

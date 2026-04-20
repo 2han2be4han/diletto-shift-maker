@@ -4,7 +4,8 @@ import React, { useEffect, useRef } from 'react';
 import { format, getDaysInMonth, getDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { todayStr } from '@/lib/date/isToday';
-import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
+import { StaffRole } from '@/types';
 
 /**
  * 利用予定グリッド（児童×日付）
@@ -40,6 +41,7 @@ type ScheduleGridProps = {
   children: ScheduleChild[];
   cells: ScheduleCellData[];
   onCellClick: (childId: string, date: string) => void;
+  myRole: StaffRole;
 };
 
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
@@ -54,11 +56,10 @@ function formatHM(raw: string | null | undefined): string {
 }
 
 export default function ScheduleGrid({
-  year,
-  month,
   children,
   cells,
   onCellClick,
+  myRole,
 }: ScheduleGridProps) {
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
   const dates: { day: number; dow: number; dateStr: string }[] = [];
@@ -215,22 +216,30 @@ export default function ScheduleGrid({
                 else if (isOff) bg = 'rgba(0,0,0,0.04)';
 
                 const isTodayCol = d.dateStr === today;
+                const isRestricted = isDateOutOfRange(d.dateStr, myRole);
+
                 return (
                   <td
                     key={d.dateStr}
-                    className="px-1 py-1 text-center cursor-pointer transition-colors group-hover:!bg-[var(--accent-pale)]"
+                    className={`px-1 py-1 text-center transition-colors ${!isRestricted ? 'cursor-pointer group-hover:!bg-[var(--accent-pale)]' : 'cursor-not-allowed'}`}
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
                       borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
-                      background: bg,
+                      background: isRestricted 
+                        ? 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.03) 5px, rgba(0,0,0,0.03) 10px), var(--bg)'
+                        : bg,
+                      opacity: isRestricted ? 0.7 : 1,
                     }}
-                    onClick={() => onCellClick(child.id, d.dateStr)}
+                    onClick={() => !isRestricted && onCellClick(child.id, d.dateStr)}
                     title={
+                      isRestricted ? '閲覧制限により表示できません' :
                       isAbsent ? '欠席' : isOff ? 'お休み' : hasTimes ? '出席' : '未入力（クリックで編集）'
                     }
                   >
-                    {cell?.note ? (
+                    {isRestricted ? (
+                      <span style={{ fontSize: '1rem', opacity: 0.4 }}>🔒</span>
+                    ) : cell?.note ? (
                       /* 追・休 や 定・休 などの特殊表示 */
                       <span
                         className="text-xs font-medium"
