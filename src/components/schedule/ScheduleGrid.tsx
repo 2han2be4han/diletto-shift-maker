@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import { format, getDaysInMonth, getDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { todayStr } from '@/lib/date/isToday';
+import { isJpHoliday, jpHolidayName } from '@/lib/date/holidays';
 import { isDateOutOfRange } from '@/lib/date/dateLimit';
 import { StaffRole } from '@/types';
 
