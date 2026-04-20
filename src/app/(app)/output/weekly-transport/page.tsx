@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { format, getDaysInMonth } from 'date-fns';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
+import { useCurrentStaff } from '@/components/layout/AppShell';
 import Header from '@/components/layout/Header';
 import MonthStepper from '@/components/ui/MonthStepper';
 import Button from '@/components/ui/Button';
@@ -97,6 +99,8 @@ export default function WeeklyTransportPrintPage() {
   const [transportAssignments, setTransportAssignments] = useState<TransportAssignmentRow[]>([]);
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
+  const { staff: currentStaff } = useCurrentStaff();
+  const myRole = currentStaff?.role ?? 'viewer';
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
@@ -297,9 +301,10 @@ export default function WeeklyTransportPrintPage() {
                       .fill(null)
                       .map((_, i) => realRows[i] ?? null);
                     const dt = new Date(date);
+                    const isRestricted = isInMonth && isDateOutOfRange(date, myRole);
                     const dayLabel = `${dt.getMonth() + 1}/${dt.getDate()}（${DOW_LABELS[dt.getDay()]}）`;
                     const dayLabelColor =
-                      !isInMonth ? 'var(--ink-3)' : dt.getDay() === 0 ? 'var(--red)' : dt.getDay() === 6 ? 'var(--accent)' : '#fff';
+                      isRestricted || !isInMonth ? 'var(--ink-3)' : dt.getDay() === 0 ? 'var(--red)' : dt.getDay() === 6 ? 'var(--accent)' : '#fff';
 
                     /* 場所ラベルの先頭絵文字（マーク）を抽出: "🐻 学校" → "🐻" */
                     const extractEmoji = (label: string | null | undefined): string => {
@@ -309,7 +314,18 @@ export default function WeeklyTransportPrintPage() {
                       return sp === -1 ? trimmed : trimmed.slice(0, sp);
                     };
                     return (
-                      <div key={date} className="day-block mb-2" style={{ opacity: isInMonth ? 1 : 0.45 }}>
+                      <div key={date} className="day-block mb-2" style={{ opacity: isInMonth ? 1 : 0.45, position: 'relative' }}>
+                        {isRestricted && (
+                          <div
+                            className="absolute inset-0 z-10 flex items-center justify-center"
+                            style={{
+                              background: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.02) 5px, rgba(0,0,0,0.02) 10px)',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            <span style={{ fontSize: '1.5rem', opacity: 0.15 }}>🔒</span>
+                          </div>
+                        )}
                         <table className="w-full border-collapse" style={{ fontSize: '0.74rem' }}>
                           {/* Phase 47: 場所列を 110px 固定で狭く、担当列を 130px に広げる */}
                           <colgroup>

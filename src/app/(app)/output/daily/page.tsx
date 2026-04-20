@@ -38,6 +38,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
 import { staffDisplayName } from '@/lib/utils/displayName';
+import { isDateOutOfRange } from '@/lib/date/dateLimit';
+import { useCurrentStaff } from '@/components/layout/AppShell';
 
 /** 児童名をマーク円内で 2 行表示するために分割。
     空白区切りがあればそこで分ける。無ければ文字列中央で分ける。2 文字以下は 1 行のまま。 */
@@ -120,6 +122,8 @@ export default function DailyOutputPage() {
   const [date, setDate] = useState(defaultOutputDate());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { staff: currentStaff } = useCurrentStaff();
+  const myRole = currentStaff?.role ?? 'viewer';
 
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [children, setChildren] = useState<ChildRow[]>([]);
@@ -561,6 +565,26 @@ export default function DailyOutputPage() {
         {loading ? (
           <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
             読み込み中...
+          </div>
+        ) : isDateOutOfRange(date, myRole) ? (
+          <div
+            className="py-32 text-center border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-4"
+            style={{
+              background: 'rgba(0,0,0,0.02)',
+              borderColor: 'var(--rule)',
+              maxWidth: '1100px',
+              margin: '0 auto',
+            }}
+          >
+            <span style={{ fontSize: '4rem', opacity: 0.3 }}>🔒</span>
+            <div className="flex flex-col gap-1">
+              <p className="text-xl font-bold" style={{ color: 'var(--ink-2)' }}>
+                閲覧制限エリア
+              </p>
+              <p style={{ color: 'var(--ink-3)' }}>
+                閲覧権限により、過去2日前から7日間先までの予定のみ参照可能です。
+              </p>
+            </div>
           </div>
         ) : (
           /* ホワイトボード本体: A3 縦に合わせた最大幅。常時 2-col（左=送迎, 右=勤務+休憩） */
