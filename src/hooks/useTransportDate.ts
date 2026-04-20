@@ -63,7 +63,7 @@ export function useTransportDate(): UseTransportDate {
       source = (role === 'admin') ? defaultNextMonthStr() : todayStr().slice(0, 7);
     }
     const [y, m] = source.split('-').map(Number);
-    return { year: y, month, monthStr: source };
+    return { year: y, month: m, monthStr: source };
   }, [urlMonth, urlDate, role]);
 
   /* date は URL のみから決定論的に派生。SSR/初期レンダも同じ結果になる。 */
