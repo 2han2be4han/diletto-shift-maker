@@ -1091,7 +1091,7 @@ export default function TransportPage() {
 
         {loading ? (
           <div className="py-20 text-center text-sm" style={{ color: 'var(--ink-3)' }}>読み込み中...</div>
-        ) : isDateOutOfRange(selectedDate, myRole) ? (
+        ) : isDateOutOfRange(selectedDate, myRole ?? 'viewer') ? (
           <div
             className="py-24 text-center border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-4"
             style={{

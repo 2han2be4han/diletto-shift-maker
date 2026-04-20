@@ -219,7 +219,7 @@ export default function ScheduleGrid({
                 else if (isOff) bg = 'rgba(0,0,0,0.04)';
 
                 const isTodayCol = d.dateStr === today;
-                const isRestricted = isDateOutOfRange(d.dateStr, myRole);
+                const isRestricted = isDateOutOfRange(d.dateStr, myRole ?? 'viewer');
 
                 return (
                   <td

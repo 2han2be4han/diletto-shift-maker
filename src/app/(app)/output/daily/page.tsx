@@ -566,7 +566,7 @@ export default function DailyOutputPage() {
           <div className="h-96 flex items-center justify-center text-sm" style={{ color: 'var(--ink-3)' }}>
             読み込み中...
           </div>
-        ) : isDateOutOfRange(date, myRole) ? (
+        ) : isDateOutOfRange(date, myRole ?? 'viewer') ? (
           <div
             className="py-32 text-center border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-4"
             style={{

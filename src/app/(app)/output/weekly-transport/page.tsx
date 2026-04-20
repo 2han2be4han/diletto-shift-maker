@@ -301,7 +301,7 @@ export default function WeeklyTransportPrintPage() {
                       .fill(null)
                       .map((_, i) => realRows[i] ?? null);
                     const dt = new Date(date);
-                    const isRestricted = isInMonth && isDateOutOfRange(date, myRole);
+                    const isRestricted = isInMonth && isDateOutOfRange(date, myRole ?? 'viewer');
                     const dayLabel = `${dt.getMonth() + 1}/${dt.getDate()}（${DOW_LABELS[dt.getDay()]}）`;
                     const dayLabelColor =
                       isRestricted || !isInMonth ? 'var(--ink-3)' : dt.getDay() === 0 ? 'var(--red)' : dt.getDay() === 6 ? 'var(--accent)' : '#fff';
