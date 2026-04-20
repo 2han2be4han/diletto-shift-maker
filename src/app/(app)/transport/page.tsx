@@ -1446,3 +1446,49 @@ function ToastBanner({
 }
 
 
+/* Phase 38: 送迎表ヘッダーの日付ピッカー。
+   日次出力ページ (src/app/(app)/output/daily/page.tsx) と同じ「素の <input type=date>」方式。
+   オーバーレイやカスタムボタンは iOS Safari で不発になるケースがあったため廃止。
+   見た目だけボタン風（アクセント枠・角丸・padding）にスタイリング。 */
+function DateHeaderPicker({
+  year,
+  month,
+  selectedDate,
+  workDays,
+  onChange,
+}: {
+  year: number;
+  month: number;
+  selectedDate: string;
+  workDays: string[];
+  onChange: (d: string) => void;
+}) {
+  const minDate = workDays[0] ?? `${year}-${String(month).padStart(2, '0')}-01`;
+  const maxDate = workDays[workDays.length - 1] ?? minDate;
+
+  return (
+    <input
+      type="date"
+      value={selectedDate}
+      min={minDate}
+      max={maxDate}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v) onChange(v);
+      }}
+      title="日付を選択して遷移"
+      aria-label="日付を選択"
+      style={{
+        fontSize: '0.95rem',
+        fontWeight: 600,
+        padding: '6px 12px',
+        border: '1.5px solid var(--accent)',
+        borderRadius: '8px',
+        background: 'var(--white)',
+        color: 'var(--ink)',
+        cursor: 'pointer',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}
+    />
+  );
+}
