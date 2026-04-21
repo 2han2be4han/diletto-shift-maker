@@ -918,6 +918,7 @@
 
     <h2>Phase 60 以降の候補</h2>
     <ul>
+        <li><strong>公休/有給上書き時の本人通知</strong>: シフト追加で <code>public_holiday</code>/<code>paid_leave</code> を上書き出勤に変えた際、対象職員にアプリ内通知（ベル）を飛ばす。<em>migration 不要</em>（既存 <code>notifications</code> テーブル + type='generic' で OK）だが、RLS の関係で <code>createAdminClient</code> を使う新エンドポイント（例: <code>/api/notifications/insert</code>）が必要。</li>
         <li><strong>状態バッジのインタラクティブ化</strong>: 👥出勤 クリックで一覧、⚠未割当 クリックで絞り込み</li>
         <li><strong>送迎表 mini カレンダーに「要再生成」状態追加</strong>: schedule_entries/shift_assignments の更新日時が transport_assignments より新しい日を検出</li>
         <li><strong>送迎 2 人目自動化</strong>: AUTO_ASSIGN_STAFF_COUNT=2 にして、1 人目=運転手・2 人目=運転手or付き添いで補完するアルゴリズム</li>

@@ -7,6 +7,7 @@ import { isDateOutOfRange } from '@/lib/date/dateLimit';
 import DateStepper from '@/components/ui/DateStepper';
 import type { DayState } from '@/components/ui/DatePopover';
 import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
+import { buildPickerItems } from '@/components/transport/AddShiftStaffPicker';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
 import TransportDayView from '@/components/transport/TransportDayView';
@@ -88,6 +89,8 @@ export default function TransportPage() {
      シフト画面へ移動せずその場でシフトを追加する導線。
      分割シフト（Phase 50）対応: 既存セグメントがある職員には segment_order を自動採番。 */
   const [addShiftModal, setAddShiftModal] = useState<{
+    /** Phase 59-fix: 2 ステップフロー。'pick'=職員選択、'time'=時間入力 */
+    step: 'pick' | 'time';
     staffId: string;
     startTime: string;
     endTime: string;
@@ -1033,6 +1036,7 @@ export default function TransportPage() {
                 variant="secondary"
                 onClick={() =>
                   setAddShiftModal({
+                    step: 'pick',
                     staffId: '',
                     startTime: '09:00',
                     endTime: '17:00',
@@ -1205,163 +1209,275 @@ export default function TransportPage() {
         )}
       </div>
 
-      {/* Phase 51: シフト追加モーダル。送迎表編集中に当日分のシフトを追加する */}
+      {/* Phase 51 + Phase 59-fix: シフト追加モーダル ─ 2 ステップフロー
+          step='pick': 職員を一覧から選ぶ（クリック即決定で時間ステップへ）
+          step='time': 選んだ職員名を表示しながら時間を確認・入力 → 追加 */}
       {addShiftModal && (
         <Modal
           isOpen={true}
           onClose={() => (addShiftModal.saving ? null : setAddShiftModal(null))}
-          title={`シフト追加（${selectedDate}）`}
-          size="sm"
+          title={
+            addShiftModal.step === 'pick'
+              ? `シフト追加（${selectedDate}）— 職員を選択`
+              : `シフト追加（${selectedDate}）— 時間を入力`
+          }
+          size="md"
         >
-          <div className="flex flex-col gap-3">
-            <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-              この日に出勤する職員を追加します。基本時間外（早朝・夜間）も入力可能です。
-              既に当日シフトがある職員を選ぶと、分割シフト（2 コマ目以降）として追加されます。
-            </p>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>職員</span>
-              <select
-                value={addShiftModal.staffId}
-                onChange={(e) =>
-                  setAddShiftModal((prev) => (prev ? { ...prev, staffId: e.target.value } : prev))
-                }
-                disabled={addShiftModal.saving}
-                className="outline-none"
+          {addShiftModal.step === 'pick' ? (
+            /* === Step 1: 職員選択 === */
+            <div className="flex flex-col gap-3">
+              <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                この日に出勤する職員を選択してください。既に当日シフトがある職員は分割シフト（2 コマ目以降）として追加されます。
+              </p>
+              <div
+                className="flex flex-col overflow-y-auto"
                 style={{
-                  padding: '8px 10px',
-                  fontSize: '0.9rem',
+                  maxHeight: '52vh',
                   border: '1px solid var(--rule)',
-                  borderRadius: '6px',
+                  borderRadius: '8px',
                   background: 'var(--white)',
                 }}
               >
-                <option value="">選択してください</option>
-                {staff
-                  .filter((s) => s.is_active !== false)
-                  .map((s) => {
-                    const dayAssignments = shiftAssignments.filter(
-                      (sa) => sa.staff_id === s.id && sa.date === selectedDate,
-                    );
-                    const hasShift = dayAssignments.some((sa) => sa.assignment_type === 'normal');
-                    /* Phase 57: 休み希望が反映された当日のシフト状態を警告表示。
-                       public_holiday / paid_leave / off のいずれかなら「⚠ 本来は休み」として注意喚起。
-                       選択自体は許可（admin/editor 判断で上書き出勤扱いにできる）。 */
-                    const leaveTypes = ['public_holiday', 'paid_leave', 'off'] as const;
-                    const leave = dayAssignments.find((sa) =>
-                      (leaveTypes as readonly string[]).includes(sa.assignment_type),
-                    );
-                    const leaveLabel =
-                      leave?.assignment_type === 'public_holiday'
-                        ? '公休'
-                        : leave?.assignment_type === 'paid_leave'
-                        ? '有給'
-                        : leave?.assignment_type === 'off'
-                        ? '休み'
-                        : null;
-                    let suffix = '';
-                    if (leaveLabel) suffix = `  ⚠ 本来は${leaveLabel}`;
-                    else if (hasShift) suffix = '（既にシフトあり → 分割追加）';
-                    return (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{suffix}
-                      </option>
-                    );
-                  })}
-              </select>
-            </label>
-            {/* Phase 57: 選択中の職員が当日「休み扱い」なら警告表示（admin/editor 判断で続行は可） */}
-            {(() => {
-              if (!addShiftModal.staffId) return null;
-              const leaveTypes = ['public_holiday', 'paid_leave', 'off'];
+                {buildPickerItems(staff, shiftAssignments, selectedDate).map((item, idx) => {
+                  const badgeColor =
+                    item.leaveLabel === '有給'
+                      ? 'var(--green, #2f8f57)'
+                      : item.leaveLabel === '公休'
+                      ? 'var(--accent)'
+                      : null;
+                  const badgeBg =
+                    item.leaveLabel === '有給'
+                      ? 'var(--green-pale, rgba(47,143,87,0.10))'
+                      : item.leaveLabel === '公休'
+                      ? 'var(--accent-pale)'
+                      : null;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        const picked = staff.find((s) => s.id === item.id);
+                        setAddShiftModal((prev) => {
+                          if (!prev) return prev;
+                          const start = picked?.default_start_time?.slice(0, 5) ?? prev.startTime;
+                          const end = picked?.default_end_time?.slice(0, 5) ?? prev.endTime;
+                          return {
+                            ...prev,
+                            staffId: item.id,
+                            startTime: start,
+                            endTime: end,
+                            step: 'time',
+                            errorMsg: '',
+                          };
+                        });
+                      }}
+                      className="flex items-center justify-between gap-3 px-4 py-3 transition-colors text-left"
+                      style={{
+                        background: 'transparent',
+                        borderTop: idx === 0 ? 'none' : '1px solid var(--rule)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(0,0,0,0.03)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span className="text-base font-medium" style={{ color: 'var(--ink)' }}>
+                        {item.name}
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        {item.leaveLabel && badgeColor && badgeBg && (
+                          <span
+                            className="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                            style={{
+                              background: badgeBg,
+                              color: badgeColor,
+                              border: `1px solid ${badgeColor}`,
+                            }}
+                          >
+                            ⚠ {item.leaveLabel}
+                          </span>
+                        )}
+                        {item.hasShift && !item.leaveLabel && (
+                          <span
+                            className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                            style={{
+                              background: 'var(--bg)',
+                              color: 'var(--ink-2)',
+                              border: '1px solid var(--rule-strong)',
+                            }}
+                          >
+                            分割追加
+                          </span>
+                        )}
+                        <span style={{ color: 'var(--ink-3)', fontSize: '0.8rem' }}>›</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end mt-1">
+                <Button variant="secondary" onClick={() => setAddShiftModal(null)}>
+                  キャンセル
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* === Step 2: 時間入力 === */
+            (() => {
+              const picked = staff.find((s) => s.id === addShiftModal.staffId);
               const leave = shiftAssignments.find(
                 (sa) =>
                   sa.staff_id === addShiftModal.staffId &&
                   sa.date === selectedDate &&
-                  leaveTypes.includes(sa.assignment_type),
+                  (sa.assignment_type === 'public_holiday' || sa.assignment_type === 'paid_leave'),
               );
-              if (!leave) return null;
-              const label =
-                leave.assignment_type === 'public_holiday'
-                  ? '公休'
-                  : leave.assignment_type === 'paid_leave'
-                  ? '有給'
-                  : '休み';
+              const hasShift = shiftAssignments.some(
+                (sa) =>
+                  sa.staff_id === addShiftModal.staffId &&
+                  sa.date === selectedDate &&
+                  sa.assignment_type === 'normal',
+              );
+              const isGreen = leave?.assignment_type === 'paid_leave';
+              const leaveLabel = isGreen ? '有給' : leave ? '公休' : null;
+              const leaveColor = isGreen ? 'var(--green, #2f8f57)' : 'var(--accent)';
+              const leaveBg = isGreen ? 'var(--green-pale, rgba(47,143,87,0.10))' : 'var(--accent-pale)';
               return (
-                <div
-                  className="text-xs px-3 py-2 rounded"
-                  style={{
-                    background: 'rgba(212,160,23,0.1)',
-                    color: 'var(--gold, #b8860b)',
-                    border: '1px solid var(--gold, #d4a017)',
-                  }}
-                >
-                  ⚠ この職員は当日「{label}」扱いです。出勤として追加すると現在のシフトが上書きされます。
+                <div className="flex flex-col gap-3">
+                  {/* 選択中の職員 + 戻るリンク */}
+                  <div
+                    className="flex items-center justify-between gap-3 px-4 py-3 rounded"
+                    style={{ background: 'var(--accent-pale)', border: '1px solid var(--accent)' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base font-bold truncate" style={{ color: 'var(--ink)' }}>
+                        {picked?.name ?? '(未選択)'}
+                      </span>
+                      {leaveLabel && (
+                        <span
+                          className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded"
+                          style={{ background: leaveBg, color: leaveColor, border: `1px solid ${leaveColor}` }}
+                        >
+                          ⚠ {leaveLabel}
+                        </span>
+                      )}
+                      {hasShift && !leaveLabel && (
+                        <span
+                          className="shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                          style={{
+                            background: 'var(--white)',
+                            color: 'var(--ink-2)',
+                            border: '1px solid var(--rule-strong)',
+                          }}
+                        >
+                          分割追加
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAddShiftModal((prev) =>
+                          prev ? { ...prev, step: 'pick', errorMsg: '' } : prev,
+                        )
+                      }
+                      className="text-xs font-semibold whitespace-nowrap shrink-0"
+                      style={{ color: 'var(--accent)' }}
+                      disabled={addShiftModal.saving}
+                    >
+                      ← 職員を変更
+                    </button>
+                  </div>
+
+                  {leave && leaveLabel && (
+                    <div
+                      className="text-xs px-3 py-2 rounded"
+                      style={{
+                        background: leaveBg,
+                        color: leaveColor,
+                        border: `1px solid ${leaveColor}`,
+                      }}
+                    >
+                      ⚠ この職員は当日「{leaveLabel}」扱いです。出勤として追加すると現在のシフトが上書きされます。
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <label className="flex-1 flex flex-col gap-1">
+                      <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                        開始
+                      </span>
+                      <input
+                        type="time"
+                        value={addShiftModal.startTime}
+                        onChange={(e) =>
+                          setAddShiftModal((prev) => (prev ? { ...prev, startTime: e.target.value } : prev))
+                        }
+                        disabled={addShiftModal.saving}
+                        style={{
+                          padding: '8px 10px',
+                          fontSize: '0.95rem',
+                          border: '1px solid var(--rule)',
+                          borderRadius: '6px',
+                          background: 'var(--white)',
+                        }}
+                      />
+                    </label>
+                    <label className="flex-1 flex flex-col gap-1">
+                      <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                        終了
+                      </span>
+                      <input
+                        type="time"
+                        value={addShiftModal.endTime}
+                        onChange={(e) =>
+                          setAddShiftModal((prev) => (prev ? { ...prev, endTime: e.target.value } : prev))
+                        }
+                        disabled={addShiftModal.saving}
+                        style={{
+                          padding: '8px 10px',
+                          fontSize: '0.95rem',
+                          border: '1px solid var(--rule)',
+                          borderRadius: '6px',
+                          background: 'var(--white)',
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+                    職員の基本出勤・退勤時刻を初期値にしています。早朝・夜間など必要に応じて変更できます。
+                  </p>
+
+                  {addShiftModal.errorMsg && (
+                    <div
+                      className="px-3 py-2 rounded text-xs"
+                      style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
+                    >
+                      {addShiftModal.errorMsg}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 mt-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setAddShiftModal(null)}
+                      disabled={addShiftModal.saving}
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveAddShift}
+                      disabled={addShiftModal.saving || !addShiftModal.staffId}
+                    >
+                      {addShiftModal.saving ? '保存中…' : '追加'}
+                    </Button>
+                  </div>
                 </div>
               );
-            })()}
-            <div className="flex gap-3">
-              <label className="flex-1 flex flex-col gap-1">
-                <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>開始</span>
-                <input
-                  type="time"
-                  value={addShiftModal.startTime}
-                  onChange={(e) =>
-                    setAddShiftModal((prev) => (prev ? { ...prev, startTime: e.target.value } : prev))
-                  }
-                  disabled={addShiftModal.saving}
-                  style={{
-                    padding: '8px 10px',
-                    fontSize: '0.9rem',
-                    border: '1px solid var(--rule)',
-                    borderRadius: '6px',
-                    background: 'var(--white)',
-                  }}
-                />
-              </label>
-              <label className="flex-1 flex flex-col gap-1">
-                <span className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>終了</span>
-                <input
-                  type="time"
-                  value={addShiftModal.endTime}
-                  onChange={(e) =>
-                    setAddShiftModal((prev) => (prev ? { ...prev, endTime: e.target.value } : prev))
-                  }
-                  disabled={addShiftModal.saving}
-                  style={{
-                    padding: '8px 10px',
-                    fontSize: '0.9rem',
-                    border: '1px solid var(--rule)',
-                    borderRadius: '6px',
-                    background: 'var(--white)',
-                  }}
-                />
-              </label>
-            </div>
-            {addShiftModal.errorMsg && (
-              <div
-                className="px-3 py-2 rounded text-xs"
-                style={{ background: 'var(--red-pale)', color: 'var(--red)' }}
-              >
-                {addShiftModal.errorMsg}
-              </div>
-            )}
-            <div className="flex justify-end gap-2 mt-2">
-              <Button
-                variant="secondary"
-                onClick={() => setAddShiftModal(null)}
-                disabled={addShiftModal.saving}
-              >
-                キャンセル
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSaveAddShift}
-                disabled={addShiftModal.saving || !addShiftModal.staffId}
-              >
-                {addShiftModal.saving ? '保存中…' : 'シフト追加'}
-              </Button>
-            </div>
-          </div>
+            })()
+          )}
         </Modal>
       )}
     </>
