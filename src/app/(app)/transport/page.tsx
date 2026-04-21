@@ -838,9 +838,14 @@ export default function TransportPage() {
 
     setAddShiftModal((prev) => (prev ? { ...prev, saving: true, errorMsg: '' } : prev));
 
-    /* 既存セグメントから次の segment_order を決定 */
+    /* 既存セグメントから次の segment_order を決定。
+       'off'（休み）行はシフト生成が自動で作るダミーなので、シフト追加時は上書きする。
+       paid_leave / public_holiday は業務上の意味があるため残し、normal と同列で分割シフト扱い。 */
     const existingSegments = shiftAssignments.filter(
-      (sa) => sa.staff_id === addShiftModal.staffId && sa.date === selectedDate,
+      (sa) =>
+        sa.staff_id === addShiftModal.staffId &&
+        sa.date === selectedDate &&
+        sa.assignment_type !== 'off',
     );
     const nextSegmentOrder =
       existingSegments.length === 0
