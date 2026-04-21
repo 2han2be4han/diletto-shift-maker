@@ -474,17 +474,17 @@ export default function SchedulePage() {
         title="利用予定"
         actions={
           <>
-            <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">🖨 印刷</Button>
+            <Button data-tour="schedule-print" variant="secondary" onClick={() => window.print()} title="A3 横で印刷">🖨 印刷</Button>
             {myRole !== 'viewer' && (
               <>
-                <Button variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
-                <Button variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
+                <Button data-tour="schedule-excel" variant="secondary" onClick={() => setExcelModalOpen(true)}>Excel貼付</Button>
+                <Button data-tour="schedule-pdf" variant="primary" onClick={() => setPdfModalOpen(true)}>PDFインポート</Button>
               </>
             )}
           </>
         }
       />
-      <div className="px-6 pt-3">
+      <div className="px-6 pt-3" data-tour="month-stepper">
         <MonthStepper defaultMonth={defaultCurrentMonthStr()} />
       </div>
 
@@ -503,14 +503,16 @@ export default function SchedulePage() {
             児童が登録されていません。児童管理から追加してください。
           </div>
         ) : (
-          <ScheduleGrid
-            year={year}
-            month={month}
-            children={childrenForGrid}
-            cells={cells}
-            onCellClick={handleCellClick}
-            myRole={myRole}
-          />
+          <div data-tour="schedule-grid" className="flex-1 min-h-0 flex flex-col">
+            <ScheduleGrid
+              year={year}
+              month={month}
+              children={childrenForGrid}
+              cells={cells}
+              onCellClick={handleCellClick}
+              myRole={myRole}
+            />
+          </div>
         )}
       </div>
 
@@ -586,77 +588,36 @@ export default function SchedulePage() {
               </>
             )}
 
-            {/* Phase 25: 当日の出欠記録（全ロール編集可・履歴付き） */}
+            {/* Phase 60: 出欠ボタンを 3 種類の大きなボタンに簡素化。
+                お休み と 欠席 は DB 上どちらも attendance_status='absent' にマップ。 */}
             <div className="flex flex-col gap-2 pt-3 mt-1" style={{ borderTop: '1px solid var(--rule)' }}>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
-                  当日の出欠記録
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cell = cells.find(
-                      (c) =>
-                        c.child_id === selectedCell.childId && c.date === selectedCell.date,
-                    );
-                    if (!cell?.entry_id) return;
-                    if (!logsOpen) void loadAttendanceLogs(cell.entry_id);
-                    setLogsOpen(!logsOpen);
-                  }}
-                  className="text-xs underline"
-                  style={{ color: 'var(--ink-3)' }}
-                >
-                  {logsOpen ? '履歴を閉じる' : '履歴を見る'}
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {(['planned', 'present', 'absent', 'late', 'early_leave'] as AttendanceStatus[]).map(
-                  (s) => (
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { label: '出席', value: 'present' as AttendanceStatus, color: 'var(--green)' },
+                  { label: 'お休み', value: 'absent' as AttendanceStatus, color: 'var(--ink-3)' },
+                  { label: '欠席', value: 'absent' as AttendanceStatus, color: 'var(--red)' },
+                ]).map((opt, idx) => {
+                  const on = attendanceStatus === opt.value;
+                  return (
                     <button
-                      key={s}
+                      key={`${opt.label}-${idx}`}
                       type="button"
                       disabled={attendanceBusy}
-                      onClick={() => handleAttendanceChange(s)}
-                      className="px-3 py-1 text-xs font-semibold rounded transition-all"
+                      onClick={() => handleAttendanceChange(opt.value)}
+                      className="py-3 text-base font-bold rounded transition-all"
                       style={{
-                        background: attendanceStatus === s ? ATTENDANCE_COLORS[s] : 'var(--bg)',
-                        color: attendanceStatus === s ? '#fff' : 'var(--ink-2)',
-                        border: `1px solid ${
-                          attendanceStatus === s ? ATTENDANCE_COLORS[s] : 'var(--rule-strong)'
-                        }`,
+                        background: on ? opt.color : 'var(--bg)',
+                        color: on ? '#fff' : 'var(--ink-2)',
+                        border: `2px solid ${on ? opt.color : 'var(--rule-strong)'}`,
                         opacity: attendanceBusy ? 0.6 : 1,
                         cursor: attendanceBusy ? 'wait' : 'pointer',
                       }}
                     >
-                      {ATTENDANCE_LABELS[s]}
+                      {opt.label}
                     </button>
-                  ),
-                )}
+                  );
+                })}
               </div>
-              {logsOpen && (
-                <div
-                  className="mt-1 p-2 rounded text-xs"
-                  style={{ background: 'var(--bg)', maxHeight: '160px', overflowY: 'auto' }}
-                >
-                  {attendanceLogs.length === 0 ? (
-                    <span style={{ color: 'var(--ink-3)' }}>履歴なし</span>
-                  ) : (
-                    <ul className="flex flex-col gap-1">
-                      {attendanceLogs.map((l) => (
-                        <li key={l.id} style={{ color: 'var(--ink-2)' }}>
-                          <span style={{ color: 'var(--ink-3)' }}>
-                            {format(new Date(l.changed_at), 'M/d HH:mm', { locale: ja })}
-                          </span>{' '}
-                          {l.changed_by_name}: {l.old_status ? ATTENDANCE_LABELS[l.old_status] : '(新規)'} →{' '}
-                          <strong style={{ color: ATTENDANCE_COLORS[l.new_status] }}>
-                            {ATTENDANCE_LABELS[l.new_status]}
-                          </strong>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="flex gap-2 mt-2">
