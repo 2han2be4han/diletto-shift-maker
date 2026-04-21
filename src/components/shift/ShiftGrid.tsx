@@ -299,7 +299,10 @@ export default function ShiftGrid({
               </td>
               {dates.map((d) => {
                 const segs = cellSegmentsMap.get(`${s.id}_${d.dateStr}`) ?? [];
-                const cell = segs[0];
+                /* off 以外（normal / paid_leave / public_holiday）を優先して primary に据える。
+                   過去のバグで [off@0, normal@1] が同居している日も勤務シフト側を表示する。 */
+                const meaningful = segs.filter((c) => c.assignment_type !== 'off');
+                const cell = meaningful[0] ?? segs[0];
                 const type = cell?.assignment_type || 'off';
                 const config = TYPE_CONFIG[type];
                 const commentText = commentMap.get(`${s.id}_${d.dateStr}`);
