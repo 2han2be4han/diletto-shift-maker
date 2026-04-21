@@ -222,7 +222,8 @@ export default function DailyOutputPage() {
 
     for (const entry of entries) {
       if (entry.attendance_status === 'absent') continue;
-      if (!entry.pickup_time && !entry.dropoff_time) continue; /* お休み除外 */
+      if (entry.attendance_status === 'leave') continue;
+      if (!entry.pickup_time && !entry.dropoff_time) continue; /* 旧データ互換のお休み除外 */
 
       const child = childById.get(entry.child_id);
       if (!child) continue;
@@ -415,12 +416,13 @@ export default function DailyOutputPage() {
   );
 
   /* 利用児童数: 当日 entries のうち「実際に来所する」児童のユニーク数。
-     Phase 42: 欠席 (attendance_status='absent') と お休み (times 両方 null) を除外。
+     欠席 (attendance_status='absent')・お休み (attendance_status='leave' または times 両方 null) を除外。
      お休みは国保連請求対象外、欠席は請求対象だが当日は来所しない。どちらも「利用児童」にカウントしない。 */
   const activeChildCount = useMemo(() => {
     const ids = new Set<string>();
     for (const e of entries) {
       if (e.attendance_status === 'absent') continue;
+      if (e.attendance_status === 'leave') continue;
       if (!e.pickup_time && !e.dropoff_time) continue;
       ids.add(e.child_id);
     }

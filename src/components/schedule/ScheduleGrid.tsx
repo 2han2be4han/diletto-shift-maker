@@ -33,7 +33,7 @@ type ScheduleCellData = {
   note: string | null; // 追・休、定・休 など
   /** Phase 42: セルに状態バッジを出すための追加項目 */
   entry_id?: string | null;
-  attendance_status?: 'planned' | 'present' | 'absent' | 'late' | 'early_leave';
+  attendance_status?: 'planned' | 'present' | 'absent' | 'late' | 'early_leave' | 'leave';
 };
 
 type ScheduleGridProps = {
@@ -204,14 +204,15 @@ export default function ScheduleGrid({
               {dates.map((d) => {
                 const cell = cellMap.get(`${child.id}_${d.dateStr}`);
                 const hasTimes = !!(cell && (cell.pickup_time || cell.dropoff_time));
-                /* Phase 42: 状態判定
+                /* 状態判定
                    - 未入力: entry が存在しない（cell == null or entry_id == null）
                    - 欠席: attendance_status='absent'
-                   - お休み: entry あり / times 両方 null / 欠席ではない
+                   - お休み: attendance_status='leave'、または entry あり / times 両方 null（旧データ互換）
                    - 出席: times あり */
                 const hasEntry = !!cell && (cell.entry_id ?? null) !== null;
                 const isAbsent = cell?.attendance_status === 'absent';
-                const isOff = hasEntry && !hasTimes && !isAbsent;
+                const isLeave = cell?.attendance_status === 'leave';
+                const isOff = isLeave || (hasEntry && !hasTimes && !isAbsent);
 
                 /* セル背景: 状態によって淡くハイライト */
                 let bg = getCellBg(d.dow);

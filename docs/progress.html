@@ -1024,6 +1024,29 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 71: お休み / 欠席ステータスの分離（2026-04-21）</div>
+    <p>
+        目的: 利用表の編集モーダルで「お休み」を押しても DB 上は 'absent' にマップされてしまい、
+        表示が「欠席」になる / お休み・欠席ボタンが両方ハイライトされる問題を解消。
+        挙動（時刻 null・送迎除外）は同一のまま、別ステータスとして独立保存・独立表示する。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>71-1</td><td>DB: attendance_status check 制約に 'leave' を追加 + RPC 検証リスト更新</td><td>supabase/migrations/0039_attendance_leave_status.sql</td><td class="status-done">完了</td><td>100%</td><td>新規マイグレーション</td></tr>
+            <tr><td>71-2</td><td>型定義に 'leave' を追加</td><td>src/types/index.ts (AttendanceStatus)</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>71-3</td><td>API ルートの VALID_STATUSES 更新</td><td>src/app/api/schedule-entries/[id]/attendance/route.ts</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>71-4</td><td>出欠ボタンマップ修正: お休み=leave / 欠席=absent</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>両ボタン同時ハイライト解消</td></tr>
+            <tr><td>71-5</td><td>isPresent 判定・時間 UI 表示判定を leave も含めて更新 + ATTENDANCE_LABELS/COLORS に leave 追加</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>71-6</td><td>利用表グリッドで leave を「お休み」として表示</td><td>src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>旧データ互換: times 両方 null もお休み扱いを継続</td></tr>
+            <tr><td>71-7</td><td>送迎表 / 日次出力 / 週次送迎表の除外フィルタに leave を追加</td><td>transport/page.tsx, output/daily/page.tsx, output/weekly-transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>挙動 = absent と完全同一</td></tr>
+            <tr><td>71-8</td><td>TypeScript 型チェック通過（npx tsc --noEmit）</td><td>（横断）</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>71-9</td><td>docs/reference-map.md 更新</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td>attendance_status エントリに 0039 + 関連ファイルを追記</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

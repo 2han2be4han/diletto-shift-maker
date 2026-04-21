@@ -247,7 +247,7 @@
 ### カラム追加
 - `staff.is_active` bool（Migration 0023 — Phase 25 マージ時 renumber 0020→0023）: `src/types/index.ts` (StaffRow), `src/lib/auth/getCurrentStaff.ts`（退職者除外）, `src/app/api/staff/[id]/route.ts` (DELETE→ソフト削除), `src/app/api/staff/route.ts` (?include_retired=1), `src/app/(app)/settings/staff/page.tsx` (退職バッジ・復帰ボタン)
 - `staff.retired_at` timestamptz（Migration 0023）
-- `schedule_entries.attendance_status` text（Migration 0024）: `src/types/index.ts` (ScheduleEntryRow, AttendanceStatus), `src/app/(app)/schedule/page.tsx` (出欠UI), `src/app/(app)/output/daily/page.tsx`（absent 除外）, `src/app/api/output/daily/pdf/route.ts`（absent 除外）
+- `schedule_entries.attendance_status` text（Migration 0024 + 0039 で 'leave' 追加）: `src/types/index.ts` (ScheduleEntryRow, AttendanceStatus: planned/present/absent/late/early_leave/leave), `src/app/(app)/schedule/page.tsx` (出欠UI — お休み=leave, 欠席=absent を別ステータスで独立保存), `src/components/schedule/ScheduleGrid.tsx` (leave → お休み表示), `src/app/(app)/output/daily/page.tsx`（absent / leave 除外）, `src/app/(app)/output/weekly-transport/page.tsx`（absent / leave 除外）, `src/app/(app)/transport/page.tsx`（absent / leave 除外）, `src/app/api/schedule-entries/[id]/attendance/route.ts` (VALID_STATUSES), `supabase/migrations/0039_attendance_leave_status.sql` (check 制約 + RPC 検証)
 - `schedule_entries.attendance_updated_at`, `attendance_updated_by`
 
 ### 新規 API ルート

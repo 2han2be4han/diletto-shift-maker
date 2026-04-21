@@ -30,6 +30,7 @@ const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
   absent: '欠席',
   late: '遅刻',
   early_leave: '早退',
+  leave: 'お休み',
 };
 const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
   planned: 'var(--ink-3)',
@@ -37,6 +38,7 @@ const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
   absent: 'var(--red)',
   late: 'var(--gold)',
   early_leave: 'var(--accent)',
+  leave: 'var(--ink-3)',
 };
 
 /**
@@ -305,9 +307,9 @@ export default function SchedulePage() {
 
   const handleSave = async () => {
     if (!selectedCell) return;
-    /* Phase 41: 「欠席以外なら時刻を保存」に統一。
-       absent のときだけ pickup/dropoff を null にして送迎対象外にする。 */
-    const isPresent = attendanceStatus !== 'absent';
+    /* 「出席以外なら時刻は null」に統一。
+       absent（欠席）と leave（お休み）はどちらも送迎対象外なので pickup/dropoff を null にする。 */
+    const isPresent = attendanceStatus !== 'absent' && attendanceStatus !== 'leave';
     const pickup = isPresent
       ? `${pickupHour.padStart(2, '0')}:${pickupMin.padStart(2, '0')}`
       : null;
@@ -542,9 +544,9 @@ export default function SchedulePage() {
       >
         {selectedCell && selectedChild && (
           <div className="flex flex-col gap-5">
-            {/* Phase 41: 時間/送迎 UI は「欠席以外」で表示。
+            {/* 時間/送迎 UI は「欠席／お休み以外」で表示。
                 attendanceStatus に統一して旧 attendance state の二重管理を撤廃。 */}
-            {attendanceStatus !== 'absent' && (
+            {attendanceStatus !== 'absent' && attendanceStatus !== 'leave' && (
               <>
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
@@ -588,19 +590,20 @@ export default function SchedulePage() {
               </>
             )}
 
-            {/* Phase 60: 出欠ボタンを 3 種類の大きなボタンに簡素化。
-                お休み と 欠席 は DB 上どちらも attendance_status='absent' にマップ。 */}
+            {/* 出欠ボタンは 3 種類。
+                お休み (leave) と 欠席 (absent) は挙動は同じ（時刻 null / 送迎除外）が
+                別ステータスとして独立保存・表示する。 */}
             <div className="flex flex-col gap-2 pt-3 mt-1" style={{ borderTop: '1px solid var(--rule)' }}>
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { label: '出席', value: 'present' as AttendanceStatus, color: 'var(--green)' },
-                  { label: 'お休み', value: 'absent' as AttendanceStatus, color: 'var(--ink-3)' },
+                  { label: 'お休み', value: 'leave' as AttendanceStatus, color: 'var(--ink-3)' },
                   { label: '欠席', value: 'absent' as AttendanceStatus, color: 'var(--red)' },
-                ]).map((opt, idx) => {
+                ]).map((opt) => {
                   const on = attendanceStatus === opt.value;
                   return (
                     <button
-                      key={`${opt.label}-${idx}`}
+                      key={opt.value}
                       type="button"
                       disabled={attendanceBusy}
                       onClick={() => handleAttendanceChange(opt.value)}

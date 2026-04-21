@@ -230,13 +230,15 @@ export default function TransportPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      /* Phase 38/42: 送迎表で出さないものを除外。
+      /* 送迎表で出さないものを除外。
          - 欠席 (attendance_status='absent'): お金は発生するが送迎は不要
-         - お休み (pickup_time も dropoff_time も null): 国保連請求対象外、送迎も不要
-         どちらも送迎担当を割り当てる必要がない entry なので /transport から弾く。 */
+         - お休み (attendance_status='leave'): 送迎も不要
+         - times 両方 null（旧データ互換のお休み扱い）
+         どれも送迎担当を割り当てる必要がない entry なので /transport から弾く。 */
       setScheduleEntries(
         ((eJson.entries ?? []) as ScheduleEntryRow[]).filter((e) => {
           if (e.attendance_status === 'absent') return false;
+          if (e.attendance_status === 'leave') return false;
           if (!e.pickup_time && !e.dropoff_time) return false;
           return true;
         }),
@@ -970,10 +972,13 @@ export default function TransportPage() {
       <div className="px-2 py-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            {/* Phase 58-fix: 送迎表の当日利用人数（schedule_entries ベース、attendance_status='absent' は除外） */}
+            {/* 送迎表の当日利用人数（schedule_entries ベース、欠席・お休みは除外） */}
             {(() => {
               const dayEntries = scheduleEntries.filter(
-                (e) => e.date === selectedDate && e.attendance_status !== 'absent',
+                (e) =>
+                  e.date === selectedDate &&
+                  e.attendance_status !== 'absent' &&
+                  e.attendance_status !== 'leave',
               );
               return (
                 <span

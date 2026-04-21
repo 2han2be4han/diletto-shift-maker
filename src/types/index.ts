@@ -213,7 +213,8 @@ export type AttendanceStatus =
   | 'present'      /* 出席 */
   | 'absent'       /* 欠席 */
   | 'late'         /* 遅刻 */
-  | 'early_leave'; /* 早退 */
+  | 'early_leave'  /* 早退 */
+  | 'leave';       /* お休み（欠席と同じ扱いだが表示を区別） */
 
 export type AttendanceAuditLogRow = {
   id: string;

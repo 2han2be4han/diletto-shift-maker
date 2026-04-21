@@ -17,6 +17,7 @@ const VALID_STATUSES: AttendanceStatus[] = [
   'absent',
   'late',
   'early_leave',
+  'leave',
 ];
 
 export async function PATCH(
