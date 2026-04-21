@@ -10,7 +10,10 @@ import type {
   ChildRow,
   TenantSettings,
   AreaLabel,
+  StaffRow,
+  ChildAreaEligibleStaffRow,
 } from '@/types';
+import { staffDisplayName } from '@/lib/utils/displayName';
 import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 
 /**
@@ -33,8 +36,16 @@ type EditableChild = {
   custom_pickup_areas: AreaLabel[];
   /** この児童専用の送りエリア候補（イレギュラー用） */
   custom_dropoff_areas: AreaLabel[];
+  /** Phase 60: 児童専用エリアごとの担当可能職員。
+      キー = `${area_id}|${direction}`、値 = staff_id の Set。
+      direction は 'pickup' | 'dropoff'。 */
+  eligibility: Map<string, Set<string>>;
   isNew?: boolean;
 };
+
+/** Phase 60: eligibility Map のキー形式（area_id|direction） */
+const eligKey = (areaId: string, direction: 'pickup' | 'dropoff') =>
+  `${areaId}|${direction}`;
 
 /**
  * 学年カテゴリ別の行背景（うっすら）
@@ -72,6 +83,8 @@ export default function ChildrenSettingsPage() {
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
+  /* Phase 60: 担当可能職員トグル UI 用に同テナントの在職職員を保持 */
+  const [staffList, setStaffList] = useState<StaffRow[]>([]);
   const [editing, setEditing] = useState<EditableChild | null>(null);
   const [draggingChildIdx, setDraggingChildIdx] = useState<number | null>(null);
   const [dragOverChildIdx, setDragOverChildIdx] = useState<number | null>(null);
@@ -79,9 +92,10 @@ export default function ChildrenSettingsPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [cRes, tRes] = await Promise.all([
+      const [cRes, tRes, sRes] = await Promise.all([
         fetch('/api/children'),
         fetch('/api/tenant'),
+        fetch('/api/staff'),
       ]);
       if (!cRes.ok) throw new Error('児童の取得に失敗しました');
       const cJson = await cRes.json();
@@ -91,6 +105,10 @@ export default function ChildrenSettingsPage() {
         const s: TenantSettings = tenant?.settings ?? {};
         setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
         setDropoffAreas(s.dropoff_areas ?? []);
+      }
+      if (sRes.ok) {
+        const sJson = await sRes.json();
+        setStaffList(sJson.staff ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
@@ -128,11 +146,27 @@ export default function ChildrenSettingsPage() {
       dropoff_area_labels: [],
       custom_pickup_areas: [],
       custom_dropoff_areas: [],
+      eligibility: new Map(),
       isNew: true,
     });
   };
 
-  const handleEdit = (child: ChildRow) => {
+  const handleEdit = async (child: ChildRow) => {
+    /* Phase 60: 既存の担当可能職員設定をロード。失敗時は空 Map で継続（編集後に保存すれば復旧）。 */
+    let eligibility = new Map<string, Set<string>>();
+    try {
+      const res = await fetch(`/api/children/${child.id}/area-eligibility`);
+      if (res.ok) {
+        const { items } = (await res.json()) as { items: ChildAreaEligibleStaffRow[] };
+        for (const it of items) {
+          const k = eligKey(it.area_id, it.direction);
+          if (!eligibility.has(k)) eligibility.set(k, new Set());
+          eligibility.get(k)!.add(it.staff_id);
+        }
+      }
+    } catch {
+      eligibility = new Map();
+    }
     setEditing({
       id: child.id,
       name: child.name,
@@ -144,6 +178,7 @@ export default function ChildrenSettingsPage() {
       dropoff_area_labels: child.dropoff_area_labels ?? [],
       custom_pickup_areas: Array.isArray(child.custom_pickup_areas) ? child.custom_pickup_areas : [],
       custom_dropoff_areas: Array.isArray(child.custom_dropoff_areas) ? child.custom_dropoff_areas : [],
+      eligibility,
     });
   };
 
@@ -163,6 +198,7 @@ export default function ChildrenSettingsPage() {
         custom_pickup_areas: editing.custom_pickup_areas,
         custom_dropoff_areas: editing.custom_dropoff_areas,
       };
+      let targetId = editing.id;
       if (editing.isNew) {
         const res = await fetch('/api/children', {
           method: 'POST',
@@ -170,6 +206,8 @@ export default function ChildrenSettingsPage() {
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '作成失敗');
+        const json = await res.json();
+        targetId = json.child?.id ?? editing.id;
       } else {
         const res = await fetch(`/api/children/${editing.id}`, {
           method: 'PATCH',
@@ -177,6 +215,31 @@ export default function ChildrenSettingsPage() {
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
+      }
+
+      /* Phase 60: 児童専用エリアの担当可能職員を全置換で保存。
+         児童専用エリア（custom_*_areas）の id に紐づくもののみ送信し、
+         削除されたエリアに紐づくレコードは含めない（子エリア削除時の自動クリーンアップ）。 */
+      const validAreaIds = new Set([
+        ...editing.custom_pickup_areas.map((a) => a.id),
+        ...editing.custom_dropoff_areas.map((a) => a.id),
+      ]);
+      const items: { area_id: string; staff_id: string; direction: 'pickup' | 'dropoff' }[] = [];
+      for (const [k, set] of editing.eligibility) {
+        const [areaId, dir] = k.split('|') as [string, 'pickup' | 'dropoff'];
+        if (!validAreaIds.has(areaId)) continue;
+        for (const staffId of set) {
+          items.push({ area_id: areaId, staff_id: staffId, direction: dir });
+        }
+      }
+      const eligRes = await fetch(`/api/children/${targetId}/area-eligibility`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!eligRes.ok) {
+        const j = await eligRes.json().catch(() => ({}));
+        throw new Error(j.error ?? '担当可能職員の保存に失敗しました');
       }
 
       setEditing(null);
@@ -285,7 +348,7 @@ export default function ChildrenSettingsPage() {
                 >
                   ↕
                 </th>
-                {['氏名', '学年', '迎マーク', '送マーク', 'ステータス'].map((h) => (
+                {['氏名', '学年', '迎マーク', '送マーク', '専用エリア', 'ステータス'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold" style={{ background: 'var(--ink)', color: '#fff' }}>{h}</th>
                 ))}
               </tr>
@@ -293,7 +356,7 @@ export default function ChildrenSettingsPage() {
             <tbody>
               {children.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
+                  <td colSpan={7} className="px-3 py-4 text-center" style={{ color: 'var(--ink-3)' }}>
                     児童が登録されていません
                   </td>
                 </tr>
@@ -380,6 +443,36 @@ export default function ChildrenSettingsPage() {
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)', color: dropoffCount > 0 ? 'var(--green)' : 'var(--ink-3)' }}>
                       {dropoffCount === 0 ? '—' : `${dropoffCount}件`}
+                    </td>
+                    {/* Phase 60: 児童専用エリア件数 + 絵文字。肥大化対策で最大3個まで表示、残りは +N */}
+                    <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
+                      {(() => {
+                        const customAreas = [
+                          ...(c.custom_pickup_areas ?? []),
+                          ...(c.custom_dropoff_areas ?? []),
+                        ];
+                        if (customAreas.length === 0) {
+                          return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+                        }
+                        const shown = customAreas.slice(0, 3);
+                        const rest = customAreas.length - shown.length;
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1"
+                            style={{ color: 'var(--ink-2)' }}
+                          >
+                            <span style={{ fontSize: '1rem', letterSpacing: '-0.02em' }}>
+                              {shown.map((a) => a.emoji).join('')}
+                            </span>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                              {customAreas.length}件
+                              {rest > 0 && (
+                                <span style={{ color: 'var(--ink-3)' }}> (+{rest})</span>
+                              )}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2" style={{ borderBottom: '1px solid var(--rule)' }}>
                       <Badge variant={c.is_active ? 'success' : 'neutral'}>{c.is_active ? '在籍' : '退籍'}</Badge>
@@ -471,7 +564,7 @@ export default function ChildrenSettingsPage() {
                   onChange={(e) => setEditing({ ...editing, home_address: e.target.value })}
                   className="outline-none"
                   style={inputStyle}
-                  placeholder="例）愛知県知多郡東浦町藤江西之宮95"
+                  placeholder="例）〇〇県〇〇市〇〇町1-2-3"
                 />
                 <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
                   送りマークに住所が未設定の場合、ここが自動で使われます（送迎表 → 地図で開く）
@@ -564,6 +657,8 @@ export default function ChildrenSettingsPage() {
                                 </span>
                                 {rows.map(({ area: a, label: ll }, idx) => {
                                   const checked = selected.includes(a.id);
+                                  /* Phase 60: 行を縞々にして可読性アップ。選択中（accent 塗り）はそちら優先。 */
+                                  const zebraBg = idx % 2 === 1 ? 'rgba(0,0,0,0.035)' : 'var(--white)';
                                   return (
                                     <button
                                       type="button"
@@ -579,7 +674,7 @@ export default function ChildrenSettingsPage() {
                                         padding: '5px 10px',
                                         fontSize: '0.78rem',
                                         fontWeight: 500,
-                                        background: checked ? accentVar : 'var(--white)',
+                                        background: checked ? accentVar : zebraBg,
                                         color: checked ? '#fff' : 'var(--ink-2)',
                                         border: `1px solid ${checked ? accentVar : 'var(--rule)'}`,
                                       }}
@@ -610,6 +705,7 @@ export default function ChildrenSettingsPage() {
                 editing={editing}
                 setEditing={setEditing}
                 inputStyle={inputStyle}
+                staffList={staffList}
               />
             </section>
 
@@ -640,14 +736,157 @@ export default function ChildrenSettingsPage() {
  * この児童専用エリアの編集 UI。
  * テナント共通では扱えないイレギュラー時刻/場所を、児童ごとに追加できる。
  */
+/**
+ * Phase 60: 児童専用エリア 1 件ごとの「担当可能職員」トグルピッカー。
+ * 表示:
+ *   - 並び順は職員管理の display_order に合わせる（画面間で視線誘導を一貫させる）
+ *   - 人数制限なし。responsive grid（auto-fill, minmax 104px）で幅に応じて列数自動調整
+ *   - 全員 / 解除ボタンで一括操作
+ *   - 0 名のときは赤字で「担当可能職員が未設定」と注意喚起
+ */
+function EligibleStaffPicker({
+  areaId,
+  direction,
+  editing,
+  setEditing,
+  staffList,
+  accent,
+}: {
+  areaId: string;
+  direction: 'pickup' | 'dropoff';
+  editing: EditableChild;
+  setEditing: (c: EditableChild) => void;
+  staffList: StaffRow[];
+  accent: string;
+}) {
+  const k = eligKey(areaId, direction);
+  const selected = editing.eligibility.get(k) ?? new Set<string>();
+
+  /* Phase 60: 表示順は職員管理の表示順（display_order）そのまま。
+     「選択済みを先頭に」方式は、並べ替えると毎回順序が変わって混乱するため不採用。
+     職員管理画面と同じ並びなら、ユーザーの視線誘導が一貫する。 */
+  const ordered = [...staffList].sort((a, b) => {
+    const ao = a.display_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.display_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name, 'ja');
+  });
+
+  const setSelected = (next: Set<string>) => {
+    const nextElig = new Map(editing.eligibility);
+    if (next.size === 0) nextElig.delete(k);
+    else nextElig.set(k, next);
+    setEditing({ ...editing, eligibility: nextElig });
+  };
+
+  const toggle = (staffId: string) => {
+    const next = new Set(selected);
+    if (next.has(staffId)) next.delete(staffId);
+    else next.add(staffId);
+    setSelected(next);
+  };
+
+  const selectAll = () => setSelected(new Set(staffList.map((s) => s.id)));
+  const clearAll = () => setSelected(new Set());
+
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded p-2"
+      style={{ background: 'var(--bg)', border: '1px dashed var(--rule)' }}
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span
+          className="text-[11px] font-bold tracking-wide"
+          style={{ color: selected.size === 0 ? 'var(--red)' : 'var(--ink-2)' }}
+        >
+          担当可能職員: {selected.size === 0 ? '未設定' : `${selected.size}名`}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-[11px] px-2 py-0.5 rounded"
+            style={{
+              color: 'var(--ink-2)',
+              border: '1px solid var(--rule)',
+              background: 'var(--white)',
+            }}
+          >
+            全員
+          </button>
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11px] px-2 py-0.5 rounded"
+            style={{
+              color: 'var(--ink-2)',
+              border: '1px solid var(--rule)',
+              background: 'var(--white)',
+            }}
+          >
+            解除
+          </button>
+        </div>
+      </div>
+
+      {staffList.length === 0 ? (
+        <p className="text-[11px]" style={{ color: 'var(--ink-3)' }}>
+          職員が登録されていません
+        </p>
+      ) : (
+        <>
+          {/* Phase 60: 人数制限なし・幅に応じて列数が自動調整される responsive grid。
+              広い画面（≈720px）で 6〜7 列、狭い画面（≈480px）で 4 列程度に落ちる。
+              minmax の最小値 104px はチップ「✓本岡」がきれいに収まる幅。 */}
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))' }}
+          >
+            {ordered.map((s) => {
+              const on = selected.has(s.id);
+              const label = staffDisplayName(s) || s.name;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className="text-xs px-2 py-1 rounded transition-colors"
+                  style={{
+                    background: on ? accent : 'var(--white)',
+                    color: on ? 'var(--white)' : 'var(--ink)',
+                    border: `1px solid ${on ? accent : 'var(--rule)'}`,
+                    fontWeight: on ? 600 : 500,
+                    textAlign: 'center',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={s.name}
+                  aria-pressed={on}
+                >
+                  {on ? '✓ ' : ''}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CustomAreasEditor({
   editing,
   setEditing,
   inputStyle,
+  staffList,
 }: {
   editing: EditableChild;
   setEditing: (c: EditableChild) => void;
   inputStyle: React.CSSProperties;
+  /** Phase 60: 担当可能職員トグル UI 用 */
+  staffList: StaffRow[];
 }) {
   const sections = [
     { key: 'custom_pickup_areas' as const, title: 'お迎え（この児童専用）', accent: 'var(--accent)', pale: 'var(--accent-pale)' },
@@ -708,52 +947,70 @@ function CustomAreasEditor({
               （未登録）
             </p>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              {editing[key].map((a, i) => (
-                <div key={i} className="flex items-center gap-1.5 flex-wrap">
-                  <input
-                    type="text"
-                    value={a.emoji}
-                    onChange={(e) => updateArea(key, i, 'emoji', e.target.value)}
-                    style={emojiStyle}
-                    maxLength={2}
-                    aria-label="絵文字"
-                  />
-                  <input
-                    type="text"
-                    value={a.name}
-                    onChange={(e) => updateArea(key, i, 'name', e.target.value)}
-                    style={nameStyle}
-                    placeholder="エリア名（例: おばあちゃん家）"
-                    aria-label="エリア名"
-                  />
-                  <input
-                    type="time"
-                    value={a.time ?? ''}
-                    onChange={(e) => updateArea(key, i, 'time', e.target.value)}
-                    style={timeStyle}
-                    step={600}
-                    aria-label="基準時刻"
-                  />
-                  <input
-                    type="text"
-                    value={a.address ?? ''}
-                    onChange={(e) => updateArea(key, i, 'address', e.target.value)}
-                    style={addrStyle}
-                    placeholder="住所（任意）"
-                    aria-label="住所"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeArea(key, i)}
-                    className="text-xs px-2 py-1 rounded"
-                    style={{ color: 'var(--red)', border: '1px solid var(--rule)', background: 'var(--white)' }}
-                    aria-label="削除"
+            <div className="flex flex-col gap-3">
+              {editing[key].map((a, i) => {
+                const direction: 'pickup' | 'dropoff' =
+                  key === 'custom_pickup_areas' ? 'pickup' : 'dropoff';
+                return (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-2 rounded p-2"
+                    style={{ background: 'var(--white)', border: '1px solid var(--rule)' }}
                   >
-                    🗑
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <input
+                        type="text"
+                        value={a.emoji}
+                        onChange={(e) => updateArea(key, i, 'emoji', e.target.value)}
+                        style={emojiStyle}
+                        maxLength={2}
+                        aria-label="絵文字"
+                      />
+                      <input
+                        type="text"
+                        value={a.name}
+                        onChange={(e) => updateArea(key, i, 'name', e.target.value)}
+                        style={nameStyle}
+                        placeholder="エリア名（例: おばあちゃん家）"
+                        aria-label="エリア名"
+                      />
+                      <input
+                        type="time"
+                        value={a.time ?? ''}
+                        onChange={(e) => updateArea(key, i, 'time', e.target.value)}
+                        style={timeStyle}
+                        step={600}
+                        aria-label="基準時刻"
+                      />
+                      <input
+                        type="text"
+                        value={a.address ?? ''}
+                        onChange={(e) => updateArea(key, i, 'address', e.target.value)}
+                        style={addrStyle}
+                        placeholder="住所（任意）"
+                        aria-label="住所"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeArea(key, i)}
+                        className="text-xs px-2 py-1 rounded"
+                        style={{ color: 'var(--red)', border: '1px solid var(--rule)', background: 'var(--white)' }}
+                        aria-label="削除"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                    <EligibleStaffPicker
+                      areaId={a.id}
+                      direction={direction}
+                      editing={editing}
+                      setEditing={setEditing}
+                      staffList={staffList}
+                      accent={accent}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

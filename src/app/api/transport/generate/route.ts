@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateTransportAssignments } from '@/lib/logic/generateTransport';
 import { requireRole } from '@/lib/auth/requireRole';
-import type { StaffRow, ShiftAssignmentRow, ScheduleEntryRow, ChildRow, AreaLabel } from '@/types';
+import { createClient } from '@/lib/supabase/server';
+import type {
+  StaffRow,
+  ShiftAssignmentRow,
+  ScheduleEntryRow,
+  ChildRow,
+  AreaLabel,
+  ChildAreaEligibleStaffRow,
+} from '@/types';
 
 /**
  * POST /api/transport/generate
@@ -35,6 +43,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'date は必須です' }, { status: 400 });
     }
 
+    /* Phase 60: child-specific エリアの担当可能職員を server-side で取得。
+       クライアントから渡さないことで、変更直後でも最新状態が反映される。 */
+    const supabase = await createClient();
+    const { data: eligRows } = await supabase
+      .from('child_area_eligible_staff')
+      .select('*');
+    const childAreaEligibleStaff = (eligRows ?? []) as ChildAreaEligibleStaffRow[];
+
     const result = generateTransportAssignments({
       tenantId: gate.staff.tenant_id,
       date,
@@ -46,6 +62,7 @@ export async function POST(request: NextRequest) {
       pickupAreas: pickupAreas || [],
       dropoffAreas: dropoffAreas || [],
       pickupCooldownMinutes,
+      childAreaEligibleStaff,
     });
 
     return NextResponse.json({

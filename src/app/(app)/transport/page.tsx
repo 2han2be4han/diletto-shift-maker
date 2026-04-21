@@ -23,6 +23,7 @@ import type {
   AreaLabel,
   TenantSettings,
   TransportColumnKey,
+  ChildAreaEligibleStaffRow,
 } from '@/types';
 import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES, DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
@@ -44,6 +45,8 @@ type UiTransportEntry = {
   dropoffLocation: string | null;
   pickupAreaLabel: string | null;
   dropoffAreaLabel: string | null;
+  pickupAreaId: string | null;
+  dropoffAreaId: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -74,6 +77,10 @@ export default function TransportPage() {
   /* エリア設定を取得し、パターンの pickup_location/dropoff_location が未入力のときに住所をフォールバック */
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
+  /* Phase 60: 児童専用エリアごとの担当可能職員（全テナント分）。対応外警告に使う */
+  const [childAreaEligibleStaff, setChildAreaEligibleStaff] = useState<
+    ChildAreaEligibleStaffRow[]
+  >([]);
   /* Phase 26: 送迎担当の最低退勤時間（HH:MM）。テナント設定 or デフォルト */
   const [transportMinEndTime, setTransportMinEndTime] = useState<string>(DEFAULT_TRANSPORT_MIN_END_TIME);
   /* Phase 28: 迎のクールダウン（分）。テナント設定 or デフォルト 45 分 */
@@ -203,13 +210,14 @@ export default function TransportPage() {
       const from = `${year}-${String(month).padStart(2, '0')}-01`;
       const to = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      const [sRes, cRes, eRes, aRes, tRes, tenantRes] = await Promise.all([
+      const [sRes, cRes, eRes, aRes, tRes, tenantRes, elRes] = await Promise.all([
         fetch('/api/staff'),
         fetch('/api/children'),
         fetch(`/api/schedule-entries?from=${from}&to=${to}`),
         fetch(`/api/shift-assignments?from=${from}&to=${to}`),
         fetch(`/api/transport-assignments?from=${from}&to=${to}`),
         fetch('/api/tenant'),
+        fetch('/api/child-area-eligibility'),
       ]);
       const sJson = sRes.ok ? await sRes.json() : { staff: [] };
       const cJson = cRes.ok ? await cRes.json() : { children: [] };
@@ -217,6 +225,8 @@ export default function TransportPage() {
       const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
       const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
       const tenantJson = tenantRes.ok ? await tenantRes.json() : { tenant: null };
+      const elJson = elRes.ok ? await elRes.json() : { items: [] };
+      setChildAreaEligibleStaff(elJson.items ?? []);
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
@@ -316,6 +326,8 @@ export default function TransportPage() {
         dropoffLocation: spec.dropoff.location,
         pickupAreaLabel: spec.pickup.areaLabel,
         dropoffAreaLabel: spec.dropoff.areaLabel,
+        pickupAreaId: spec.pickup.areaId,
+        dropoffAreaId: spec.dropoff.areaId,
         pickupStaffIds,
         dropoffStaffIds,
         isUnassigned,
@@ -484,17 +496,33 @@ export default function TransportPage() {
               if (!acc) return sa.end_time;
               return (sa.end_time as string) > acc ? (sa.end_time as string) : acc;
             }, null);
+      /* Phase 60: 分割シフト対応で全セグメントを UI 側に渡す。
+         便時刻が「いずれかのセグメントに収まる & 退勤まで 30 分以上余裕」を
+         満たすかで候補判定する（TransportDayView）。 */
+      const segments = daySegments
+        .filter((sa) => sa.start_time && sa.end_time)
+        .map((sa) => ({ startTime: sa.start_time as string, endTime: sa.end_time as string }));
       return {
         id: s.id,
         name: s.name,
         /* Phase 28 F案: 送迎 select の短縮表示に使う */
         display_name: s.display_name ?? null,
         endTime: latestEndTime,
+        segments,
         pickupAreaMarks: staffAreaMarksForDay.pickup.get(s.id) ?? [],
         dropoffAreaMarks: staffAreaMarksForDay.dropoff.get(s.id) ?? [],
         /* Phase 59: 運転手/付き添いフラグを StaffSelect のスロット別フィルタに伝える */
         isDriver: s.is_driver,
         isAttendant: s.is_attendant,
+        /* Phase 60: エリア対応可否。空なら旧 transport_areas にフォールバック（generateTransport と同条件）。 */
+        pickupAreaIds:
+          s.pickup_transport_areas && s.pickup_transport_areas.length > 0
+            ? s.pickup_transport_areas
+            : s.transport_areas,
+        dropoffAreaIds:
+          s.dropoff_transport_areas && s.dropoff_transport_areas.length > 0
+            ? s.dropoff_transport_areas
+            : s.transport_areas,
       };
     });
   }, [staff, shiftAssignments, selectedDate, staffAreaMarksForDay]);
@@ -965,18 +993,97 @@ export default function TransportPage() {
             {(() => {
               const onDuty = availableStaffForDay.filter((s) => !!s.endTime);
               const driverCount = onDuty.filter((s) => s.isDriver).length;
+              /* Phase 60: ホバーで出勤者一覧を表示。分割シフトは各セグメントを " / " で並べる。
+                 出勤時刻が早い順にソート。ネイティブ title は見た目が OS 依存で美しくないので、
+                 group-hover 方式で自前スタイルのポップオーバーを出す。 */
+              const onDutySorted = onDuty.slice().sort((a, b) => {
+                const as = a.segments[0]?.startTime ?? '99:99';
+                const bs = b.segments[0]?.startTime ?? '99:99';
+                return as.localeCompare(bs);
+              });
               return (
                 <>
-                  <span
-                    className="text-xs font-semibold px-2 py-1 rounded"
-                    style={{
-                      background: 'var(--bg)',
-                      color: 'var(--ink-2)',
-                      border: '1px solid var(--rule)',
-                    }}
-                    title="この日にシフトが入っている職員数（分割シフトは1名としてカウント）"
-                  >
-                    👤 出勤 {onDuty.length}人
+                  <span className="relative inline-block group">
+                    <span
+                      className="text-xs font-semibold px-2 py-1 rounded cursor-help"
+                      style={{
+                        background: 'var(--bg)',
+                        color: 'var(--ink-2)',
+                        border: '1px solid var(--rule)',
+                      }}
+                    >
+                      👤 出勤 {onDuty.length}人
+                    </span>
+                    {/* Phase 60: カード型ポップオーバー。group-hover で開閉。 */}
+                    <div
+                      className="absolute left-0 top-full mt-1 hidden group-hover:block z-50"
+                      style={{ minWidth: '240px' }}
+                      role="tooltip"
+                    >
+                      <div
+                        className="rounded shadow-lg overflow-hidden"
+                        style={{
+                          background: 'var(--surface, #fff)',
+                          border: '1px solid var(--rule)',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        <div
+                          className="px-3 py-2 text-[11px] font-bold tracking-wide"
+                          style={{
+                            background: 'var(--bg)',
+                            color: 'var(--ink-2)',
+                            borderBottom: '1px solid var(--rule)',
+                          }}
+                        >
+                          この日の出勤者（{onDuty.length}人）
+                        </div>
+                        {onDutySorted.length === 0 ? (
+                          <div
+                            className="px-3 py-3 text-xs"
+                            style={{ color: 'var(--ink-3)' }}
+                          >
+                            出勤者はいません
+                          </div>
+                        ) : (
+                          <ul className="py-1">
+                            {onDutySorted.map((s, idx) => (
+                              <li
+                                key={s.id}
+                                className="flex items-center justify-between gap-4 px-3 py-2"
+                                style={{
+                                  background:
+                                    idx % 2 === 1 ? 'rgba(0,0,0,0.03)' : 'transparent',
+                                }}
+                              >
+                                <span
+                                  className="font-semibold truncate"
+                                  style={{ color: 'var(--ink)', fontSize: '0.9rem' }}
+                                >
+                                  {s.name}
+                                </span>
+                                <span
+                                  className="shrink-0 tabular-nums"
+                                  style={{
+                                    color: 'var(--ink)',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 500,
+                                    letterSpacing: '0.01em',
+                                  }}
+                                >
+                                  {s.segments
+                                    .map(
+                                      (seg) =>
+                                        `${seg.startTime.slice(0, 5)}–${seg.endTime.slice(0, 5)}`,
+                                    )
+                                    .join(' / ')}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
                   </span>
                   {/* Phase 59: 運転手不在警告。自動割り当てが成立しない・左スロットが空になる */}
                   {onDuty.length > 0 && driverCount === 0 && (
@@ -1052,12 +1159,13 @@ export default function TransportPage() {
             )}
             {/* Phase 55b: viewer は送迎表確定・生成・保存系ボタンを全て非表示 */}
             {generated && !confirmed && unassignedTotal === 0 && myRole !== 'viewer' && (
-              <Button variant="primary" onClick={handleConfirm}>
+              <Button data-tour="transport-confirm" variant="primary" onClick={handleConfirm}>
                 送迎表確定
               </Button>
             )}
             {myRole !== 'viewer' && (
             <Button
+              data-tour="transport-generate"
               variant={generated ? 'secondary' : 'app-card-cta'}
               onClick={handleGenerate}
               disabled={
@@ -1131,6 +1239,7 @@ export default function TransportPage() {
               </div>
             )}
 
+            <div data-tour="transport-day">
             <TransportDayView
               children={currentDayEntries.map((e) => ({
                 id: e.scheduleEntryId,
@@ -1143,6 +1252,8 @@ export default function TransportPage() {
                 dropoffLocation: e.dropoffLocation,
                 pickupAreaLabel: e.pickupAreaLabel,
                 dropoffAreaLabel: e.dropoffAreaLabel,
+                pickupAreaId: e.pickupAreaId,
+                dropoffAreaId: e.dropoffAreaId,
                 pickupStaffIds: e.pickupStaffIds,
                 dropoffStaffIds: e.dropoffStaffIds,
                 isUnassigned: e.isUnassigned,
@@ -1151,6 +1262,8 @@ export default function TransportPage() {
               }))}
               availableStaff={availableStaffForDay}
               transportMinEndTime={transportMinEndTime}
+              tenantAreaIds={[...pickupAreas.map((a) => a.id), ...dropoffAreas.map((a) => a.id)]}
+              childAreaEligibleStaff={childAreaEligibleStaff}
               onStaffChange={handleStaffChange}
               /* Phase 58: 当日がロック済み（保存済み）かどうか。
                  false = 自動割り当ての未保存状態 → StaffSelect は薄いグレーで「仮状態」を示す。
@@ -1169,6 +1282,7 @@ export default function TransportPage() {
                 myRole === 'admin' || myRole === 'editor' ? handleAddCustomArea : undefined
               }
             />
+            </div>
 
             {/* Phase 26: 日ごとの保存ボタン（Phase 55b: viewer には非表示） */}
             <div className="flex items-center justify-end gap-3 mt-4">
@@ -1273,14 +1387,16 @@ export default function TransportPage() {
                       }}
                       className="flex items-center justify-between gap-3 px-4 py-3 transition-colors text-left"
                       style={{
-                        background: 'transparent',
+                        /* Phase 60: 行を縞々にして視線誘導。奇数行のみ薄グレー */
+                        background: idx % 2 === 1 ? 'rgba(0,0,0,0.025)' : 'transparent',
                         borderTop: idx === 0 ? 'none' : '1px solid var(--rule)',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(0,0,0,0.03)';
+                        e.currentTarget.style.background = 'rgba(0,0,0,0.06)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.background =
+                          idx % 2 === 1 ? 'rgba(0,0,0,0.025)' : 'transparent';
                       }}
                     >
                       <span className="text-base font-medium" style={{ color: 'var(--ink)' }}>

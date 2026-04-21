@@ -5,6 +5,7 @@ import type {
   TransportAssignmentRow,
   ChildRow,
   AreaLabel,
+  ChildAreaEligibleStaffRow,
 } from '@/types';
 import {
   DEFAULT_TRANSPORT_MIN_END_TIME,
@@ -50,6 +51,10 @@ type GenerateTransportInput = {
   /** Phase 28: 迎え連続担当禁止時間（分）。ある職員が pickup 担当後、この分数内は同職員を候補から除外。
       未指定はデフォルト 45 分。送り側には適用しない。 */
   pickupCooldownMinutes?: number;
+  /** Phase 60: 児童専用エリアごとの担当可能職員（多対多）。
+      child-specific な areaId（= children.custom_*_areas 内の id）の場合のみこのテーブルを参照。
+      未指定や空配列なら child-specific エリアは自動割り当て対象外。 */
+  childAreaEligibleStaff?: ChildAreaEligibleStaffRow[];
 };
 
 type GenerateTransportResult = {
@@ -72,6 +77,20 @@ export function generateTransportAssignments(
   const dropoffAreas = input.dropoffAreas ?? [];
   const pickupCooldownMin = input.pickupCooldownMinutes ?? DEFAULT_PICKUP_COOLDOWN_MINUTES;
   const childById = new Map(children.map((c) => [c.id, c]));
+
+  /* Phase 60: tenant area id の集合と、child-specific area ごとの担当可能職員 map を作る。
+     - tenant areaId → staff.transport_areas で判定（従来通り）
+     - child-specific areaId → eligibleStaffByAreaDir で判定（このテーブルにある職員のみ OK） */
+  const tenantAreaIds = new Set<string>([
+    ...pickupAreas.map((a) => a.id),
+    ...dropoffAreas.map((a) => a.id),
+  ]);
+  const eligibleStaffByAreaDir = new Map<string, Set<string>>();
+  for (const r of input.childAreaEligibleStaff ?? []) {
+    const k = `${r.area_id}|${r.direction}`;
+    if (!eligibleStaffByAreaDir.has(k)) eligibleStaffByAreaDir.set(k, new Set());
+    eligibleStaffByAreaDir.get(k)!.add(r.staff_id);
+  }
 
   /* ① 出勤している職員のみ抽出（end_time が記録されている職員）。
      Phase 50: 分割シフト対応。同一職員に複数セグメントがある場合、
@@ -196,6 +215,8 @@ export function generateTransportAssignments(
             lastPickupMinByStaff,
             cooldownMinutes: pickupCooldownMin,
           },
+          tenantAreaIds,
+          eligibleStaffByAreaDir,
         });
         if (pickupStaff.length > 0 && pickupAreaId && pickupTimeMin !== null) {
           groupAssignments.push({
@@ -230,6 +251,8 @@ export function generateTransportAssignments(
           staffAssignCount,
           maxStaff: AUTO_ASSIGN_STAFF_COUNT,
           /* 送りにはクールダウンを適用しない */
+          tenantAreaIds,
+          eligibleStaffByAreaDir,
         });
         if (dropoffStaff.length > 0 && dropoffAreaId && dropoffTimeMin !== null) {
           groupAssignments.push({
@@ -286,6 +309,8 @@ function selectStaff({
   staffAssignCount,
   maxStaff,
   cooldownContext,
+  tenantAreaIds,
+  eligibleStaffByAreaDir,
 }: {
   workingStaff: StaffRow[];
   shiftAssignments: ShiftAssignmentRow[];
@@ -302,6 +327,10 @@ function selectStaff({
     lastPickupMinByStaff: Map<string, number>;
     cooldownMinutes: number;
   };
+  /** Phase 60: テナント共通 AreaLabel.id の集合。これに含まれない areaId は child-specific として扱う */
+  tenantAreaIds: Set<string>;
+  /** Phase 60: child-specific 用の担当可能職員 map。key=`${areaId}|${direction}` */
+  eligibleStaffByAreaDir: Map<string, Set<string>>;
 }): StaffRow[] {
   if (!time) return [];
   const timeMin = normalizeTimeMinutes(time);
@@ -322,33 +351,37 @@ function selectStaff({
     );
     if (segments.length === 0) return false;
 
-    /* ② 送迎時間が勤務時間内か（いずれかのセグメント内に収まれば OK） */
-    const coveringSegment = segments.find(
-      (seg) => isTimeInRange(time, seg.start_time!, seg.end_time!)
-    );
+    /* Phase 60: 迎/送 統一ルール。便時刻がセグメントに収まり、かつ 退勤 >= 便 + 30 分。
+         - start <= t: まだ出勤していない職員は候補外
+         - t + 30 <= end: 便後 30 分の往復/戻り時間を確保（迎でも必要）
+       旧 Phase 47 の「送りだけ厳密 end>time」ガードはこの式に吸収された（>= はバッファ込み）。 */
+    const TRANSPORT_BUFFER_MINUTES = 30;
+    if (timeMin === null) return false;
+    const coveringSegment = segments.find((seg) => {
+      const sm = normalizeTimeMinutes(seg.start_time!);
+      const em = normalizeTimeMinutes(seg.end_time!);
+      if (sm === null || em === null) return false;
+      return sm <= timeMin && timeMin + TRANSPORT_BUFFER_MINUTES <= em;
+    });
     if (!coveringSegment) return false;
 
-    /* Phase 47 (②): 送り便は退勤時刻ジャストの職員を除外（厳密 end_time > dropoff_time）。
-       16:30 発の送り便に 16:30 退勤の職員を当てると、退勤後に時間外運転を強いることになる。
-       事業所が「+1 分」設定をしなくても、ロジック側で自動的に弾く。
-       お迎え便にはこのガードを掛けない（早朝出勤のお迎え担当は退勤時刻と無関係）。
-       Phase 50: 分割シフト時は「便時刻を内包しているセグメント」の end_time を基準にする。 */
-    if (direction === 'dropoff' && timeMin !== null) {
-      const endMin = normalizeTimeMinutes(coveringSegment.end_time!);
-      if (endMin === null || endMin <= timeMin) return false;
-    }
-
     /* ③ エリア一致（エリア指定がある場合）。
-       Phase 27-D: 迎=pickup_transport_areas, 送=dropoff_transport_areas を参照。
-       両カラムが空（migration 0026 未適用 or 未設定）の場合は旧 transport_areas にフォールバック。
-       Phase 27 fix: 空エリア = 「対応不可（候補から除外）」として扱う。
+       Phase 60: 2 段階評価。
+         - areaId が tenant 共通エリア → staff.pickup_transport_areas / dropoff_transport_areas で判定
+         - areaId が child-specific → child_area_eligible_staff で判定
        Phase 30: 比較キーは AreaLabel.id（テナント設定上の uuid）。 */
     if (areaId) {
-      const directionAreas =
-        direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
-      const effective =
-        (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
-      if (!effective.includes(areaId)) return false;
+      if (tenantAreaIds.has(areaId)) {
+        const directionAreas =
+          direction === 'pickup' ? s.pickup_transport_areas : s.dropoff_transport_areas;
+        const effective =
+          (directionAreas && directionAreas.length > 0) ? directionAreas : s.transport_areas;
+        if (!effective.includes(areaId)) return false;
+      } else {
+        /* child-specific エリア。担当可能職員が登録されていない or この職員が含まれなければ候補外。 */
+        const set = eligibleStaffByAreaDir.get(`${areaId}|${direction}`);
+        if (!set || !set.has(s.id)) return false;
+      }
     }
 
     /* Phase 28: 迎のクールダウンチェック。直近 pickup_time + cooldown 以降でなければ候補外。 */
@@ -388,21 +421,3 @@ function normalizeTimeMinutes(t: string | null | undefined): number | null {
   return h * 60 + m;
 }
 
-/* 時間が範囲内かチェック（HH:MM形式） */
-function isTimeInRange(time: string, start: string, end: string): boolean {
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const t = toMinutes(time);
-  return t >= toMinutes(start) && t <= toMinutes(end);
-}
-
-/* Phase 26: "HH:MM" または "HH:MM:SS" 形式の時刻を比較（a - b の符号） */
-function compareTime(a: string, b: string): number {
-  const toMin = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-  return toMin(a) - toMin(b);
-}

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { openInGoogleMaps } from '@/lib/utils/googleMaps';
 import type { TransportColumnKey } from '@/types';
 import { DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
 import { staffDisplayName } from '@/lib/utils/displayName';
+import type { ChildAreaEligibleStaffRow } from '@/types';
 
 /**
  * 日別送迎表ビュー
@@ -29,6 +30,9 @@ type TransportChild = {
   dropoffLocation: string | null;
   pickupAreaLabel: string | null;
   dropoffAreaLabel: string | null;
+  /** Phase 60: エリア対応可否チェック用。対応外職員に option 側で「⚠対応外」マーカーを出す */
+  pickupAreaId: string | null;
+  dropoffAreaId: string | null;
   pickupStaffIds: string[];
   dropoffStaffIds: string[];
   isUnassigned: boolean;
@@ -46,6 +50,9 @@ type TransportStaff = {
   display_name?: string | null;
   /** Phase 26: 当日の勤務終了時刻（"HH:MM:SS" or "HH:MM"）。null なら欠勤/候補外 */
   endTime: string | null;
+  /** Phase 60: 当日の出勤セグメント（分割シフト対応）。便時刻がいずれかのセグメント内に
+      収まるかで候補判定する。空配列は欠勤扱い。 */
+  segments: { startTime: string; endTime: string }[];
   /** Phase 27: 迎で担当しているエリア絵文字。重複なし */
   pickupAreaMarks: string[];
   /** Phase 27: 送で担当しているエリア絵文字。重複なし */
@@ -54,6 +61,10 @@ type TransportStaff = {
   isDriver: boolean;
   /** Phase 59: 付き添いフラグ。右スロット候補に含める判定用 */
   isAttendant: boolean;
+  /** Phase 60: 対応エリア（AreaLabel.id）。迎担当は pickup、送は dropoff を参照。
+      どちらも空なら transport_areas（旧統一カラム）にフォールバック。 */
+  pickupAreaIds: string[];
+  dropoffAreaIds: string[];
 };
 
 type TransportDayViewProps = {
@@ -62,6 +73,10 @@ type TransportDayViewProps = {
   availableStaff: TransportStaff[];
   /** Phase 26: "HH:MM" 形式の最低退勤時刻（この時刻以降に退勤する職員のみ候補） */
   transportMinEndTime: string;
+  /** Phase 60: テナント共通 AreaLabel.id 一覧。areaId がここに含まれなければ child-specific として扱う。 */
+  tenantAreaIds: string[];
+  /** Phase 60: 児童専用エリアごとの担当可能職員（同テナント全件）。 */
+  childAreaEligibleStaff: ChildAreaEligibleStaffRow[];
   onStaffChange: (
     scheduleEntryId: string,
     field: 'pickup' | 'dropoff',
@@ -164,6 +179,8 @@ export default function TransportDayView({
   children,
   availableStaff,
   transportMinEndTime,
+  tenantAreaIds,
+  childAreaEligibleStaff,
   onStaffChange,
   disabled = false,
   dayLocked = false,
@@ -171,6 +188,19 @@ export default function TransportDayView({
   onColumnReorder,
   onAddCustomArea,
 }: TransportDayViewProps) {
+  /* Phase 60: 対応エリア判定を 2 段階化するためのルックアップ。
+     - tenantAreaSet に含まれる → staff.pickupAreaIds / dropoffAreaIds で判定（既存ロジック）
+     - 含まれない（child-specific）→ eligibleStaffByAreaDir map で判定 */
+  const tenantAreaSet = React.useMemo(() => new Set(tenantAreaIds), [tenantAreaIds]);
+  const eligibleStaffByAreaDir = React.useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const r of childAreaEligibleStaff) {
+      const k = `${r.area_id}|${r.direction}`;
+      if (!m.has(k)) m.set(k, new Set());
+      m.get(k)!.add(r.staff_id);
+    }
+    return m;
+  }, [childAreaEligibleStaff]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /* Phase 28: 列並び替え DnD 用のドラッグ中インデックス（columnOrder 上の位置） */
   const [dragCol, setDragCol] = useState<number | null>(null);
@@ -206,26 +236,28 @@ export default function TransportDayView({
   /* 児童名 + 並び替え可能列数 = 合計列数（展開行の colSpan 用） */
   const colSpan = 1 + effectiveOrder.length;
 
-  /* Phase 47 (②): 送迎の担当候補ロジックを方向別に分離。
-     - お迎え便: その日に出勤している職員すべてを候補とする（退勤時刻ガードなし）。
-       旧実装は transportMinEndTime（事業所設定値）で迎/送どちらも一律に弾いていたため、
-       16:31 より前に退勤する職員がお迎えにも出てこないバグがあった。
-     - お送り便: その便の発時刻より後に退勤する職員のみ候補（行ごとに動的フィルタ）。
-       16:30 発の便に 16:30 退勤の職員は危険なので、退勤時刻 > 便発時刻（厳密）で判定。
-       テナント側の設定がなくてもロジック側で自動的に効く。 */
-  const pickupEligibleStaff = availableStaff.filter((s) => !!s.endTime);
-  const dropoffEligibleFor = (dropoffTime: string | null) => {
-    const tripMin = timeToMinutes(dropoffTime);
+  /* Phase 60: 迎/送を統一ルールで候補抽出。
+     条件: 便時刻が職員のいずれかのセグメントに収まり、かつ 退勤時刻 >= 便時刻 + 30 分。
+       - start <= t: まだ出勤していない職員を迎に出せない
+       - t + 30 <= end: 便後 30 分の往復/戻り時間を確保（送はもちろん迎でも必要）
+     これによりテナント設定の transportMinEndTime は不要に。props は互換維持のため残す。 */
+  const TRANSPORT_BUFFER_MINUTES = 30;
+  const eligibleFor = (tripTime: string | null) => {
+    const tripMin = timeToMinutes(tripTime);
     return availableStaff.filter((s) => {
-      if (!s.endTime) return false;
-      const em = timeToMinutes(s.endTime);
-      if (em === null) return false;
+      if (s.segments.length === 0) return false;
       /* 便時刻不明なら出勤者全員を候補に（フィルタしない） */
       if (tripMin === null) return true;
-      return em > tripMin;
+      return s.segments.some((seg) => {
+        const start = timeToMinutes(seg.startTime);
+        const end = timeToMinutes(seg.endTime);
+        if (start === null || end === null) return false;
+        return start <= tripMin && tripMin + TRANSPORT_BUFFER_MINUTES <= end;
+      });
     });
   };
-  /* transportMinEndTime は Phase 47 で参照しなくなったが、props は互換維持のため残す */
+  const pickupEligibleFor = (pickupTime: string | null) => eligibleFor(pickupTime);
+  const dropoffEligibleFor = (dropoffTime: string | null) => eligibleFor(dropoffTime);
   void transportMinEndTime;
 
   /* Phase 27 (layout revised): ダーク帯 + 方向別アクセントカラーでセクション感を出す。
@@ -305,12 +337,22 @@ export default function TransportDayView({
           ) : (
             <StaffSelect
               staffIds={child.pickupStaffIds}
-              availableStaff={pickupEligibleStaff}
+              availableStaff={pickupEligibleFor(child.pickupTime)}
               onChange={(ids) => onStaffChange(child.scheduleEntryId, 'pickup', ids)}
               disabled={disabled}
               dayLocked={dayLocked}
               direction="pickup"
               rowAreaEmoji={splitAreaLabel(child.pickupAreaLabel).emoji}
+              rowAreaId={child.pickupAreaId}
+              isAreaCovered={(staffId, sAreas) => {
+                if (!child.pickupAreaId) return true;
+                if (tenantAreaSet.has(child.pickupAreaId)) {
+                  return sAreas.includes(child.pickupAreaId);
+                }
+                return !!eligibleStaffByAreaDir
+                  .get(`${child.pickupAreaId}|pickup`)
+                  ?.has(staffId);
+              }}
               tripMarks={computeTripMarks(child, children, 'pickup')}
             />
           )}
@@ -365,6 +407,16 @@ export default function TransportDayView({
               dayLocked={dayLocked}
               direction="dropoff"
               rowAreaEmoji={splitAreaLabel(child.dropoffAreaLabel).emoji}
+              rowAreaId={child.dropoffAreaId}
+              isAreaCovered={(staffId, sAreas) => {
+                if (!child.dropoffAreaId) return true;
+                if (tenantAreaSet.has(child.dropoffAreaId)) {
+                  return sAreas.includes(child.dropoffAreaId);
+                }
+                return !!eligibleStaffByAreaDir
+                  .get(`${child.dropoffAreaId}|dropoff`)
+                  ?.has(staffId);
+              }}
               tripMarks={computeTripMarks(child, children, 'dropoff')}
               /* Phase 53 (rev): 自動コピーは児童により逆効果なのでボタン化。
                  迎担当が入っていて送担当が空の時だけ「迎からコピー」ボタンを表示。
@@ -999,6 +1051,8 @@ function StaffSelect({
   dayLocked = false,
   direction,
   rowAreaEmoji,
+  rowAreaId,
+  isAreaCovered,
   tripMarks,
   copyFromPickup,
 }: {
@@ -1010,6 +1064,11 @@ function StaffSelect({
   dayLocked?: boolean;
   /** Phase 27: 迎担当=pickup のマークのみ表示、送担当=dropoff のマークのみ表示 */
   direction: 'pickup' | 'dropoff';
+  /** Phase 60: この便の AreaLabel.id。対応外職員判定に使う。null ならチェックしない */
+  rowAreaId?: string | null;
+  /** Phase 60: 職員がこのエリアに対応できるかを判定するクロージャ。
+      tenant area / child-specific area の 2 段階判定を親側で吸収する。 */
+  isAreaCovered?: (staffId: string, staffAreaIds: string[]) => boolean;
   /** Phase 47 (①): この行（=この便）のエリア絵文字。
       旧実装は職員の 1 日全エリアを集計表示していたため、
       別便でも同じ職員担当だと "🐻✏" のように合体表示されてしまっていた。
@@ -1030,11 +1089,34 @@ function StaffSelect({
       updated[index] = newId;
     }
     onChange(updated);
+    /* Phase 60: 選択が決まれば展開状態は解除（閉じた「＋」表示には戻らないが、他セルを触って再オープンできる） */
+    setActiveSlotIdx(null);
   };
+
+  /* Phase 60: 空スロットを「＋」ボタンに折りたたむ挙動。
+     クリックで当該スロットを展開（プルダウン表示）、他の個所クリックで戻る。 */
+  const [activeSlotIdx, setActiveSlotIdx] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (activeSlotIdx === null) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        /* 外側クリック: 展開状態を解除し、未確定の空スロットを掃除する（trailing 空きを残さない） */
+        setActiveSlotIdx(null);
+        const pruned = staffIds.filter((id) => id !== '');
+        if (pruned.length !== staffIds.length) onChange(pruned);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [activeSlotIdx, staffIds, onChange]);
 
   const handleAdd = () => {
     if (staffIds.length >= 2) return;
-    onChange([...staffIds, '']);
+    const next = [...staffIds, ''];
+    onChange(next);
+    setActiveSlotIdx(next.length - 1);
   };
 
   /* Phase 28: 横並びコンパクト表示（Excel 準拠）
@@ -1080,9 +1162,58 @@ function StaffSelect({
       >
         {rowMarks.slice(0, 4).join('')}
       </span>
-      {/* Phase 53: 空状態でも「担当を選択」ボタンではなく未選択プルダウンを直接表示。
-          displaySlots は常に最低 1 スロット（未選択）を確保し、選ぶと staffIds に反映される。 */}
+      {/* Phase 60: 閲覧のみ（viewer or 確定済み）はプルダウンを出さず、担当者名 or "—" をプレーン表示。
+          編集者向けの赤枠「未選択」は見てもアクションできないので隠す。 */}
+      {disabled ? (
+        (() => {
+          const names = staffIds
+            .filter((id) => id !== '')
+            .map((id) => {
+              const s = availableStaff.find((x) => x.id === id);
+              return s ? staffDisplayName(s) || s.name : '（候補外）';
+            });
+          return (
+            <span
+              className="shrink-0"
+              style={{
+                fontSize: '0.78rem',
+                color: names.length > 0 ? 'var(--ink)' : 'var(--ink-3)',
+                padding: '4px 2px',
+              }}
+            >
+              {names.length > 0 ? names.join('・') : '—'}
+            </span>
+          );
+        })()
+      ) : (
+      <div ref={containerRef} className="inline-flex items-center gap-1.5 flex-nowrap">
       {(staffIds.length === 0 ? [''] : staffIds).map((id, i) => {
+        /* Phase 60: 空スロット（id === ''）はデフォルトで「＋」ボタンに折りたたむ。
+           active にしたスロットだけ展開して未選択プルダウンを表示する。 */
+        if (id === '' && activeSlotIdx !== i) {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActiveSlotIdx(i)}
+              className="rounded-md transition-colors shrink-0"
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: 'var(--accent)',
+                border: '1px dashed var(--accent)',
+                background: 'transparent',
+                whiteSpace: 'nowrap',
+                minWidth: '36px',
+              }}
+              title={i === 0 ? '担当を選択' : 'もう 1 名追加'}
+              aria-label={i === 0 ? '担当を選択' : 'もう 1 名追加'}
+            >
+              ＋
+            </button>
+          );
+        }
         const isMissing = id !== '' && !availableStaff.some((s) => s.id === id);
         /* Phase 28 fix: 他スロットで既に選ばれている職員を候補から除外し、
            同一送迎で同じ職員が 2 回選ばれるバグを防ぐ。自スロットの値は残す */
@@ -1097,8 +1228,32 @@ function StaffSelect({
           if (i === 0) return s.isDriver;
           return s.isDriver || s.isAttendant;
         });
+        /* Phase 60: 選択中の職員がエリア対応外かを判定。閉じた select の左に ⚠ アイコンを出す。
+           select 内テキスト（80px）を圧迫しないよう外出し表示。 */
+        const selectedStaff = id !== '' ? availableStaff.find((s) => s.id === id) : null;
+        const selectedAreas = selectedStaff
+          ? (direction === 'pickup' ? selectedStaff.pickupAreaIds : selectedStaff.dropoffAreaIds)
+          : [];
+        const selectedOutOfArea = !!rowAreaId && !!selectedStaff
+          ? (isAreaCovered
+              ? !isAreaCovered(selectedStaff.id, selectedAreas)
+              : !selectedAreas.includes(rowAreaId))
+          : false;
         return (
           <div key={i} className="inline-flex items-center gap-1">
+            {selectedOutOfArea && (
+              <span
+                aria-label="対応エリア外"
+                title="この職員はこのエリアに対応設定がありません"
+                style={{
+                  color: 'var(--red)',
+                  fontSize: '0.85rem',
+                  lineHeight: 1,
+                }}
+              >
+                ⚠
+              </span>
+            )}
             <select
               value={id}
               onChange={(e) => handleChange(i, e.target.value)}
@@ -1145,8 +1300,25 @@ function StaffSelect({
                   /* Phase 28 F案: セル幅 60px に収めるため option 表示は短縮名のみ。
                      同姓判別はフルネームを title（hover）で確認する運用 */
                   const short = staffDisplayName(s);
+                  /* Phase 60: エリア対応可否。対応外でも候補から外さず「⚠対応外」マーカーで警告表示。
+                     急遽ヘルプに入るケースを潰さないため選択は許可する（CLAUDE.md §8 の運用思想）。
+                     tenant area / child-specific area の 2 段階判定は isAreaCovered クロージャが吸収。 */
+                  const areas =
+                    direction === 'pickup' ? s.pickupAreaIds : s.dropoffAreaIds;
+                  const outOfArea = !!rowAreaId
+                    ? isAreaCovered
+                      ? !isAreaCovered(s.id, areas)
+                      : !areas.includes(rowAreaId)
+                    : false;
                   return (
-                    <option key={s.id} value={s.id} title={s.name}>
+                    <option
+                      key={s.id}
+                      value={s.id}
+                      title={outOfArea ? `${s.name}（対応エリア外）` : s.name}
+                      /* Phase 60: 対応外は option を赤字に（⚠ プレフィックスは幅を食うため廃止）。
+                         閉じた select では別途アイコンで警告表示する。 */
+                      style={outOfArea ? { color: 'var(--red)' } : undefined}
+                    >
                       {short || s.name}
                     </option>
                   );
@@ -1155,6 +1327,30 @@ function StaffSelect({
           </div>
         );
       })}
+      {/* Phase 60: 1 名選択済み・2 人目未追加 のとき「＋」ボタンで空スロットを生やす */}
+      {staffIds.length === 1 && staffIds[0] !== '' && !disabled && (
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="rounded-md transition-colors shrink-0"
+          style={{
+            padding: '4px 10px',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            color: 'var(--accent)',
+            border: '1px dashed var(--accent)',
+            background: 'transparent',
+            whiteSpace: 'nowrap',
+            minWidth: '36px',
+          }}
+          title="もう 1 名追加"
+          aria-label="担当をもう 1 名追加"
+        >
+          ＋
+        </button>
+      )}
+      </div>
+      )}
       {/* Phase 53 (rev): 送担当で迎担当が入っていて送が空なら「迎からコピー」の絵文字ボタン。
           迎に 2 名いたら 2 名まとめてコピー（退勤時刻ガードを通る職員のみ）。
           自動コピーは児童ごとに正解が違うので手動ボタン方式にした。 */}
@@ -1174,29 +1370,6 @@ function StaffSelect({
           aria-label="迎担当から送担当へコピー"
         >
           📥
-        </button>
-      )}
-      {/* Phase 53: 「＋」ボタンは 1 人目が確定してから（2 人目追加のため）のみ表示。
-          空状態は上の未選択プルダウンでカバーされるのでボタンは不要。 */}
-      {staffIds.length >= 1 && staffIds.length < 2 && !disabled && (
-        <button
-          onClick={handleAdd}
-          disabled={disabled}
-          className="rounded-md transition-colors disabled:opacity-60 shrink-0"
-          style={{
-            padding: '4px 6px',
-            fontSize: '0.74rem',
-            fontWeight: 500,
-            color: 'var(--accent)',
-            border: '1px dashed var(--accent)',
-            background: 'transparent',
-            whiteSpace: 'nowrap',
-            minWidth: '24px',
-          }}
-          title="もう 1 名追加"
-          aria-label="担当をもう 1 名追加"
-        >
-          ＋
         </button>
       )}
     </div>

@@ -164,6 +164,20 @@ export type ChildRow = {
   created_at: string;
 };
 
+/** Phase 60: 児童専用エリアごとの担当可能職員（多対多）。
+    migration 0038 で追加。tenant 共通エリアはこのテーブルを使わず staff.transport_areas を参照する。 */
+export type ChildAreaEligibleStaffRow = {
+  id: string;
+  tenant_id: string;
+  child_id: string;
+  /** AreaLabel.id。children.custom_pickup_areas / custom_dropoff_areas 内の uuid。 */
+  area_id: string;
+  staff_id: string;
+  /** 'pickup'=迎担当可、'dropoff'=送担当可。両方可の場合は 2 行。 */
+  direction: 'pickup' | 'dropoff';
+  created_at: string;
+};
+
 // ----- 利用予定 -----
 export type ScheduleEntryPickupMethod = 'pickup' | 'self';
 export type ScheduleEntryDropoffMethod = 'dropoff' | 'self';

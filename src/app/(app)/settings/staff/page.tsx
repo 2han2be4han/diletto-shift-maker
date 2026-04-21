@@ -984,6 +984,26 @@ export default function StaffSettingsPage() {
               </div>
             </div>
 
+            {/* Phase 60: 児童専用エリアの担当設定は児童管理側でしか行えないことを明示。
+                ここに混入させると画面が肥大化するため、職員管理ではテナント共通エリアだけを扱う。 */}
+            <div
+              className="flex items-start gap-2 rounded-md p-3"
+              style={{
+                background: 'var(--accent-pale)',
+                borderLeft: '4px solid var(--accent)',
+                fontSize: '0.8rem',
+                color: 'var(--ink)',
+              }}
+            >
+              <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>ℹ️</span>
+              <span>
+                <strong style={{ fontWeight: 700 }}>児童専用エリア</strong>
+                （🐻 祖母宅 など、特定の児童にだけ設定されるエリア）の担当設定は、
+                <strong style={{ fontWeight: 700 }}>児童管理 → 専用エリア</strong>
+                から行ってください。ここではテナント共通エリアのみ設定します。
+              </span>
+            </div>
+
             {/* Phase 27-D (revised v2): 迎エリア・送エリアを別ソースで並列表示。
                 迎セクション=テナントの pickup_areas のみ、送セクション=dropoff_areas のみ。 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
