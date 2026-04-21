@@ -328,7 +328,7 @@ export default function ShiftPage() {
   /* Phase 26: ヘッダー右側のアクション（再生成 / シフト確定 / 編集モード切替）
      Phase 47: 印刷ボタン追加（cells があるときのみ表示） */
   const headerActions = (
-    <div className="flex items-center gap-2">
+    <div data-tour="shift-actions" className="flex items-center gap-2">
       {/* Phase 58: 月の完成状態 - 閲覧者には非表示 */}
       {myRole !== 'viewer' && (() => {
         const monthStr = `${year}-${String(month).padStart(2, '0')}`;
@@ -337,19 +337,20 @@ export default function ShiftPage() {
         return <MonthStatusBadge status={status} month={monthStr} />;
       })()}
       {cells.length > 0 && (
-        <Button variant="secondary" onClick={() => window.print()} title="A3 横で印刷">
+        <Button data-tour="shift-print" variant="secondary" onClick={() => window.print()} title="A3 横で印刷">
           🖨 印刷
         </Button>
       )}
       {myRole !== 'viewer' && cells.length > 0 && !confirmed && (
-        <Button variant="secondary" onClick={handleGenerateWithGuard}>再生成</Button>
+        <Button data-tour="shift-regenerate" variant="secondary" onClick={handleGenerateWithGuard}>再生成</Button>
       )}
       {myRole !== 'viewer' && cells.length > 0 && !confirmed && (
-        <Button variant="primary" onClick={handleConfirm}>シフト確定</Button>
+        <Button data-tour="shift-confirm" variant="primary" onClick={handleConfirm}>シフト確定</Button>
       )}
       {myRole !== 'viewer' && confirmed && (
         <>
           <Button
+            data-tour="shift-edit-mode"
             variant={editMode ? 'primary' : 'secondary'}
             onClick={() => setEditMode((v) => !v)}
           >
@@ -359,7 +360,7 @@ export default function ShiftPage() {
         </>
       )}
       {myRole !== 'viewer' && cells.length === 0 && (
-        <Button variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
+        <Button data-tour="shift-generate" variant="app-card-cta" onClick={handleGenerate} disabled={staff.length === 0 || scheduleEntries.length === 0}>
           シフト生成
         </Button>
       )}
@@ -448,7 +449,7 @@ export default function ShiftPage() {
           >
             {summary.understaffedDays > 0 && <Badge variant="error">人員不足 {summary.understaffedDays}日</Badge>}
             {summary.noQualifiedDays > 0 && <Badge variant="warning">有資格者不足 {summary.noQualifiedDays}日</Badge>}
-            <span className="text-xs" style={{ color: 'var(--red)' }}>セルをクリックして調整してください</span>
+            <span data-tour="shift-warnings-hint" className="text-xs" style={{ color: 'var(--red)' }}>セルをクリックして調整してください</span>
           </div>
         )}
 
@@ -457,7 +458,7 @@ export default function ShiftPage() {
             読み込み中...
           </div>
         ) : cells.length > 0 ? (
-          <div className="flex flex-col h-full min-h-[500px]">
+          <div data-tour="shift-grid" className="flex flex-col h-full min-h-[500px]">
             <ShiftGrid
               year={year}
               month={month}

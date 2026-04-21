@@ -1140,6 +1140,7 @@ export default function TransportPage() {
             {/* Phase 51: 送迎表作成中にシフト外の職員を当日出勤扱いにして担当に立てるための導線 */}
             {myRole !== 'viewer' && (myRole === 'admin' || myRole === 'editor') && (
               <Button
+                data-tour="transport-add-shift"
                 variant="secondary"
                 onClick={() =>
                   setAddShiftModal({
@@ -1304,6 +1305,7 @@ export default function TransportPage() {
                 const showSaved = pendingCountForDay === 0 && currentDayLocked && !saving;
                 return (
                   <Button
+                    data-tour="transport-save-day"
                     variant="primary"
                     onClick={handleSaveDay}
                     disabled={saving || pendingCountForDay === 0 || confirmed}

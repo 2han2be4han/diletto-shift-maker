@@ -79,17 +79,21 @@ export default async function RequestPage({
 
           {showAdminView ? (
             <>
-              <AdminRequestList
-                staff={allStaff}
-                initialRequests={allRequests}
-                targetMonth={targetMonth}
-              />
+              <div data-tour="request-admin-list">
+                <AdminRequestList
+                  staff={allStaff}
+                  initialRequests={allRequests}
+                  targetMonth={targetMonth}
+                />
+              </div>
               {/* Phase 25: シフト変更申請（全ロール共通） */}
-              <ShiftChangeRequestSection myStaffId={staff.id} />
+              <div data-tour="request-change-section">
+                <ShiftChangeRequestSection myStaffId={staff.id} />
+              </div>
             </>
           ) : (
             <div className="flex flex-col xl:flex-row items-start gap-8">
-              <div className="flex-1 w-full xl:max-w-xl">
+              <div data-tour="request-calendar" className="flex-1 w-full xl:max-w-xl">
                 <MyRequestCalendar
                   myStaffId={staff.id}
                   myStaffName={staff.name}
@@ -97,7 +101,7 @@ export default async function RequestPage({
                   initialRequests={(myRequests as ShiftRequestRow[]) ?? []}
                 />
               </div>
-              <div className="flex-1 w-full xl:max-w-md">
+              <div data-tour="request-change-section" className="flex-1 w-full xl:max-w-md">
                 <ShiftChangeRequestSection myStaffId={staff.id} />
               </div>
             </div>

@@ -43,14 +43,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               対処方法
             </p>
             <ul className="space-y-1.5 list-disc list-inside">
-              <li>
-                新しく事業所を登録する場合は
-                <a href="/signup" style={{ color: 'var(--accent)', textDecoration: 'underline', marginLeft: '4px' }}>
-                  新規登録
-                </a>
-                へ
-              </li>
               <li>既存事業所に参加する場合は、管理者から招待を受けてください</li>
+              <li>事業所の新規登録については運営にお問い合わせください</li>
             </ul>
           </div>
 

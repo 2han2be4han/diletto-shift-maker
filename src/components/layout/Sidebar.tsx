@@ -53,9 +53,6 @@ const NAV_SETTINGS = [
   { href: '/settings/tenant', label: 'テナント設定', icon: '🏢' },
   { href: '/settings/staff', label: '職員管理', icon: '👤' },
   { href: '/settings/children', label: '児童管理', icon: '🧒' },
-];
-
-const NAV_BOTTOM = [
   { href: '/billing', label: '契約管理', icon: '💳' },
 ];
 
@@ -69,7 +66,6 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
   const searchParams = useSearchParams();
   const isResizing = useRef(false);
   const isAdmin = role === 'admin';
-  const canSeeBilling = isAdmin;
 
   /* Phase 58: 送迎表/シフト表の完成状態を取得。URL ?month に追従、無ければ来月。
      ルートが /transport や /shift の時は URL から読める。他ページでは来月固定。 */
@@ -254,6 +250,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
                   href={item.href}
                   onClick={() => { if (window.innerWidth < 1024) onClose(); }}
                   className={navItemClass}
+                  data-tour={`sidebar-nav-${item.href.replace(/\//g, '-').replace(/^-/, '')}`}
                   title={!isOpen ? item.label : undefined}
                   style={{
                     color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
@@ -274,38 +271,9 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
         )}
       </nav>
 
-      {/* 下部ナビ（admin のみ） */}
-      {canSeeBilling && (
-      <div className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2.5' : 'px-0'}`} style={{ borderColor: 'var(--rule)' }}>
-        <ul className="flex flex-col gap-1">
-          {NAV_BOTTOM.map((item) => (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                className={navItemClass}
-                title={!isOpen ? item.label : undefined}
-                style={{
-                  color: isActive(item.href) ? 'var(--accent)' : 'var(--ink-3)',
-                  background: isActive(item.href) ? 'var(--accent-pale)' : 'transparent',
-                }}
-              >
-                <span className="text-xl w-7 flex items-center justify-center shrink-0">{item.icon}</span>
-                {isOpen && (
-                  <span className="ml-3 text-sm font-medium whitespace-nowrap">
-                    {item.label}
-                  </span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-      )}
-
       {/* サインアウト（常時表示） */}
       <div
-        className={`pb-4 ${canSeeBilling ? '' : 'mt-auto border-t pt-4'} ${isOpen ? 'px-2.5' : 'px-0'}`}
+        className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2.5' : 'px-0'}`}
         style={{ borderColor: 'var(--rule)' }}
       >
         <form action="/auth/signout" method="POST">
@@ -349,6 +317,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
 
       {/* === サイドバー本体 === */}
       <aside
+        data-tour="sidebar"
         className={`
           fixed top-0 left-0 z-[60] h-full flex flex-col
           lg:sticky lg:translate-x-0

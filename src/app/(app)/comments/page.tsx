@@ -32,10 +32,12 @@ export default async function CommentsAdminPage() {
           </h2>
           <Badge variant="info">admin専用</Badge>
         </div>
-        <CommentsApprovalList
-          initialComments={(comments ?? []) as unknown as Parameters<typeof CommentsApprovalList>[0]['initialComments']}
-          currentStaffId={staff.id}
-        />
+        <div data-tour="comments-list">
+          <CommentsApprovalList
+            initialComments={(comments ?? []) as unknown as Parameters<typeof CommentsApprovalList>[0]['initialComments']}
+            currentStaffId={staff.id}
+          />
+        </div>
       </div>
     </>
   );

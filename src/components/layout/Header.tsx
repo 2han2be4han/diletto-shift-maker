@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useSidebarToggle } from '@/components/layout/AppShell';
 import NotificationBell from '@/components/layout/NotificationBell';
+import TourButton from '@/components/tour/TourButton';
 
 type HeaderProps = {
   title: string;
@@ -56,6 +57,7 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
 
       <div className="flex items-center flex-wrap gap-2 min-w-0">
         {actions}
+        <TourButton />
         <NotificationBell />
       </div>
     </header>

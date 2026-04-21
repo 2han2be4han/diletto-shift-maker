@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import TourResetButton from '@/components/tour/TourResetButton';
 import type { AreaLabel, QualificationType, TenantSettings } from '@/types';
 import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES } from '@/types';
 
@@ -184,9 +185,12 @@ export default function TenantSettingsPage() {
       <Header title="テナント設定" />
 
       <div className="p-6 overflow-y-auto">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
           <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>事業所設定</h2>
           <Badge variant="info">admin専用</Badge>
+          <div className="ml-auto">
+            <TourResetButton />
+          </div>
         </div>
 
         {error && (
@@ -208,7 +212,7 @@ export default function TenantSettingsPage() {
           </div>
 
           {/* 送迎エリア: 迎 / 送 を2カラムで並べる */}
-          <div className="flex flex-col gap-3">
+          <div data-tour="tenant-areas" className="flex flex-col gap-3">
             <div>
               <label className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>送迎エリア</label>
               <p className="text-xs mt-1" style={{ color: 'var(--ink-3)' }}>

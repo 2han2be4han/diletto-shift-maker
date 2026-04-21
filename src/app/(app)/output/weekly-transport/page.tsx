@@ -251,12 +251,12 @@ export default function WeeklyTransportPrintPage() {
         title="送迎表（週次印刷）"
         actions={
           <div className="weekly-print-toolbar flex items-center gap-2">
-            <Button variant="primary" onClick={() => window.print()}>🖨 印刷</Button>
+            <Button data-tour="weekly-print" variant="primary" onClick={() => window.print()}>🖨 印刷</Button>
           </div>
         }
       />
 
-      <div className="weekly-print-toolbar px-6 pt-3">
+      <div data-tour="weekly-month-stepper" className="weekly-print-toolbar px-6 pt-3">
         <MonthStepper />
       </div>
 

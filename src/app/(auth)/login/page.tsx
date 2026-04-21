@@ -291,15 +291,6 @@ export default function LoginPage() {
                 {loading ? 'ログイン中...' : 'ログイン'}
               </button>
 
-              <p className="text-xs text-center mt-2" style={{ color: 'var(--ink-3)' }}>
-                事業所の初回登録は{' '}
-                <a
-                  href="/signup"
-                  style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}
-                >
-                  こちら
-                </a>
-              </p>
             </form>
           </div>
         </div>

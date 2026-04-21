@@ -327,7 +327,7 @@ export default function ChildrenSettingsPage() {
             >
               送迎エリアを設定 →
             </a>
-            <Button variant="primary" onClick={handleAdd}>+ 児童追加</Button>
+            <Button data-tour="children-add" variant="primary" onClick={handleAdd}>+ 児童追加</Button>
           </div>
         </div>
 
@@ -337,7 +337,7 @@ export default function ChildrenSettingsPage() {
           </div>
         )}
 
-        <div className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+        <div data-tour="children-list" className="overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem' }}>
             <thead>
               <tr>

@@ -2,6 +2,7 @@
 
 import { useState, createContext, useContext, type ReactNode } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
+import TourProvider from '@/components/tour/TourProvider';
 import type { AuthenticatedStaff, StaffRole } from '@/types';
 
 /**
@@ -59,6 +60,7 @@ export default function AppShell({
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {children}
           </main>
+          <TourProvider />
         </div>
       </SidebarContext.Provider>
     </StaffContext.Provider>

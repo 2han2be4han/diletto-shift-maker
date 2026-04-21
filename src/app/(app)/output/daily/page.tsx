@@ -534,14 +534,14 @@ export default function DailyOutputPage() {
       <Header
         title="日次出力"
         actions={
-          <Button variant="primary" onClick={handlePrint}>
+          <Button data-tour="daily-print" variant="primary" onClick={handlePrint}>
             🖨 印刷 / PDF保存
           </Button>
         }
       />
 
       {/* Phase 58-fix: 日次出力も送迎表と同じ DateStepper に統一（土日祝色付き・祝日名併記） */}
-      <div className="px-6 pt-3">
+      <div className="px-6 pt-3" data-tour="daily-date-stepper">
         <DateStepper value={date} onChange={setDate} />
       </div>
 
@@ -589,6 +589,7 @@ export default function DailyOutputPage() {
         ) : (
           /* ホワイトボード本体: A3 縦に合わせた最大幅。常時 2-col（左=送迎, 右=勤務+休憩） */
           <div
+            data-tour="daily-board"
             className="rounded-lg p-4 lg:p-6 whiteboard-frame mx-auto"
             style={{
               background: 'var(--white)',

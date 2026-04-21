@@ -925,6 +925,105 @@
         <li><strong>運転手不在日の手動オーバーライド</strong>: 例外的に付き添いを左スロットに置けるスイッチ（現状は警告バッジのみ）</li>
     </ul>
 
+    <div class="phase-head">Phase 70: 使い方ツアー（オンボーディング）</div>
+    <p>
+        目的: ダッシュボード + 全ページ（請求除く）に「📖 使い方を見る」ボタンとスポットライト型ツアーを追加。
+        初回ログイン時に自動起動し、機能・チップスを漏れなく伝える。PC/モバイルで別ツアーを用意。
+    </p>
+    <ul>
+        <li><strong>ライブラリ</strong>: driver.js（MIT, ~10KB, 依存ゼロ）</li>
+        <li><strong>完了管理</strong>: localStorage のみ（<code>tour:global:first_login_seen</code>, <code>tour:{page}:completed</code>）</li>
+        <li><strong>初回起動</strong>: 既存ユーザーも全員初回扱いで自動起動</li>
+        <li><strong>デバイス分岐</strong>: <code>window.innerWidth &lt; 768</code> で PC/モバイル切替</li>
+        <li><strong>対象ページ (11)</strong>: dashboard / schedule / shift / transport / request / output/daily / output/weekly-transport / comments / settings/tenant / settings/staff / settings/children（billing は除外）</li>
+    </ul>
+    <table>
+        <thead>
+            <tr>
+                <th>ステップ</th>
+                <th>対応内容</th>
+                <th>対象ファイル</th>
+                <th>ステータス</th>
+                <th>完了率</th>
+                <th>備考 / 整合性チェック</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>70-1</td>
+                <td>driver.js 導入・型定義</td>
+                <td>package.json, src/lib/tour/types.ts</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>バージョン互換確認。CSS 変数（--accent 等）でテーマ馴染ませ</td>
+            </tr>
+            <tr>
+                <td>70-2</td>
+                <td>useTour フック・localStorage 管理・デバイス判定</td>
+                <td>src/lib/tour/useTour.ts, src/lib/tour/storage.ts</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>SSR 安全性（typeof window チェック）。リサイズ時の再判定は不要（ツアー開始時のみ分岐）</td>
+            </tr>
+            <tr>
+                <td>70-3</td>
+                <td>TourButton 共通コンポーネント + Header 組込</td>
+                <td>src/components/tour/TourButton.tsx, src/components/layout/Header.tsx</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>ボタン表記「📖 使い方を見る」で統一。既存 Header の props を壊さない</td>
+            </tr>
+            <tr>
+                <td>70-4</td>
+                <td>ツアー定義ファイル作成（11ページ × PC/モバイル × ロール）</td>
+                <td>src/lib/tour/tours.ts</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>ステップ数は各 5〜8 目安。モバイルは簡易版。viewer/editor/admin で差分</td>
+            </tr>
+            <tr>
+                <td>70-5</td>
+                <td>各ページに data-tour 属性付与</td>
+                <td>src/app/(app)/**/page.tsx, 関連コンポーネント</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>既存クラス名・propsを変えない。属性追加のみの最小侵襲</td>
+            </tr>
+            <tr>
+                <td>70-6</td>
+                <td>TourProvider（初回自動起動監視）</td>
+                <td>src/components/tour/TourProvider.tsx, src/app/(app)/layout.tsx</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>ダッシュボード初回マウント時に global ツアー → 各ページ初訪問時にページツアー</td>
+            </tr>
+            <tr>
+                <td>70-7</td>
+                <td>ツアーリセット機能</td>
+                <td>src/app/(app)/settings/tenant/page.tsx（or 他設定）</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>「ツアーをもう一度見る」ボタンで localStorage 全クリア</td>
+            </tr>
+            <tr>
+                <td>70-8</td>
+                <td>動作確認（PC / タブレット / モバイル × admin/editor/viewer）</td>
+                <td>npm run dev で全ロール確認</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>ターゲット要素が存在しないロール時のフォールバック確認</td>
+            </tr>
+            <tr>
+                <td>70-9</td>
+                <td>docs/reference-map.md 更新</td>
+                <td>docs/reference-map.md</td>
+                <td class="status-todo">未着手</td>
+                <td><div class="progress-bar"><div class="progress-inner" style="width:0%"></div></div> 0%</td>
+                <td>新規ファイル・data-tour 属性の所在を記録</td>
+            </tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

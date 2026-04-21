@@ -508,7 +508,7 @@ export default function StaffSettingsPage() {
               退職者も表示
             </label>
           </div>
-          <Button variant="primary" onClick={handleAdd}>+ 職員を招待</Button>
+          <Button data-tour="staff-invite" variant="primary" onClick={handleAdd}>+ 職員を招待</Button>
         </div>
 
         {error && (
@@ -523,7 +523,7 @@ export default function StaffSettingsPage() {
         )}
 
         {/* デスクトップ・タブレット（md以上）: テーブル表示 */}
-        <div className="hidden md:block overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
+        <div data-tour="staff-list" className="hidden md:block overflow-x-auto" style={{ borderRadius: '8px', border: '1px solid var(--rule)' }}>
           <table className="w-full border-collapse" style={{ fontSize: '0.85rem', tableLayout: 'auto' }}>
             <thead>
               <tr>

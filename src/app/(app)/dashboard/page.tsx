@@ -125,6 +125,7 @@ export default async function DashboardPage() {
       <div className="p-6 overflow-y-auto">
         {/* ウェルカム */}
         <div
+          data-tour="dashboard-welcome"
           className="p-6 mb-6 flex items-center justify-between flex-wrap gap-4"
           style={{
             background: 'var(--white)',
@@ -167,7 +168,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* カードグリッド */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div data-tour="dashboard-cards" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {cards.map((c) => {
             const status = c.key ? cardStatus[c.key] : null;
             return (
