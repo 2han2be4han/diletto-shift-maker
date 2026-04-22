@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import DemoLoginButton from '@/components/demo/DemoLoginButton';
 
 /**
  * dilettoブランド準拠のログインページ
@@ -290,6 +291,9 @@ export default function LoginPage() {
               >
                 {loading ? 'ログイン中...' : 'ログイン'}
               </button>
+
+              {/* デモプレイ起動ボタン（Phase D）。ログイン経路とは独立、Supabase に触らない */}
+              <DemoLoginButton />
 
             </form>
           </div>
