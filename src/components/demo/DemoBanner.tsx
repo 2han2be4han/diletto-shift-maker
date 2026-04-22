@@ -77,7 +77,7 @@ export default function DemoBanner() {
         zIndex: 1000,
         maxWidth: 'calc(100vw - 32px)',
         padding: '8px 10px',
-        background: 'var(--gold-pale)',
+        background: 'var(--gold-pale-solid)',
         border: '1px solid var(--gold)',
         borderRadius: 9999,
         boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
