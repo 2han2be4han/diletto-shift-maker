@@ -1047,6 +1047,48 @@
         </tbody>
     </table>
 
+    <h2>Phase D: デモプレイ機能（2026-04-22 着手）</h2>
+    <p style="background:#f9f5e8;border-left:4px solid #d4a017;padding:10px 14px;margin:12px 0;">
+      <strong>方式</strong>: クライアント完全モック（C案）<br>
+      <strong>永続化</strong>: sessionStorage（タブを閉じれば消える）<br>
+      <strong>API 横取り</strong>: window.fetch モンキーパッチ（全ブラウザ互換）<br>
+      <strong>主要制約</strong>: 本番DB / Claude API / Stripe / Resend には一切到達しない
+    </p>
+    <p style="background:#fff5f5;border-left:4px solid #c0392b;padding:10px 14px;margin:12px 0;">
+      <strong>各ステップ完了ごとの自己レビュー観点（CLAUDE.md §3）</strong><br>
+      ① 既存ログイン経路を壊していないか / ② 本番ユーザーの SSR レンダリングに副作用がないか /
+      ③ デモ Cookie が漏れて本番 API に到達していないか / ④ sessionStorage の容量上限（5MB）を超えないか
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>ステップ</th>
+                <th>対応内容</th>
+                <th>対象ファイル</th>
+                <th>ステータス</th>
+                <th>完了率</th>
+                <th>備考</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>D-1</td><td>デモ判定ユーティリティ（client/server 共通）</td><td>src/lib/demo/flag.ts</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>D-2</td><td>sessionStorage ストア + seed データ（テナント・職員3名・児童5名・エリア・当月利用予定）</td><td>src/lib/demo/store.ts, seedData.ts</td><td class="status-todo">未着手</td><td>0%</td><td>容量計測も実装</td></tr>
+            <tr><td>D-3</td><td>モックバックエンド: 読み系（GET 全般）</td><td>src/lib/demo/demoBackend.ts</td><td class="status-todo">未着手</td><td>0%</td><td>未対応 GET は空配列フォールバック</td></tr>
+            <tr><td>D-4</td><td>モックバックエンド: 書き系（POST/PATCH/DELETE）</td><td>src/lib/demo/demoBackend.ts</td><td class="status-todo">未着手</td><td>0%</td><td>未対応は { ok: true } 成功擬装</td></tr>
+            <tr><td>D-5</td><td>DemoProvider + window.fetch モンキーパッチ + 復元処理</td><td>src/lib/demo/DemoProvider.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>/api/* のみ patch 対象</td></tr>
+            <tr><td>D-6</td><td>middleware に sp_demo Cookie バイパスを追加</td><td>src/middleware.ts</td><td class="status-todo">未着手</td><td>0%</td><td>本番ユーザーの auth は壊さない</td></tr>
+            <tr><td>D-7</td><td>(app)/layout.tsx に合成 staff 注入分岐</td><td>src/app/(app)/layout.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>cookie() で判定</td></tr>
+            <tr><td>D-8</td><td>SSR 3 ページ（dashboard/request/comments）の demo 時 CSR 分岐</td><td>各 page.tsx + Demo*.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>本番経路は無変更</td></tr>
+            <tr><td>D-9</td><td>ログイン画面に「デモプレイしてみる」ボタン追加</td><td>src/app/(auth)/login/page.tsx, src/components/demo/DemoLoginButton.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>Secondary バリアント</td></tr>
+            <tr><td>D-10</td><td>デモバナー（常時表示・終了ボタン付き）</td><td>src/components/demo/DemoBanner.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>サイドバー上に固定</td></tr>
+            <tr><td>D-11</td><td>PDF 取込モーダルを demo 時は「有料版でご利用可能」ロックに差し替え</td><td>src/components/schedule/PdfImportModal.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>Claude API は絶対に叩かない</td></tr>
+            <tr><td>D-12</td><td>billing / 招待 / signout など無効化機能のデモガード</td><td>billing/page.tsx, settings/staff/page.tsx, Sidebar.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>無効化＋トースト</td></tr>
+            <tr><td>D-13</td><td>ローカル動作確認（ログイン→デモ起動→各ページ操作→終了）</td><td>—</td><td class="status-todo">未着手</td><td>0%</td><td>npm run dev で実機確認</td></tr>
+            <tr><td>D-14</td><td>docs/reference-map.md / docs/error-log.md 更新</td><td>docs/</td><td class="status-todo">未着手</td><td>0%</td><td>新規ファイル一覧と発生エラーを記録</td></tr>
+            <tr><td>D-15</td><td>noindex meta + robots.txt（デモ画面のみクローラー除外）</td><td>(app)/layout.tsx, public/robots.txt</td><td class="status-todo">未着手</td><td>0%</td><td>デモ Cookie 検知時のみ noindex</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>
