@@ -29,7 +29,7 @@ export default function Header({ title, onMenuToggle, actions }: HeaderProps) {
 
   return (
     <header
-      className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 lg:px-6 py-3 shrink-0"
+      className="sticky top-0 z-[60] flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 lg:px-6 py-3 shrink-0"
       style={{
         borderBottom: '1px solid var(--rule)',
         background: 'var(--white)',
