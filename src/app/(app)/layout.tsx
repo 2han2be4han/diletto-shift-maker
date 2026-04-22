@@ -1,13 +1,46 @@
 import type { ReactNode } from 'react';
+import { cookies } from 'next/headers';
 import AppShell from '@/components/layout/AppShell';
 import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
+import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
+import { DEMO_STAFF_ID_ME, DEMO_TENANT_ID } from '@/lib/demo/seedData';
+import DemoProvider from '@/lib/demo/DemoProvider';
+import type { AuthenticatedStaff } from '@/types';
 
 const SUPABASE_CONFIGURED =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 const DEV_SKIP_AUTH = process.env.DEV_SKIP_AUTH === 'true';
 
+/* デモモード時にサーバー側で合成する admin staff。
+   本物の staff と同じ shape なので AppShell / 権限判定はそのまま動く。 */
+const DEMO_STAFF: AuthenticatedStaff = {
+  id: DEMO_STAFF_ID_ME,
+  tenant_id: DEMO_TENANT_ID,
+  name: 'デモ太郎',
+  email: 'demo@example.com',
+  role: 'admin',
+};
+
+export const metadata = {
+  /* デモ経路でも robots を noindex したいが、layout metadata は静的。
+     実際の noindex 制御は D-15 で page 側に追加する */
+};
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  /* デモ Cookie を先に判定。立っていれば Supabase を一切触らず合成 staff で AppShell を返す。
+     middleware (D-6) で Supabase 認証はスキップされているが、ここでも独立判定することで
+     DEV_SKIP_AUTH 併用環境でも「デモボタン → デモ体験」が成立する。 */
+  const cookieStore = await cookies();
+  const demoCookieValue = cookieStore.get(DEMO_COOKIE_NAME)?.value;
+  if (isDemoCookie(demoCookieValue)) {
+    return (
+      <DemoProvider>
+        <AppShell staff={DEMO_STAFF}>{children}</AppShell>
+      </DemoProvider>
+    );
+  }
+
   const staff = await getCurrentStaff();
 
   /* Supabase 接続済みなのに staff が取れない = 未招待 or DB未構築

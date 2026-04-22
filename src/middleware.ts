@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
 
 /**
  * 認証ミドルウェア
@@ -7,6 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * - 未認証 → /login
  * - 認証済みで /login → /dashboard
  * - /request/submit と /auth/* は常時通過（招待リンク・コールバック用）
+ * - sp_demo Cookie が立っていたら Supabase 認証をまるごとバイパスし、/login → /dashboard に誘導
  */
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,6 +31,20 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   /* Supabase 未接続 or 明示スキップ時 = 開発用バイパス */
   if (!SUPABASE_CONFIGURED || SKIP_AUTH_FLAG) {
+    return NextResponse.next();
+  }
+
+  /* デモモード: sp_demo Cookie があれば Supabase 認証をスキップし、
+     /login /signup にいたら /dashboard へ誘導する。
+     本番ユーザーは Cookie を持たないため、下の Supabase フローにそのまま流れる。 */
+  const demoCookie = request.cookies.get(DEMO_COOKIE_NAME)?.value;
+  if (isDemoCookie(demoCookie)) {
+    const { pathname } = request.nextUrl;
+    if (pathname === '/login' || pathname === '/signup') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next();
   }
 

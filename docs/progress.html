@@ -1075,9 +1075,9 @@
             <tr><td>D-2</td><td>sessionStorage ストア + seed データ（テナント・職員3名・児童5名・エリア・当月利用予定）</td><td>src/lib/demo/store.ts, seedData.ts</td><td class="status-done">完了</td><td>100%</td><td>c2e98e2 / tenant 1, staff 3, 児童 5, 当月+来月の平日分</td></tr>
             <tr><td>D-3</td><td>モックバックエンド: 読み系（GET 全般）</td><td>src/lib/demo/demoBackend.ts</td><td class="status-done">完了</td><td>100%</td><td>未対応 GET は { ok: true } フォールバック。tsc 通過</td></tr>
             <tr><td>D-4</td><td>モックバックエンド: 書き系（POST/PATCH/DELETE）</td><td>src/lib/demo/demoBackend.ts</td><td class="status-done">完了</td><td>100%</td><td>handleDemoRequest 一本化で 50+ endpoint カバー</td></tr>
-            <tr><td>D-5</td><td>DemoProvider + window.fetch モンキーパッチ + 復元処理</td><td>src/lib/demo/DemoProvider.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>/api/* のみ patch 対象</td></tr>
-            <tr><td>D-6</td><td>middleware に sp_demo Cookie バイパスを追加</td><td>src/middleware.ts</td><td class="status-todo">未着手</td><td>0%</td><td>本番ユーザーの auth は壊さない</td></tr>
-            <tr><td>D-7</td><td>(app)/layout.tsx に合成 staff 注入分岐</td><td>src/app/(app)/layout.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>cookie() で判定</td></tr>
+            <tr><td>D-5</td><td>DemoProvider + window.fetch モンキーパッチ + 復元処理</td><td>src/lib/demo/DemoProvider.tsx</td><td class="status-done">完了</td><td>100%</td><td>__demo_patched フラグで StrictMode 多重適用を防止</td></tr>
+            <tr><td>D-6</td><td>middleware に sp_demo Cookie バイパスを追加</td><td>src/middleware.ts</td><td class="status-done">完了</td><td>100%</td><td>Cookie 無しの本番ユーザー経路は無変更</td></tr>
+            <tr><td>D-7</td><td>(app)/layout.tsx に合成 staff 注入分岐</td><td>src/app/(app)/layout.tsx</td><td class="status-done">完了</td><td>100%</td><td>Cookie 検知時は Supabase に一切触らず DemoProvider でラップ</td></tr>
             <tr><td>D-8</td><td>SSR 3 ページ（dashboard/request/comments）の demo 時 CSR 分岐</td><td>各 page.tsx + Demo*.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>本番経路は無変更</td></tr>
             <tr><td>D-9</td><td>ログイン画面に「デモプレイしてみる」ボタン追加</td><td>src/app/(auth)/login/page.tsx, src/components/demo/DemoLoginButton.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>Secondary バリアント</td></tr>
             <tr><td>D-10</td><td>デモバナー（常時表示・終了ボタン付き）</td><td>src/components/demo/DemoBanner.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>サイドバー上に固定</td></tr>
