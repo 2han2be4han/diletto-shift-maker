@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import PdfConfirmTable from './PdfConfirmTable';
 import type { ChildRow, ParsedScheduleEntry, AreaLabel } from '@/types';
 import { inferMarkFromTime, mergeAreas } from '@/lib/logic/resolveTransportSpec';
+import { isDemoClient } from '@/lib/demo/flag';
 
 /**
  * PDFインポートモーダル
@@ -67,7 +68,66 @@ export default function PdfImportModal({
   const [isMock, setIsMock] = useState(false);
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
+  const [isDemo, setIsDemo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* Phase D: デモモード検知。isDemoClient() は sessionStorage を見るので
+     マウント後に判定する（SSR 段階では false 固定で hydration 差分ゼロ）。 */
+  useEffect(() => {
+    setIsDemo(isDemoClient());
+  }, []);
+
+  if (isOpen && isDemo) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="PDF 取り込み">
+        <div className="flex flex-col gap-4 p-2">
+          <div
+            className="flex flex-col items-center gap-3 p-6 text-center"
+            style={{
+              background: 'var(--gold-pale)',
+              borderRadius: '12px',
+              border: '1px solid var(--gold)',
+            }}
+          >
+            <div style={{ fontSize: '2.5rem' }}>🔒</div>
+            <h3 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
+              PDF 取り込み機能
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+              この機能は有料版でご利用いただけます。
+              <br />
+              デモモードでは無効化されています。
+            </p>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+            本番環境ではデイロボから書き出した PDF をアップロードすると、
+            Claude API が利用予定を自動抽出してカレンダーに取り込みます。
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              閉じる
+            </Button>
+            <a
+              href="https://diletto-s.com/contact"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center font-semibold transition-all"
+              style={{
+                background: 'var(--ink)',
+                color: '#fff',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '0.9rem',
+                textDecoration: 'none',
+              }}
+            >
+              お問い合わせ
+            </a>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -13,6 +13,7 @@ import type {
   AreaLabel,
   QualificationType,
 } from '@/types';
+import { isDemoClient } from '@/lib/demo/flag';
 
 /**
  * 職員管理ページ（admin専用）
@@ -328,32 +329,33 @@ export default function StaffSettingsPage() {
     setInfo('');
     try {
       if (editing.isNew) {
-        /* 新規 = 招待メール送信 */
-        const res = await fetch('/api/staff/invite', {
+        /* Phase D: デモモードでは /api/staff/invite を呼ばず /api/staff (POST) で
+           ローカル seed に row だけ追加する（メール送信無効）。本番経路では従来通り招待送信。 */
+        const demo = isDemoClient();
+        const payload = {
+          name: editing.name,
+          email: editing.email,
+          role: editing.role,
+          employment_type: editing.employment_type,
+          default_start_time: editing.default_start_time,
+          default_end_time: editing.default_end_time,
+          transport_areas: Array.from(new Set([...editing.pickup_transport_areas, ...editing.dropoff_transport_areas])),
+          pickup_transport_areas: editing.pickup_transport_areas,
+          dropoff_transport_areas: editing.dropoff_transport_areas,
+          qualifications: editing.qualifications,
+          is_qualified: editing.is_qualified,
+          is_driver: editing.is_driver,
+          is_attendant: editing.is_attendant,
+          display_name: editing.display_name,
+        };
+        const res = await fetch(demo ? '/api/staff' : '/api/staff/invite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editing.name,
-            email: editing.email,
-            role: editing.role,
-            employment_type: editing.employment_type,
-            default_start_time: editing.default_start_time,
-            default_end_time: editing.default_end_time,
-            /* Phase 27-D: transport_areas は pickup ∪ dropoff のユニオンで後方互換維持 */
-            transport_areas: Array.from(new Set([...editing.pickup_transport_areas, ...editing.dropoff_transport_areas])),
-            pickup_transport_areas: editing.pickup_transport_areas,
-            dropoff_transport_areas: editing.dropoff_transport_areas,
-            qualifications: editing.qualifications,
-            is_qualified: editing.is_qualified,
-            /* Phase 59: 送迎役割フラグ */
-            is_driver: editing.is_driver,
-            is_attendant: editing.is_attendant,
-            display_name: editing.display_name,
-          }),
+          body: JSON.stringify(payload),
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? '追加失敗');
-        setInfo(json.warning ?? '招待メールを送信しました');
+        setInfo(demo ? 'デモモードのため招待メールは送信されませんでした（職員は追加されました）' : json.warning ?? '招待メールを送信しました');
       } else {
         /* 既存 = 更新 */
         const res = await fetch(`/api/staff/${editing.id}`, {
@@ -421,6 +423,10 @@ export default function StaffSettingsPage() {
     target: StaffRow
   ) => {
     e.stopPropagation(); /* 行クリックの編集モーダルを抑止 */
+    if (isDemoClient()) {
+      setInfo('デモモードでは招待メール再送は無効です');
+      return;
+    }
     if (!confirm(`${target.name} さんに招待メールを再送しますか？`)) return;
     setError('');
     setInfo('');

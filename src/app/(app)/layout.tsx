@@ -5,6 +5,7 @@ import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
 import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
 import { DEMO_STAFF_ID_ME, DEMO_TENANT_ID } from '@/lib/demo/seedData';
 import DemoProvider from '@/lib/demo/DemoProvider';
+import DemoBanner from '@/components/demo/DemoBanner';
 import type { AuthenticatedStaff } from '@/types';
 
 const SUPABASE_CONFIGURED =
@@ -36,7 +37,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (isDemoCookie(demoCookieValue)) {
     return (
       <DemoProvider>
-        <AppShell staff={DEMO_STAFF}>{children}</AppShell>
+        <AppShell staff={DEMO_STAFF}>
+          <DemoBanner />
+          {children}
+        </AppShell>
       </DemoProvider>
     );
   }

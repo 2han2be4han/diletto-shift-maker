@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { StaffRole } from '@/types';
+import { isDemoClient, disableDemoClient } from '@/lib/demo/flag';
 
 type MonthStatus = 'empty' | 'incomplete' | 'complete' | null;
 
@@ -276,7 +277,19 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
         className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2.5' : 'px-0'}`}
         style={{ borderColor: 'var(--rule)' }}
       >
-        <form action="/auth/signout" method="POST">
+        <form
+          action="/auth/signout"
+          method="POST"
+          onSubmit={(e) => {
+            /* Phase D: デモモード時は Supabase signout を呼ばず Cookie+sessionStorage を捨てて /login へ。
+               本番経路では isDemoClient() が false を返すので従来の POST 挙動のまま。 */
+            if (isDemoClient()) {
+              e.preventDefault();
+              disableDemoClient();
+              window.location.href = '/login';
+            }
+          }}
+        >
           <button
             type="submit"
             className={`${navItemClass} ${isOpen ? 'w-full' : ''} hover:bg-[var(--red-pale)]`}
