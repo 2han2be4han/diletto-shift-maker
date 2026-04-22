@@ -91,12 +91,14 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-10 w-80 max-h-96 overflow-y-auto z-50"
+          className="absolute right-0 top-10 w-80 max-h-96 overflow-y-auto"
           style={{
             background: 'var(--white)',
             borderRadius: '8px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
             border: '1px solid var(--rule)',
+            /* シフト/送迎表の sticky 日付ヘッダー (z-index 10-40 級) に埋もれないよう高め */
+            zIndex: 200,
           }}
         >
           <div

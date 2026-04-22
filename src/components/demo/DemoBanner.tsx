@@ -49,7 +49,7 @@ export default function DemoBanner() {
           width: 44,
           height: 44,
           borderRadius: 9999,
-          background: 'var(--gold-pale)',
+          background: 'var(--gold-pale-solid)',
           border: '1px solid var(--gold)',
           boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
           fontSize: '1.1rem',

@@ -252,7 +252,7 @@ const scheduleTour: TourDefinition = {
       description: `
         <p>セルをクリックすると、こんなモーダルが開きます:</p>
         <div style="margin:10px 0; padding:12px; border:1px solid #e5e5e5; border-radius:8px; background:#fafafa; font-size:12px;">
-          <div style="font-weight:700; margin-bottom:8px;">川島舞桜 — 4月23日（木）</div>
+          <div style="font-weight:700; margin-bottom:8px;">児童A — 4月23日（木）</div>
           <div style="margin-bottom:8px;">
             <div style="font-size:10px; font-weight:700; margin-bottom:3px;">来所予定時間</div>
             <div style="font-weight:700; margin-bottom:4px;">13 : 00</div>
@@ -552,19 +552,19 @@ const transportTour: TourDefinition = {
           <div style="display:grid; grid-template-columns:16px 70px 1fr 1fr; gap:4px; padding:4px 6px; align-items:center;">
             <div>🔴</div>
             <div style="font-weight:600;">13:00</div>
-            <div>川島 舞桜</div>
-            <div style="padding:2px 6px; background:#fff; border:1px solid #ddd; border-radius:3px;">山田 太郎</div>
+            <div>児童 A</div>
+            <div style="padding:2px 6px; background:#fff; border:1px solid #ddd; border-radius:3px;">職員 1</div>
           </div>
           <div style="display:grid; grid-template-columns:16px 70px 1fr 1fr; gap:4px; padding:4px 6px; align-items:center; background:rgba(0,0,0,0.02);">
             <div>🔵</div>
             <div style="font-weight:600;">13:10</div>
-            <div>佐藤 健</div>
-            <div style="padding:2px 6px; background:#fff; border:1px solid #ddd; border-radius:3px;">山田 太郎</div>
+            <div>児童 B</div>
+            <div style="padding:2px 6px; background:#fff; border:1px solid #ddd; border-radius:3px;">職員 1</div>
           </div>
           <div style="display:grid; grid-template-columns:16px 70px 1fr 1fr; gap:4px; padding:4px 6px; align-items:center;">
             <div>🔴</div>
             <div style="font-weight:600;">16:00</div>
-            <div>川島 舞桜</div>
+            <div>児童 A</div>
             <div style="padding:2px 6px; background:#ffd6d6; border:1px solid #d63031; color:#d63031; border-radius:3px; font-weight:600;">未割当</div>
           </div>
         </div>
@@ -806,16 +806,16 @@ const outputDailyTour: TourDefinition = {
         <div style="margin:10px 0; padding:10px; border:1px solid #e5e5e5; border-radius:6px; background:#fafafa; font-size:11px;">
           <div style="font-weight:700; color:#666; margin-bottom:6px;">並び替え前</div>
           <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
-            <div style="width:46px; height:46px; border-radius:50%; background:#fde0e0; border:2px solid #d63031; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#a00;">川島<br>舞桜</div>
-            <div style="width:46px; height:46px; border-radius:50%; background:#e0efff; border:2px solid #2e86de; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#05527a;">滝川<br>希</div>
-            <div style="width:46px; height:46px; border-radius:50%; background:#e0f5e0; border:2px solid #2f8f57; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#185a32;">滝川<br>葵</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#fde0e0; border:2px solid #d63031; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#a00;">児童<br>A</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#e0efff; border:2px solid #2e86de; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#05527a;">児童<br>B</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#e0f5e0; border:2px solid #2f8f57; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#185a32;">児童<br>C</div>
           </div>
-          <div style="text-align:center; color:#888; margin-bottom:8px; font-size:13px;">↓ 葵を左にドラッグ</div>
+          <div style="text-align:center; color:#888; margin-bottom:8px; font-size:13px;">↓ C を左にドラッグ</div>
           <div style="font-weight:700; color:#666; margin-bottom:6px;">並び替え後</div>
           <div style="display:flex; gap:6px; align-items:center;">
-            <div style="width:46px; height:46px; border-radius:50%; background:#e0f5e0; border:2px solid #2f8f57; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#185a32;">滝川<br>葵</div>
-            <div style="width:46px; height:46px; border-radius:50%; background:#fde0e0; border:2px solid #d63031; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#a00;">川島<br>舞桜</div>
-            <div style="width:46px; height:46px; border-radius:50%; background:#e0efff; border:2px solid #2e86de; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#05527a;">滝川<br>希</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#e0f5e0; border:2px solid #2f8f57; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#185a32;">児童<br>C</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#fde0e0; border:2px solid #d63031; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#a00;">児童<br>A</div>
+            <div style="width:46px; height:46px; border-radius:50%; background:#e0efff; border:2px solid #2e86de; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#05527a;">児童<br>B</div>
           </div>
         </div>
         <p>並び順は<strong>自動で記憶</strong>されます。</p>
