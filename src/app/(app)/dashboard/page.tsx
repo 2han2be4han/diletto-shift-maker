@@ -1,8 +1,11 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import Header from '@/components/layout/Header';
 import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
 import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
 import { createClient } from '@/lib/supabase/server';
+import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
+import DemoDashboardShell from '@/components/demo/DemoDashboardShell';
 
 type Status = 'empty' | 'incomplete' | 'complete';
 type CardKey = 'schedule' | 'shift' | 'transport' | 'request';
@@ -13,6 +16,12 @@ type CardKey = 'schedule' | 'shift' | 'transport' | 'request';
  * - editor / viewer: 自分向けタスク（休み希望・シフト・送迎・送り場所）
  */
 export default async function DashboardPage() {
+  /* デモモード: Supabase に触らず CSR シェルを返す。本番経路は従来通り。 */
+  const cookieStore = await cookies();
+  if (isDemoCookie(cookieStore.get(DEMO_COOKIE_NAME)?.value)) {
+    return <DemoDashboardShell />;
+  }
+
   const staff = await getCurrentStaff();
   const supabase = await createClient();
 

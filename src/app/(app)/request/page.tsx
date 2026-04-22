@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import Header from '@/components/layout/Header';
+import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
+import DemoRequestShell from '@/components/demo/DemoRequestShell';
 import MonthStepper from '@/components/ui/MonthStepper';
 import Badge from '@/components/ui/Badge';
 import { getCurrentStaff, hasRoleAtLeast } from '@/lib/auth/getCurrentStaff';
@@ -22,10 +25,6 @@ export default async function RequestPage({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  const staff = await getCurrentStaff();
-  if (!staff) redirect('/login');
-
-  const supabase = await createClient();
   const sp = await searchParams;
 
   /* 対象月: ?month= 指定があれば優先、無ければ来月 */
@@ -33,6 +32,17 @@ export default async function RequestPage({
   const defaultTarget = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const defaultMonth = `${defaultTarget.getFullYear()}-${String(defaultTarget.getMonth() + 1).padStart(2, '0')}`;
   const targetMonth = /^\d{4}-\d{2}$/.test(sp.month ?? '') ? sp.month! : defaultMonth;
+
+  /* デモモード: Supabase に触らず admin ビュー CSR シェルを返す */
+  const cookieStore = await cookies();
+  if (isDemoCookie(cookieStore.get(DEMO_COOKIE_NAME)?.value)) {
+    return <DemoRequestShell targetMonth={targetMonth} />;
+  }
+
+  const staff = await getCurrentStaff();
+  if (!staff) redirect('/login');
+
+  const supabase = await createClient();
   const [ty, tm] = targetMonth.split('-').map(Number);
   const target = new Date(ty, tm - 1, 1);
 

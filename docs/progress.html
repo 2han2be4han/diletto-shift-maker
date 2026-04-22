@@ -1078,7 +1078,7 @@
             <tr><td>D-5</td><td>DemoProvider + window.fetch モンキーパッチ + 復元処理</td><td>src/lib/demo/DemoProvider.tsx</td><td class="status-done">完了</td><td>100%</td><td>__demo_patched フラグで StrictMode 多重適用を防止</td></tr>
             <tr><td>D-6</td><td>middleware に sp_demo Cookie バイパスを追加</td><td>src/middleware.ts</td><td class="status-done">完了</td><td>100%</td><td>Cookie 無しの本番ユーザー経路は無変更</td></tr>
             <tr><td>D-7</td><td>(app)/layout.tsx に合成 staff 注入分岐</td><td>src/app/(app)/layout.tsx</td><td class="status-done">完了</td><td>100%</td><td>Cookie 検知時は Supabase に一切触らず DemoProvider でラップ</td></tr>
-            <tr><td>D-8</td><td>SSR 3 ページ（dashboard/request/comments）の demo 時 CSR 分岐</td><td>各 page.tsx + Demo*.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>本番経路は無変更</td></tr>
+            <tr><td>D-8</td><td>SSR 3 ページ（dashboard/request/comments）の demo 時 CSR 分岐</td><td>各 page.tsx + Demo*.tsx</td><td class="status-done">完了</td><td>100%</td><td>DemoDashboardShell / DemoRequestShell(admin固定) / DemoCommentsShell。Cookie 無し経路は従来 SSR のまま</td></tr>
             <tr><td>D-9</td><td>ログイン画面に「デモプレイしてみる」ボタン追加</td><td>src/app/(auth)/login/page.tsx, src/components/demo/DemoLoginButton.tsx</td><td class="status-done">完了</td><td>100%</td><td>Secondary バリアント。reseed → Cookie → hard navigation</td></tr>
             <tr><td>D-10</td><td>デモバナー（常時表示・終了ボタン付き）</td><td>src/components/demo/DemoBanner.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>サイドバー上に固定</td></tr>
             <tr><td>D-11</td><td>PDF 取込モーダルを demo 時は「有料版でご利用可能」ロックに差し替え</td><td>src/components/schedule/PdfImportModal.tsx</td><td class="status-todo">未着手</td><td>0%</td><td>Claude API は絶対に叩かない</td></tr>

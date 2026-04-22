@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import Header from '@/components/layout/Header';
 import Badge from '@/components/ui/Badge';
 import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
 import { createClient } from '@/lib/supabase/server';
 import CommentsApprovalList from '@/components/comments/CommentsApprovalList';
+import { DEMO_COOKIE_NAME, isDemoCookie } from '@/lib/demo/flag';
+import DemoCommentsShell from '@/components/demo/DemoCommentsShell';
 
 /**
  * コメント承認センター（admin のみ）
@@ -11,6 +14,12 @@ import CommentsApprovalList from '@/components/comments/CommentsApprovalList';
  * - 個別に承認/却下
  */
 export default async function CommentsAdminPage() {
+  /* デモモード: Supabase に触らず admin シェルを返す */
+  const cookieStore = await cookies();
+  if (isDemoCookie(cookieStore.get(DEMO_COOKIE_NAME)?.value)) {
+    return <DemoCommentsShell />;
+  }
+
   const staff = await getCurrentStaff();
   if (!staff) redirect('/login');
   if (staff.role !== 'admin') redirect('/dashboard');
