@@ -1083,9 +1083,9 @@
             <tr><td>D-10</td><td>デモバナー（常時表示・終了ボタン付き）</td><td>src/components/demo/DemoBanner.tsx</td><td class="status-done">完了</td><td>100%</td><td>main エリア最上部に挿入。リセット/終了ボタン付き</td></tr>
             <tr><td>D-11</td><td>PDF 取込モーダルを demo 時は「有料版でご利用可能」ロックに差し替え</td><td>src/components/schedule/PdfImportModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>マウント後 isDemoClient() 判定 → ロック UI。/api/import/pdf は呼ばない</td></tr>
             <tr><td>D-12</td><td>billing / 招待 / signout など無効化機能のデモガード</td><td>billing/page.tsx, settings/staff/page.tsx, Sidebar.tsx</td><td class="status-done">完了</td><td>100%</td><td>billing: ロック画面。招待: /api/staff (POST) に差し替え＋メール無効文言。signout: Cookie 削除 → /login</td></tr>
-            <tr><td>D-13</td><td>ローカル動作確認（ログイン→デモ起動→各ページ操作→終了）</td><td>—</td><td class="status-todo">未着手</td><td>0%</td><td>npm run dev で実機確認</td></tr>
-            <tr><td>D-14</td><td>docs/reference-map.md / docs/error-log.md 更新</td><td>docs/</td><td class="status-todo">未着手</td><td>0%</td><td>新規ファイル一覧と発生エラーを記録</td></tr>
-            <tr><td>D-15</td><td>noindex meta + robots.txt（デモ画面のみクローラー除外）</td><td>(app)/layout.tsx, public/robots.txt</td><td class="status-todo">未着手</td><td>0%</td><td>デモ Cookie 検知時のみ noindex</td></tr>
+            <tr><td>D-13</td><td>ローカル動作確認（ログイン→デモ起動→各ページ操作→終了）</td><td>—</td><td class="status-doing">進行中</td><td>80%</td><td>ユーザー確認フェーズ。npm run dev は port 5000 で稼働中。seed 2.0 で staff 6 / 児童 9 / 送迎割当/シフト変更申請/コメント入り</td></tr>
+            <tr><td>D-14</td><td>docs/reference-map.md / docs/error-log.md 更新</td><td>docs/</td><td class="status-done">完了</td><td>100%</td><td>reference-map に §9 Phase D セクション追加、error-log に型エラー 2 件記録</td></tr>
+            <tr><td>D-15</td><td>noindex meta + robots.txt（デモ画面のみクローラー除外）</td><td>(app)/layout.tsx, public/robots.txt</td><td class="status-done">完了</td><td>100%</td><td>(app)/layout.tsx の generateMetadata で Cookie 検知時のみ robots: { index: false, follow: false }。robots.txt は触らず</td></tr>
         </tbody>
     </table>
 

@@ -746,3 +746,55 @@
 - 既存 is_locked=true 行は温存。migration 後に再生成しても非ロック日のみ新ルールで上書き
 - 運転手不在日の手動オーバーライドはスコープ外（警告バッジで通知するのみ）
 - 2 人目自動割り当ては Phase 59 スコープ外（現状 AUTO_ASSIGN_STAFF_COUNT=1）
+
+---
+
+## 9. Phase D: デモプレイ機能
+
+**ブランチ**: `claude/plan-demo-play-feature-yKS7p`（2026-04-22 実装）
+**目的**: ログイン不要で主要機能を試せる体験版。データは sessionStorage に持ち、タブを閉じれば消える。本番 DB には一切書き込まない。
+
+### 設計概要
+- クライアント完全モック（サーバー Map は却下: Vercel サーバーレスで共有できず崩壊するため）
+- `window.fetch` モンキーパッチ方式（Service Worker は Firefox プライベート等で互換問題のため却下）
+- sp_demo Cookie（session-only）でサーバー判定、sessionStorage で真の状態を保持
+- middleware / (app)/layout.tsx で cookie 検知 → 認証スキップ + 合成 admin staff 注入
+
+### 新規ファイル
+| ファイル | 役割 |
+|---|---|
+| `src/lib/demo/flag.ts` | DEMO_COOKIE_NAME / isDemoClient / enableDemoCookie / disableDemoClient / isDemoCookie |
+| `src/lib/demo/seedData.ts` | DemoState 型 + buildSeedState（tenant 1 / staff 6 / 児童 9 / 平日 schedule_entries / shift_assignments / shift_requests / shift_change_requests / comments / notifications / transport_assignments）。既存 Row 型のみ使用（types 追加なし） |
+| `src/lib/demo/store.ts` | loadDemoState / saveDemoState / mutateDemoState / resetDemoState / reseedDemoState / genId |
+| `src/lib/demo/demoBackend.ts` | /api/* 50+ endpoint を DemoState に対して CRUD するモック。未対応 path は { ok: true } フォールバック。import/pdf と signup は 403 |
+| `src/lib/demo/DemoProvider.tsx` | window.fetch を patch して /api/* を demoBackend に委譲。__demo_patched フラグで StrictMode 多重適用を防止 |
+| `src/components/demo/DemoLoginButton.tsx` | ログイン画面のデモ起動ボタン。reseed → Cookie → hard navigation |
+| `src/components/demo/DemoBanner.tsx` | main 上部のデモ案内バー（リセット/終了） |
+| `src/components/demo/DemoDashboardShell.tsx` | /dashboard の CSR 版（/api/notifications + /api/status/month） |
+| `src/components/demo/DemoRequestShell.tsx` | /request の CSR 版（admin ビュー固定、/api/staff + /api/shift-requests） |
+| `src/components/demo/DemoCommentsShell.tsx` | /comments の CSR 版（/api/comments） |
+
+### 編集した既存ファイル
+| ファイル | 変更 |
+|---|---|
+| `src/middleware.ts` | sp_demo Cookie 検知時は Supabase 認証をスキップ、/login /signup → /dashboard redirect |
+| `src/app/(app)/layout.tsx` | cookies() で sp_demo 判定 → Supabase 一切呼ばず合成 staff で AppShell + DemoProvider + DemoBanner。generateMetadata で noindex を付与 |
+| `src/app/(app)/dashboard/page.tsx` | 先頭で Cookie 判定 → DemoDashboardShell を早期 return |
+| `src/app/(app)/request/page.tsx` | 同上 → DemoRequestShell |
+| `src/app/(app)/comments/page.tsx` | 同上 → DemoCommentsShell |
+| `src/app/(auth)/login/page.tsx` | ログインボタン直下に DemoLoginButton 配置 |
+| `src/components/schedule/PdfImportModal.tsx` | isDemoClient() true なら🔒ロックモーダル差し替え（Claude API 呼ばない） |
+| `src/app/(app)/billing/page.tsx` | isDemoClient() true ならロック画面 |
+| `src/app/(app)/settings/staff/page.tsx` | 新規作成時 demo は /api/staff/invite → /api/staff（メール送信なし）。再送ボタンは info トーストで終了 |
+| `src/components/layout/Sidebar.tsx` | サインアウトボタン: demo なら Cookie + sessionStorage 削除 → /login（Supabase signout は呼ばない） |
+
+### 触ってはいけないと明記されたファイル（守った）
+- `src/app/api/webhooks/stripe/route.ts`
+- `src/lib/supabase/server.ts`
+- `src/types/index.ts` の既存型（追加・変更とも一切なし）
+- `.env.local`
+
+### 本番経路への影響
+- sp_demo Cookie を持たないリクエストは middleware / layout の Cookie 判定で **早期に分岐を抜け、従来の Supabase 経路を素通し**する
+- DemoProvider は layout の demo 分岐内でしか mount されないため、window.fetch patch は非デモユーザーでは発生しない
+- PdfImportModal / BillingPage / Sidebar signout / settings/staff invite のガードはすべて `isDemoClient()` で条件分岐しており、sessionStorage に demo state が無い本番ユーザーでは false になるため従来挙動

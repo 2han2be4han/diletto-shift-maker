@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import AppShell from '@/components/layout/AppShell';
 import { getCurrentStaff } from '@/lib/auth/getCurrentStaff';
@@ -23,10 +24,15 @@ const DEMO_STAFF: AuthenticatedStaff = {
   role: 'admin',
 };
 
-export const metadata = {
-  /* デモ経路でも robots を noindex したいが、layout metadata は静的。
-     実際の noindex 制御は D-15 で page 側に追加する */
-};
+/* Phase D-15: デモ Cookie を検知したときだけ <meta name="robots" content="noindex,nofollow"> を
+   出力する。本番ユーザーの /dashboard 等には noindex を付けない。 */
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieStore = await cookies();
+  if (isDemoCookie(cookieStore.get(DEMO_COOKIE_NAME)?.value)) {
+    return { robots: { index: false, follow: false } };
+  }
+  return {};
+}
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   /* デモ Cookie を先に判定。立っていれば Supabase を一切触らず合成 staff で AppShell を返す。

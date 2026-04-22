@@ -64,3 +64,32 @@
 
 - **月切替時の pending 保存ガード**: URL ベースの month 切替を client 側で intercept するのは MonthSelector の改修が必要で、本フェーズでは未対応。代替として `beforeunload` リスナーを追加（リロード/閉じる時のみ警告）。日付タブ切替は `handleSelectDate` で `confirm()` ガード済み
 - **Supabase invite の implicit flow**: `admin.generateLink({ type: 'invite' })` はデフォルトで hash fragment（implicit flow）で token を返すため、サーバ route.ts では拾えない。`/auth/confirm` (client page) で `window.location.hash` を parse → `setSession` で解決
+
+---
+## Phase D demoBackend: ShiftRequestCommentRow / ChildDisplayOrderMemoryRow に created_at を付けた初版 + ShiftChangeRequestRow の updated_at 欠落
+
+- **発生日**: 2026-04-22
+- **発生箇所**: `src/lib/demo/demoBackend.ts` の shift_request_comments upsert / shift_change_requests push / transport child-order upsert
+- **エラー内容**:
+  ```
+  TS2339: Property 'created_at' does not exist on type 'ShiftRequestCommentRow'.
+  TS2741: Property 'updated_at' is missing in type ... but required in type 'ShiftChangeRequestRow'.
+  TS2353: 'created_at' does not exist in type 'ChildDisplayOrderMemoryRow'.
+  ```
+- **原因**: 既存の Row 型 (types/index.ts) を参照せず「多分あるだろう」で created_at を付けていた。ShiftRequestCommentRow と ChildDisplayOrderMemoryRow は updated_at のみ、ShiftChangeRequestRow は created_at と updated_at 両方必須。
+- **解決方法**: types/index.ts の該当型定義を正として、余計な created_at を除去し、ShiftChangeRequestRow には updated_at も追加した。
+- **再発防止**: demoBackend のように既存型を大量に触る実装を書く前に、対象 Row 型の定義を全部目視する。書いたあとは必ず `npx tsc --noEmit` を走らせる（Phase D ではこれで catch できた）
+
+---
+## Phase D seedData: NotificationType に存在しない 'shift_change_request' / 'comment_approval' を使ってしまった
+
+- **発生日**: 2026-04-22
+- **発生箇所**: `src/lib/demo/seedData.ts` の notifications 追加 seed
+- **エラー内容**:
+  ```
+  TS2322: Type '"shift_change_request"' is not assignable to type 'NotificationType'.
+  TS2820: Type '"comment_approval"' is not assignable to type 'NotificationType'. Did you mean '"comment_approved"'?
+  ```
+- **原因**: NotificationType は `'comment_pending' | 'comment_approved' | 'comment_rejected' | 'generic'` の 4 値限定。seed に想像の種別を入れてしまった。
+- **解決方法**: 該当 2 件は `generic` に、承認待ちは `comment_pending` に修正。`target_type` 側は `string | null` なので用途別文字列を入れても型エラーなし（拡張したい情報はそちらへ）。
+- **再発防止**: 新しい種別 notification を作る前に types/index.ts の該当 union を確認。必要なら type を拡張するが CLAUDE.md §6 で既存型の変更禁止なので、追加 union の是非をユーザーに相談してから。
