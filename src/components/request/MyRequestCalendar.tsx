@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { format, getDay, getDaysInMonth } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Button from '@/components/ui/Button';
@@ -302,6 +303,7 @@ export default function MyRequestCalendar({
             return (
               <div key={d.dateStr} className="relative">
                 <button
+                  data-day-cell={d.dateStr}
                   onClick={() => setEditingDay(isEditing ? null : d.dateStr)}
                   className="w-full flex flex-col items-center justify-center py-2 rounded-md transition-all active:scale-95"
                   style={{
@@ -409,31 +411,35 @@ function DayPopover({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = useState<'below' | 'above'>('below');
-  const [horizontalShift, setHorizontalShift] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const [commentText, setCommentText] = useState(currentComment);
+  const POPOVER_WIDTH = 200;
+  const POPOVER_HEIGHT_EST = 360;
 
-  /* マウント後 / リサイズ時に viewport を計算して上下反転・横ずらしを決める */
+  /* day cell の画面座標から viewport 端に収まる fixed 座標を計算。
+     createPortal で body 直下に逃がしているため、overflow:hidden な祖先
+     （AdminRequestList の横スクロール枠など）にクリップされない。
+     anchor は data-day-cell 属性で document から検索する（portal 化で parentElement が
+     body になってしまうので DOM から直接探す方式にした）。 */
   const recompute = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const vh = window.innerHeight;
+    const anchor = document.querySelector<HTMLElement>(`[data-day-cell="${dateStr}"]`);
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
     const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const MARGIN = 8;
 
-    /* 下に出して画面下からはみ出るなら上向きに反転 */
-    if (rect.bottom > vh - 8 && rect.top - rect.height > 8) {
-      setPlacement('above');
-    } else {
-      setPlacement('below');
+    /* 横: day cell 中央に寄せて、viewport 左右 8px まで収める */
+    let left = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
+    left = Math.max(MARGIN, Math.min(left, vw - POPOVER_WIDTH - MARGIN));
+
+    /* 縦: 下に置いてはみ出るなら上に反転 */
+    let top = rect.bottom + 4;
+    if (top + POPOVER_HEIGHT_EST > vh - MARGIN && rect.top - POPOVER_HEIGHT_EST > MARGIN) {
+      top = rect.top - POPOVER_HEIGHT_EST - 4;
     }
-
-    /* 横方向: viewport 右端/左端を超えたら shift */
-    let shift = 0;
-    if (rect.right > vw - 8) shift = vw - 8 - rect.right;
-    else if (rect.left < 8) shift = 8 - rect.left;
-    setHorizontalShift(shift);
-  }, []);
+    setCoords({ top, left });
+  }, [dateStr]);
 
   useEffect(() => {
     recompute();
@@ -450,9 +456,9 @@ function DayPopover({
     const onDocClick = (e: MouseEvent) => {
       if (!ref.current) return;
       if (ref.current.contains(e.target as Node)) return;
+      /* anchor 自身のクリックは親側で別処理があるので popover を閉じるのみで止める */
       onClose();
     };
-    /* setTimeout で当該ターンのトリガークリックを除外 */
     const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
     return () => {
       clearTimeout(t);
@@ -461,22 +467,26 @@ function DayPopover({
   }, [onClose]);
 
   const positionStyle: React.CSSProperties = {
-    position: 'absolute',
-    zIndex: 30,
-    left: '50%',
-    transform: `translateX(calc(-50% + ${horizontalShift}px))`,
+    position: 'fixed',
+    zIndex: 1000,
+    top: coords?.top ?? -9999,
+    left: coords?.left ?? -9999,
+    visibility: coords ? 'visible' : 'hidden',
     background: 'var(--white)',
     borderRadius: '8px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
     border: '1px solid var(--rule)',
     padding: '12px',
-    width: '200px',
-    ...(placement === 'below' ? { top: '100%', marginTop: '4px' } : { bottom: '100%', marginBottom: '4px' }),
+    width: POPOVER_WIDTH,
   };
 
   const isCommentMode = currentStatus === 'comment' || commentText.trim() !== '';
 
-  return (
+  /* SSR 対応: document が無ければ何も描画しない（ref の anchor 捕捉もブラウザ側で行う）。
+     Portal 先は body 直下。祖先の overflow クリップから解放される。 */
+  if (typeof document === 'undefined') return null;
+
+  const content = (
     <div ref={ref} style={positionStyle} className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
       <div className="text-xs font-semibold" style={{ color: 'var(--ink)' }}>
         {format(new Date(dateStr), 'M/d（E）', { locale: ja })}
@@ -540,4 +550,6 @@ function DayPopover({
       </button>
     </div>
   );
+
+  return createPortal(content, document.body);
 }
