@@ -322,7 +322,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
       {/* === モバイル用オーバーレイ === */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-[60] lg:hidden"
+          className="fixed inset-0 z-[100] lg:hidden"
           style={{ background: 'rgba(0,0,0,0.3)' }}
           onClick={onClose}
         />
@@ -332,7 +332,7 @@ export default function Sidebar({ isOpen, onClose, width, onWidthChange, role }:
       <aside
         data-tour="sidebar"
         className={`
-          fixed top-0 left-0 z-[60] h-full flex flex-col
+          fixed top-0 left-0 z-[100] h-full flex flex-col
           lg:sticky lg:translate-x-0
           transition-[width,transform] duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}

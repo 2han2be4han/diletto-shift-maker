@@ -45,6 +45,8 @@ type ShiftCell = {
   assignment_type: ShiftAssignmentType;
   /** Phase 50: 分割シフト対応 */
   segment_order?: number;
+  /** Phase 60: セル自由入力メモ */
+  note?: string | null;
 };
 
 type Warning = { date: string; type: 'understaffed' | 'no_qualified' | 'overworked'; message: string };
@@ -100,6 +102,8 @@ export default function ShiftPage() {
   const [startM, setStartM] = useState('00');
   const [endH, setEndH] = useState('17');
   const [endM, setEndM] = useState('00');
+  /* Phase 60: セル自由入力メモ（normal / public_holiday のみ） */
+  const [editNote, setEditNote] = useState('');
 
   const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
@@ -142,6 +146,7 @@ export default function ShiftPage() {
           assignment_type: a.assignment_type,
           /* Phase 50: 分割シフト表示用に segment_order も伝搬 */
           segment_order: a.segment_order ?? 0,
+          note: a.note ?? null,
         }))
       );
       /* Phase 58: 「月が確定済み」= 全行 is_confirmed=true。
@@ -285,6 +290,7 @@ export default function ShiftPage() {
     } else {
       setEditType('normal');
     }
+    setEditNote(cell?.note ?? '');
     setEditingCell({ staffId, date });
   };
 
@@ -302,6 +308,11 @@ export default function ShiftPage() {
             start_time: editType === 'normal' ? `${startH}:${startM}` : null,
             end_time: editType === 'normal' ? `${endH}:${endM}` : null,
             is_confirmed: confirmed,
+            /* Phase 60: normal / public_holiday のみメモを保存。off / paid_leave は null で上書き。 */
+            note:
+              (editType === 'normal' || editType === 'public_holiday') && editNote.trim()
+                ? editNote.trim()
+                : null,
           }],
         }),
       });
@@ -562,6 +573,23 @@ export default function ShiftPage() {
                     <input type="text" value={endM} onChange={(e) => setEndM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Phase 60: 自由入力メモ（出勤・公休時のみ。有給・休みでは非表示） */}
+            {(editType === 'normal' || editType === 'public_holiday') && (
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>
+                  メモ（任意・例: 応援先など）
+                </label>
+                <textarea
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value.slice(0, 40))}
+                  rows={2}
+                  placeholder="例: パステル"
+                  className="w-full text-sm rounded-md px-3 py-2 outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--rule)', color: 'var(--ink)' }}
+                />
               </div>
             )}
 

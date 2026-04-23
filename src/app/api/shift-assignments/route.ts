@@ -44,6 +44,11 @@ export async function POST(request: NextRequest) {
     is_confirmed: Boolean(a.is_confirmed ?? false),
     /* Phase 50: 分割シフト対応。未指定なら 0（従来挙動）。 */
     segment_order: Number.isFinite(a.segment_order as number) ? Number(a.segment_order) : 0,
+    /* Phase 60: セル自由入力メモ。null で明示的に上書き可能にする。 */
+    note:
+      typeof a.note === 'string' && a.note.trim()
+        ? String(a.note).trim().slice(0, 40)
+        : null,
   }));
 
   const supabase = await createClient();

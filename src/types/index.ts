@@ -281,6 +281,8 @@ export type ShiftAssignmentRow = {
   created_at: string;
   /** Phase 50: 分割シフト対応。同一 (staff_id, date) 内の並び順。既存行は 0。 */
   segment_order: number;
+  /** Phase 60: セル自由入力メモ。normal / public_holiday のみ UI から入力可。 */
+  note: string | null;
 };
 
 // ----- Phase 25: シフト変更申請 -----

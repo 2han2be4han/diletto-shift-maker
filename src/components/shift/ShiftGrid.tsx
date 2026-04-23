@@ -31,6 +31,8 @@ type ShiftCell = {
   assignment_type: ShiftAssignmentType;
   /** Phase 50: 分割シフト対応。同一 (staff_id, date) の並び順。省略時は 0。 */
   segment_order?: number;
+  /** Phase 60: セル自由入力メモ（normal / public_holiday のみ入力）。 */
+  note?: string | null;
 };
 
 type ShiftWarning = {
@@ -340,8 +342,22 @@ export default function ShiftGrid({
                   >
                     {type === 'normal' ? (
                       <div className="flex flex-col gap-0.5 leading-tight py-0.5">
+                        {/* Phase 60: セル自由入力メモを時刻の上に表示（入力があるときのみ） */}
+                        {cell?.note && (
+                          <span
+                            style={{
+                              color: 'var(--accent)',
+                              fontSize: '0.62rem',
+                              lineHeight: 1.1,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {cell.note}
+                          </span>
+                        )}
                         {/* Phase 50: 分割シフト時はセグメントごとに時刻ペアを縦積み表示。
-                            分割がない通常シフトは従来通り start/end を 2 行で表示。 */}
+                            分割がない通常シフトは従来通り start/end を 2 行で表示。
+                            Phase 60: 時刻 null の normal セル（メモのみ）は時刻行を描画しない。 */}
                         {normalSegs.length > 1 ? (
                           normalSegs.map((seg, i) => (
                             <span
@@ -353,22 +369,41 @@ export default function ShiftGrid({
                           ))
                         ) : (
                           <>
-                            <span style={{ color: 'var(--ink-2)', fontSize: '0.68rem' }}>
-                              {cell?.start_time?.slice(0, 5)}
-                            </span>
-                            <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
-                              {cell?.end_time?.slice(0, 5)}
-                            </span>
+                            {cell?.start_time && (
+                              <span style={{ color: 'var(--ink-2)', fontSize: '0.68rem' }}>
+                                {cell.start_time.slice(0, 5)}
+                              </span>
+                            )}
+                            {cell?.end_time && (
+                              <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                                {cell.end_time.slice(0, 5)}
+                              </span>
+                            )}
                           </>
                         )}
                       </div>
                     ) : (
-                      <span
-                        className="font-semibold"
-                        style={{ color: config.color, fontSize: '0.7rem' }}
-                      >
-                        {config.label}
-                      </span>
+                      <div className="flex flex-col gap-0.5 leading-tight py-0.5">
+                        {/* Phase 60: public_holiday もメモを上部に表示 */}
+                        {type === 'public_holiday' && cell?.note && (
+                          <span
+                            style={{
+                              color: 'var(--accent)',
+                              fontSize: '0.62rem',
+                              lineHeight: 1.1,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {cell.note}
+                          </span>
+                        )}
+                        <span
+                          className="font-semibold"
+                          style={{ color: config.color, fontSize: '0.7rem' }}
+                        >
+                          {config.label}
+                        </span>
+                      </div>
                     )}
                     {commentText && (
                       <span
