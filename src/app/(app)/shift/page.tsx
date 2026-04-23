@@ -402,6 +402,14 @@ export default function ShiftPage() {
                 min-width: 110px !important;
                 padding: 6px 4px !important;
               }
+              /* sticky 解除: スクロール後に印刷すると1列目/ヘッダーが scrollLeft 分ずれるのを防ぐ */
+              .shift-print-root .sticky,
+              .shift-print-root [class*="sticky"] {
+                position: static !important;
+                left: auto !important;
+                top: auto !important;
+                box-shadow: none !important;
+              }
               .shift-print-root .group { cursor: default !important; }
               .shift-print-root tr:hover { background: inherit !important; }
               .shift-print-root .group-hover\\:\\!bg-\\[var\\(--accent-pale-solid\\)\\]:hover {
