@@ -1,0 +1,193 @@
+﻿node.exe : 笞 Attempted
+ to load @next/swc-win3
+2-x64-msvc, but an erro
+r occurred: An Applicat
+ion Control policy has 
+blocked this file.
+発生場所 行:1 文字:1
++ & "C:\Program Files\n
+odejs/node.exe" "C:\Pro
+gram Files\nodejs/node_
+mo ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (笞 Attempted    
+ to...cked this fil    
+e.:String) [], Rem    o
+teException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+  Skipping creating a lockfile at C:\Users\2han2\Projects\diletto-shift-maker\.next\lock because we're using WASM bindings
+笆ｲ Next.js 16.2.4 (webpack)
+- Environments: .env.local
+
+笞 The "middleware" fil
+e convention is depreca
+ted. Please use "proxy"
+ instead. Learn more: h
+ttps://nextjs.org/docs/
+messages/middleware-to-
+proxy
+  Creating an optimized production build ...
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+<w> [webpack.cache.Pack
+FileCacheStrategy] Seri
+alizing big strings (21
+5kiB) impacts deseriali
+zation performance (con
+sider using Buffer inst
+ead and decode when nee
+ded)
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+笨・Compiled successfully in 33.2s
+  Running TypeScript ...
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+  Finished TypeScript in 16.0s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/50) ...
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+  Generating static pages using 15 workers (12/50) 
+  Generating static pages using 15 workers (24/50) 
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+  Generating static pages using 15 workers (37/50) 
+笨・Generating static pages using 15 workers (50/50) in 10.5s
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+笏・笳・/
+笏・笳・/_not-found
+笏・ﾆ・/api/attendance-logs
+笏・ﾆ・/api/child-area-eligibility
+笏・ﾆ・/api/children
+笏・ﾆ・/api/children/[id]
+笏・ﾆ・/api/children/[id]/area-eligibility
+笏・ﾆ・/api/children/reorder
+笏・ﾆ・/api/comments
+笏・ﾆ・/api/comments/[id]/approve
+笏・ﾆ・/api/import/pdf
+笏・ﾆ・/api/me
+笏・ﾆ・/api/notifications
+笏・ﾆ・/api/schedule-entries
+笏・ﾆ・/api/schedule-entries/[id]/attendance
+笏・ﾆ・/api/shift-assignments
+笏・ﾆ・/api/shift-assignments/confirm
+笏・ﾆ・/api/shift-change-requests
+笏・ﾆ・/api/shift-change-requests/[id]
+笏・ﾆ・/api/shift-request-comments
+笏・ﾆ・/api/shift-requests
+笏・ﾆ・/api/shift/generate
+笏・ﾆ・/api/signup
+笏・ﾆ・/api/staff
+笏・ﾆ・/api/staff/[id]
+笏・ﾆ・/api/staff/[id]/resend-invite
+笏・ﾆ・/api/staff/[id]/reset-password
+笏・ﾆ・/api/staff/invite
+笏・ﾆ・/api/staff/reorder
+笏・ﾆ・/api/status/month
+笏・ﾆ・/api/tenant
+笏・ﾆ・/api/tenant/transport-column-order
+笏・ﾆ・/api/transport-assignments
+笏・ﾆ・/api/transport-page-data
+笏・ﾆ・/api/transport/child-order
+笏・ﾆ・/api/transport/generate
+笏・ﾆ・/api/upload
+笏・ﾆ・/api/upload/signed-url
+笏・ﾆ・/auth/callback
+笏・笳・/auth/confirm
+笏・笳・/auth/set-password
+笏・ﾆ・/auth/signout
+笏・ﾆ・/billing
+笏・ﾆ・/comments
+笏・ﾆ・/dashboard
+笏・笳・/icon.svg
+笏・笳・/login
+笏・ﾆ・/output/daily
+笏・ﾆ・/output/weekly-transport
+笏・ﾆ・/request
+笏・ﾆ・/schedule
+笏・ﾆ・/settings/children
+笏・ﾆ・/settings/staff
+笏・ﾆ・/settings/tenant
+笏・ﾆ・/shift
+笏・笳・/signup
+笏・ﾆ・/transport
+
+
+ﾆ・Proxy (Middleware)
+
+笳・ (Static)   prerendered as static content
+ﾆ・ (Dynamic)  server-rendered on demand
+

@@ -384,8 +384,8 @@ export default function ShiftGrid({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-0.5 leading-tight py-0.5">
-                        {/* Phase 60: public_holiday もメモを上部に表示 */}
-                        {type === 'public_holiday' && cell?.note && (
+                        {/* Phase 60: public_holiday / off もメモを上部に表示 */}
+                        {(type === 'public_holiday' || type === 'off') && cell?.note && (
                           <span
                             style={{
                               color: 'var(--accent)',

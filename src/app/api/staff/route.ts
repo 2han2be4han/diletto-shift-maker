@@ -33,10 +33,17 @@ export async function GET(request: NextRequest) {
   const includeRetired = request.nextUrl.searchParams.get('include_retired') === '1';
 
   const supabase = await createClient();
+
+  /* Phase 60: select('*') 廃止。dto=transport 時は軽量化 */
+  const dto = request.nextUrl.searchParams.get('dto');
+  const cols = dto === 'transport'
+    ? 'id, name, display_name, is_driver, is_attendant, transport_areas, pickup_transport_areas, dropoff_transport_areas'
+    : 'id, tenant_id, user_id, name, email, role, employment_type, default_start_time, default_end_time, transport_areas, pickup_transport_areas, dropoff_transport_areas, qualifications, is_qualified, is_driver, is_attendant, display_order, is_active, retired_at, display_name, created_at';
+
   /* Phase 24: display_order NULLS LAST → name で安定ソート */
   let q = supabase
     .from('staff')
-    .select('*')
+    .select(cols)
     .order('display_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
 

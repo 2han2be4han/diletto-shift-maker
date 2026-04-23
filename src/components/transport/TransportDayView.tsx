@@ -175,6 +175,13 @@ function splitAreaLabel(label: string | null): { emoji: string | null; name: str
   return { emoji: trimmed.slice(0, spaceIdx), name: trimmed.slice(spaceIdx + 1).trim() };
 }
 
+const SectionLabel = ({ color, children }: { color: string; children: React.ReactNode }) => (
+  <span className="inline-flex items-center gap-1.5">
+    <span aria-hidden style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: color }} />
+    <span>{children}</span>
+  </span>
+);
+
 export default function TransportDayView({
   children,
   availableStaff,
@@ -206,6 +213,48 @@ export default function TransportDayView({
   const [dragCol, setDragCol] = useState<number | null>(null);
   const [dragOverCol, setDragOverCol] = useState<number | null>(null);
 
+  /* Phase 60: 迎/送を統一ルールで候補抽出。
+     条件: 便時刻が職員のいずれかのセグメントに収まり、かつ 退勤時刻 >= 便時刻 + 30 分。
+     これによりテナント設定の transportMinEndTime は不要に。props は互換維持のため残す。 */
+  const TRANSPORT_BUFFER_MINUTES = 30;
+  const eligibleStaffMap = React.useMemo(() => {
+    const map = new Map<string | null, TransportStaff[]>();
+    const compute = (tripTime: string | null) => {
+      const tripMin = timeToMinutes(tripTime);
+      return availableStaff.filter((s) => {
+        if (s.segments.length === 0) return false;
+        if (tripMin === null) return true;
+        return s.segments.some((seg) => {
+          const start = timeToMinutes(seg.startTime);
+          const end = timeToMinutes(seg.endTime);
+          if (start === null || end === null) return false;
+          return start <= tripMin && tripMin + TRANSPORT_BUFFER_MINUTES <= end;
+        });
+      });
+    };
+    for (const child of children) {
+      if (!map.has(child.pickupTime)) map.set(child.pickupTime, compute(child.pickupTime));
+      if (!map.has(child.dropoffTime)) map.set(child.dropoffTime, compute(child.dropoffTime));
+    }
+    return map;
+  }, [children, availableStaff]);
+
+  const pickupEligibleFor = React.useCallback((time: string | null) => eligibleStaffMap.get(time) ?? [], [eligibleStaffMap]);
+  const dropoffEligibleFor = React.useCallback((time: string | null) => eligibleStaffMap.get(time) ?? [], [eligibleStaffMap]);
+  void transportMinEndTime;
+
+  /* 行ごとの tripMarks 計算が O(N^2) で重いため、children 変更時に一括で前計算する */
+  const tripMarksMap = React.useMemo(() => {
+    const map = new Map<string, { pickup: string[]; dropoff: string[] }>();
+    for (const child of children) {
+      map.set(child.scheduleEntryId, {
+        pickup: computeTripMarks(child, children, 'pickup'),
+        dropoff: computeTripMarks(child, children, 'dropoff'),
+      });
+    }
+    return map;
+  }, [children]);
+
   /* columnOrder が未指定 or 既知キー以外が混入している場合のフォールバック */
   const effectiveOrder: TransportColumnKey[] = React.useMemo(() => {
     const known: TransportColumnKey[] = [
@@ -236,29 +285,6 @@ export default function TransportDayView({
   /* 児童名 + 並び替え可能列数 = 合計列数（展開行の colSpan 用） */
   const colSpan = 1 + effectiveOrder.length;
 
-  /* Phase 60: 迎/送を統一ルールで候補抽出。
-     条件: 便時刻が職員のいずれかのセグメントに収まり、かつ 退勤時刻 >= 便時刻 + 30 分。
-       - start <= t: まだ出勤していない職員を迎に出せない
-       - t + 30 <= end: 便後 30 分の往復/戻り時間を確保（送はもちろん迎でも必要）
-     これによりテナント設定の transportMinEndTime は不要に。props は互換維持のため残す。 */
-  const TRANSPORT_BUFFER_MINUTES = 30;
-  const eligibleFor = (tripTime: string | null) => {
-    const tripMin = timeToMinutes(tripTime);
-    return availableStaff.filter((s) => {
-      if (s.segments.length === 0) return false;
-      /* 便時刻不明なら出勤者全員を候補に（フィルタしない） */
-      if (tripMin === null) return true;
-      return s.segments.some((seg) => {
-        const start = timeToMinutes(seg.startTime);
-        const end = timeToMinutes(seg.endTime);
-        if (start === null || end === null) return false;
-        return start <= tripMin && tripMin + TRANSPORT_BUFFER_MINUTES <= end;
-      });
-    });
-  };
-  const pickupEligibleFor = (pickupTime: string | null) => eligibleFor(pickupTime);
-  const dropoffEligibleFor = (dropoffTime: string | null) => eligibleFor(dropoffTime);
-  void transportMinEndTime;
 
   /* Phase 27 (layout revised): ダーク帯 + 方向別アクセントカラーでセクション感を出す。
      迎=accent(青)、送=green(緑)でヘッダーにドット記号を入れて視線を誘導。 */
@@ -279,12 +305,6 @@ export default function TransportDayView({
   };
   /* Phase 28: データセルの縦区切り（全列右端に薄い線） */
   const cellBorderRight = '1px solid var(--rule)';
-  const SectionLabel = ({ color, children }: { color: string; children: React.ReactNode }) => (
-    <span className="inline-flex items-center gap-1.5">
-      <span aria-hidden style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: color }} />
-      <span>{children}</span>
-    </span>
-  );
 
   /* Phase 28: 列のメタデータ + セル描画。ヘッダー/セルどちらもここから読む */
   type ColMeta = {
@@ -353,7 +373,7 @@ export default function TransportDayView({
                   .get(`${child.pickupAreaId}|pickup`)
                   ?.has(staffId);
               }}
-              tripMarks={computeTripMarks(child, children, 'pickup')}
+              tripMarks={tripMarksMap.get(child.scheduleEntryId)?.pickup ?? []}
             />
           )}
         </td>
@@ -417,7 +437,7 @@ export default function TransportDayView({
                   .get(`${child.dropoffAreaId}|dropoff`)
                   ?.has(staffId);
               }}
-              tripMarks={computeTripMarks(child, children, 'dropoff')}
+              tripMarks={tripMarksMap.get(child.scheduleEntryId)?.dropoff ?? []}
               /* Phase 53 (rev): 自動コピーは児童により逆効果なのでボタン化。
                  迎担当が入っていて送担当が空の時だけ「迎からコピー」ボタンを表示。
                  押すと送の退勤時刻ガード（Phase 47 ②）を通る職員だけコピーされる。 */

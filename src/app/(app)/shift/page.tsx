@@ -308,9 +308,9 @@ export default function ShiftPage() {
             start_time: editType === 'normal' ? `${startH}:${startM}` : null,
             end_time: editType === 'normal' ? `${endH}:${endM}` : null,
             is_confirmed: confirmed,
-            /* Phase 60: normal / public_holiday のみメモを保存。off / paid_leave は null で上書き。 */
+            /* Phase 60: normal / public_holiday / off のみメモを保存。paid_leave は null で上書き。 */
             note:
-              (editType === 'normal' || editType === 'public_holiday') && editNote.trim()
+              (editType === 'normal' || editType === 'public_holiday' || editType === 'off') && editNote.trim()
                 ? editNote.trim()
                 : null,
           }],
@@ -576,8 +576,8 @@ export default function ShiftPage() {
               </div>
             )}
 
-            {/* Phase 60: 自由入力メモ（出勤・公休時のみ。有給・休みでは非表示） */}
-            {(editType === 'normal' || editType === 'public_holiday') && (
+            {/* Phase 60: 自由入力メモ（出勤・公休・休み時のみ。有給では非表示） */}
+            {(editType === 'normal' || editType === 'public_holiday' || editType === 'off') && (
               <div>
                 <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>
                   メモ（任意・例: 応援先など）

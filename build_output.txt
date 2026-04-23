@@ -1,0 +1,77 @@
+﻿node.exe : 笞 Attempted
+ to load @next/swc-win3
+2-x64-msvc, but an erro
+r occurred: An Applicat
+ion Control policy has 
+blocked this file.
+発生場所 行:1 文字:1
++ & "C:\Program Files\n
+odejs/node.exe" "C:\Pro
+gram Files\nodejs/node_
+mo ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (笞 Attempted    
+ to...cked this fil    
+e.:String) [], Rem    o
+teException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+  Skipping creating a lockfile at C:\Users\2han2\Projects\diletto-shift-maker\.next\lock because we're using WASM bindings
+笆ｲ Next.js 16.2.4 (Turbopack)
+- Environments: .env.local
+
+笞 The "middleware" fil
+e convention is depreca
+ted. Please use "proxy"
+ instead. Learn more: h
+ttps://nextjs.org/docs/
+messages/middleware-to-
+proxy
+  Creating an optimized production build ...
+笞 Attempted to load @n
+ext/swc-win32-x64-msvc,
+ but an error occurred:
+ An Application Control
+ policy has blocked thi
+s file.
+\\?\C:\Users\2han2\Proj
+ects\diletto-shift-make
+r\node_modules\@next\sw
+c-win32-x64-msvc\next-s
+wc.win32-x64-msvc.node
+
+> Build error occurred
+Error: Turbopack is not
+ supported on this plat
+form (win32/x64) becaus
+e native bindings are n
+ot available. Only WebA
+ssembly (WASM) bindings
+ were loaded, and Turbo
+pack requires native bi
+ndings.
+
+To build on this platfo
+rm, use Webpack instead
+:
+  next build --webpack
+
+For more information, s
+ee: https://nextjs.org/
+docs/app/api-reference/
+turbopack#supported-pla
+tforms
+    at ignore-listed fr
+ames

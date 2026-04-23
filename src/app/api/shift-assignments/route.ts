@@ -15,7 +15,14 @@ export async function GET(request: NextRequest) {
   const to = request.nextUrl.searchParams.get('to');
 
   const supabase = await createClient();
-  let q = supabase.from('shift_assignments').select('*').order('date');
+
+  /* Phase 60: select('*') 廃止。dto=transport 時は軽量化 */
+  const dto = request.nextUrl.searchParams.get('dto');
+  const cols = dto === 'transport'
+    ? 'id, staff_id, date, start_time, end_time, assignment_type'
+    : 'id, tenant_id, staff_id, date, start_time, end_time, assignment_type, is_confirmed, created_at, segment_order, note';
+
+  let q = supabase.from('shift_assignments').select(cols).order('date');
   if (from) q = q.gte('date', from);
   if (to) q = q.lte('date', to);
 

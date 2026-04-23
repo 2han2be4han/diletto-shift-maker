@@ -143,6 +143,7 @@ export function generateShiftAssignments(
         is_confirmed: false,
         /* Phase 50: 生成ロジックは 1 職員 1 日 1 セグメント前提。segment_order=0 固定。 */
         segment_order: 0,
+        note: null,
       });
     }
 

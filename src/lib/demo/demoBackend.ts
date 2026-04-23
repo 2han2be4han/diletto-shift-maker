@@ -581,6 +581,7 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
           assignment_type: (a.assignment_type as ShiftAssignmentType) ?? 'off',
           is_confirmed: Boolean(a.is_confirmed ?? false),
           segment_order,
+          note: null,
           created_at: existing?.created_at ?? nowIso(),
         };
         if (existing) {
@@ -647,6 +648,7 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
           assignment_type: isLeave ? 'paid_leave' : 'normal',
           is_confirmed: false,
           segment_order: 0,
+          note: null,
           created_at: nowIso(),
         });
       }
@@ -827,6 +829,7 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
               assignment_type: patch.assignment_type ?? 'normal',
               is_confirmed: true,
               segment_order: 0,
+              note: null,
               created_at: nowIso(),
             });
           }

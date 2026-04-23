@@ -210,22 +210,45 @@ export default function TransportPage() {
       const from = `${year}-${String(month).padStart(2, '0')}-01`;
       const to = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      const [sRes, cRes, eRes, aRes, tRes, tenantRes, elRes] = await Promise.all([
-        fetch('/api/staff'),
-        fetch('/api/children'),
-        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
-        fetch(`/api/shift-assignments?from=${from}&to=${to}`),
-        fetch(`/api/transport-assignments?from=${from}&to=${to}`),
-        fetch('/api/tenant'),
-        fetch('/api/child-area-eligibility'),
-      ]);
-      const sJson = sRes.ok ? await sRes.json() : { staff: [] };
-      const cJson = cRes.ok ? await cRes.json() : { children: [] };
-      const eJson = eRes.ok ? await eRes.json() : { entries: [] };
-      const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
-      const tJson = tRes.ok ? await tRes.json() : { assignments: [] };
-      const tenantJson = tenantRes.ok ? await tenantRes.json() : { tenant: null };
-      const elJson = elRes.ok ? await elRes.json() : { items: [] };
+      let sJson, cJson, eJson, aJson, tJson, tenantJson, elJson;
+      let isAggregatedSuccess = false;
+
+      try {
+        const aggRes = await fetch(`/api/transport-page-data?from=${from}&to=${to}`);
+        if (aggRes.ok) {
+          const json = await aggRes.json();
+          sJson = { staff: json.staff ?? [] };
+          cJson = { children: json.children ?? [] };
+          eJson = { entries: json.entries ?? [] };
+          aJson = { assignments: json.shiftAssignments ?? [] };
+          tJson = { assignments: json.transportAssignments ?? [] };
+          tenantJson = { tenant: json.tenant ?? null };
+          elJson = { items: json.eligibilityItems ?? [] };
+          isAggregatedSuccess = true;
+        }
+      } catch (e) {
+        /* フォールバックへ移行 */
+      }
+
+      if (!isAggregatedSuccess) {
+        const [sRes, cRes, eRes, aRes, tRes, tenantRes, elRes] = await Promise.all([
+          fetch('/api/staff?dto=transport'),
+          fetch('/api/children?dto=transport'),
+          fetch(`/api/schedule-entries?from=${from}&to=${to}&dto=transport`),
+          fetch(`/api/shift-assignments?from=${from}&to=${to}&dto=transport`),
+          fetch(`/api/transport-assignments?from=${from}&to=${to}`),
+          fetch('/api/tenant'),
+          fetch('/api/child-area-eligibility?dto=transport'),
+        ]);
+        sJson = sRes.ok ? await sRes.json() : { staff: [] };
+        cJson = cRes.ok ? await cRes.json() : { children: [] };
+        eJson = eRes.ok ? await eRes.json() : { entries: [] };
+        aJson = aRes.ok ? await aRes.json() : { assignments: [] };
+        tJson = tRes.ok ? await tRes.json() : { assignments: [] };
+        tenantJson = tenantRes.ok ? await tenantRes.json() : { tenant: null };
+        elJson = elRes.ok ? await elRes.json() : { items: [] };
+      }
+
       setChildAreaEligibleStaff(elJson.items ?? []);
 
       setStaff(sJson.staff ?? []);
@@ -429,6 +452,9 @@ export default function TransportPage() {
       target.set(staffId, arr);
     };
 
+    /* O(1) 参照用に Map を事前作成 */
+    const assignByEntryId = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
+
     for (const entry of dayEntries) {
       const spec = resolveEntryTransportSpec(entry, {
         child: childById.get(entry.child_id),
@@ -441,7 +467,7 @@ export default function TransportPage() {
       const dropoffMin = toMin(entry.dropoff_time);
 
       const pending = pendingChanges.get(entry.id);
-      const existing = transportAssignments.find((t) => t.schedule_entry_id === entry.id);
+      const existing = assignByEntryId.get(entry.id);
       const pickupIds = pending?.pickupStaffIds ?? existing?.pickup_staff_ids ?? [];
       const dropoffIds = pending?.dropoffStaffIds ?? existing?.dropoff_staff_ids ?? [];
 
@@ -483,14 +509,18 @@ export default function TransportPage() {
      Phase 50: 分割シフト対応。複数セグメントがある場合、endTime は最遅の end_time を採用
      （「退勤時刻」表示として自然な最終勤務終了を示す）。 */
   const availableStaffForDay = useMemo(() => {
+    /* 職員ごとのシフトを事前に Map 化し O(1) で参照できるようにする */
+    const shiftByStaffId = new Map<string, ShiftAssignmentRow[]>();
+    for (const sa of shiftAssignments) {
+      if (sa.date === selectedDate && sa.assignment_type === 'normal' && !!sa.end_time) {
+        const arr = shiftByStaffId.get(sa.staff_id) ?? [];
+        arr.push(sa);
+        shiftByStaffId.set(sa.staff_id, arr);
+      }
+    }
+
     return staff.map((s) => {
-      const daySegments = shiftAssignments.filter(
-        (sa) =>
-          sa.staff_id === s.id &&
-          sa.date === selectedDate &&
-          sa.assignment_type === 'normal' &&
-          !!sa.end_time,
-      );
+      const daySegments = shiftByStaffId.get(s.id) ?? [];
       const latestEndTime =
         daySegments.length === 0
           ? null

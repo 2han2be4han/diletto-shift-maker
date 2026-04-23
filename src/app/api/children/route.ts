@@ -35,15 +35,22 @@ function sanitizeIdArray(input: unknown): string[] {
   return Array.from(seen);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const gate = await requireRole('viewer');
   if (!gate.ok) return gate.response;
 
   const supabase = await createClient();
+  
+  /* Phase 60: select('*') 廃止。dto=transport 時は軽量化 */
+  const dto = request.nextUrl.searchParams.get('dto');
+  const cols = dto === 'transport'
+    ? 'id, name, display_order, home_address, pickup_area_labels, dropoff_area_labels, custom_pickup_areas, custom_dropoff_areas'
+    : 'id, tenant_id, name, grade_type, is_active, parent_contact, display_order, home_address, pickup_area_labels, dropoff_area_labels, custom_pickup_areas, custom_dropoff_areas, created_at';
+
   /* display_order が NULL のレコードは末尾、その後 created_at ASC で安定ソート */
   const { data: children, error: cErr } = await supabase
     .from('children')
-    .select('*')
+    .select(cols)
     .order('display_order', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });

@@ -451,6 +451,7 @@ export function buildSeedState(): DemoState {
         is_confirmed: false,
         created_at: nowIso,
         segment_order: 0,
+    note: null,
       });
     });
   }
