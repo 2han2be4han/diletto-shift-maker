@@ -110,15 +110,22 @@ export default function ShiftGrid({
   });
 
   /* Phase 26: 職員ごとの出勤/公休/有給日数（職員名横の小さなカウント表示用）。
-     Phase 50: 同一 (staff, date) に複数セグメントがあっても「1 日 1 回」としてカウント。 */
+     Phase 50: 同一 (staff, date) に複数セグメントがあっても「1 日 1 回」としてカウント。
+     Phase 62-2: primary を「最後に入れたもの（segment_order 最大）」で判定。
+     送迎から追加した最新シフトが公休/有給より優位になり、カウントも最新状態に追従する。 */
+  const pickPrimary = (arr: ShiftCell[]): ShiftCell | undefined => {
+    /* off 以外があればその中の segment_order 最大を、全部 off ならそのまま最大を取る */
+    const nonOff = arr.filter((c) => c.assignment_type !== 'off');
+    const source = nonOff.length > 0 ? nonOff : arr;
+    return source[source.length - 1];
+  };
   const countsByStaff = new Map<string, { work: number; ph: number; pl: number }>();
   staff.forEach((s) => countsByStaff.set(s.id, { work: 0, ph: 0, pl: 0 }));
   cellSegmentsMap.forEach((segs, key) => {
     const [staffId] = key.split('_');
     const rec = countsByStaff.get(staffId);
     if (!rec) return;
-    /* 複数セグメントでも代表の assignment_type（先頭）で 1 日分を数える */
-    const type = segs[0]?.assignment_type;
+    const type = pickPrimary(segs)?.assignment_type;
     if (type === 'normal') rec.work++;
     else if (type === 'public_holiday') rec.ph++;
     else if (type === 'paid_leave') rec.pl++;
@@ -301,10 +308,12 @@ export default function ShiftGrid({
               </td>
               {dates.map((d) => {
                 const segs = cellSegmentsMap.get(`${s.id}_${d.dateStr}`) ?? [];
-                /* off 以外（normal / paid_leave / public_holiday）を優先して primary に据える。
-                   過去のバグで [off@0, normal@1] が同居している日も勤務シフト側を表示する。 */
-                const meaningful = segs.filter((c) => c.assignment_type !== 'off');
-                const cell = meaningful[0] ?? segs[0];
+                /* Phase 62-2: primary は「off 以外の中で最後に入れたもの」。
+                   送迎からシフト追加（= segment_order の大きい新しい行）が常に表示で勝つ。
+                   過去のバグで [off@0, normal@1] が同居している日も勤務側を表示、
+                   さらに [public_holiday@0, normal@1] / [paid_leave@0, normal@1] も
+                   新しい normal を優先して見せる（ユーザーの最後の意思尊重）。 */
+                const cell = pickPrimary(segs);
                 const type = cell?.assignment_type || 'off';
                 const config = TYPE_CONFIG[type];
                 const commentText = commentMap.get(`${s.id}_${d.dateStr}`);
