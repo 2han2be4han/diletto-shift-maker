@@ -92,23 +92,34 @@ export default function ChildrenSettingsPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [cRes, tRes, sRes] = await Promise.all([
-        fetch('/api/children'),
-        fetch('/api/tenant'),
-        fetch('/api/staff'),
-      ]);
-      if (!cRes.ok) throw new Error('児童の取得に失敗しました');
-      const cJson = await cRes.json();
-      setChildren(cJson.children ?? []);
-      if (tRes.ok) {
-        const { tenant } = await tRes.json();
-        const s: TenantSettings = tenant?.settings ?? {};
+      /* Phase 61-6: batch API で 1 往復。失敗時は旧 3 fetch にフォールバック */
+      const batchRes = await fetch('/api/settings-children-data');
+      if (batchRes.ok) {
+        const j = await batchRes.json();
+        setChildren(j.children ?? []);
+        const s: TenantSettings = j.tenant?.settings ?? {};
         setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
         setDropoffAreas(s.dropoff_areas ?? []);
-      }
-      if (sRes.ok) {
-        const sJson = await sRes.json();
-        setStaffList(sJson.staff ?? []);
+        setStaffList(j.staff ?? []);
+      } else {
+        const [cRes, tRes, sRes] = await Promise.all([
+          fetch('/api/children'),
+          fetch('/api/tenant'),
+          fetch('/api/staff'),
+        ]);
+        if (!cRes.ok) throw new Error('児童の取得に失敗しました');
+        const cJson = await cRes.json();
+        setChildren(cJson.children ?? []);
+        if (tRes.ok) {
+          const { tenant } = await tRes.json();
+          const s: TenantSettings = tenant?.settings ?? {};
+          setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
+          setDropoffAreas(s.dropoff_areas ?? []);
+        }
+        if (sRes.ok) {
+          const sJson = await sRes.json();
+          setStaffList(sJson.staff ?? []);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');

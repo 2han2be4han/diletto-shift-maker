@@ -27,6 +27,7 @@ import type {
 } from '@/types';
 import { DEFAULT_TRANSPORT_MIN_END_TIME, DEFAULT_PICKUP_COOLDOWN_MINUTES, DEFAULT_TRANSPORT_COLUMN_ORDER } from '@/types';
 import { resolveEntryTransportSpec } from '@/lib/logic/resolveTransportSpec';
+import { useCurrentStaff } from '@/components/layout/AppShell';
 
 /**
  * 送迎表ページ（Supabase 接続）
@@ -89,8 +90,11 @@ export default function TransportPage() {
   const [columnOrder, setColumnOrder] = useState<TransportColumnKey[]>(DEFAULT_TRANSPORT_COLUMN_ORDER);
   /* Phase 28: 並び替え保存後に他の設定を巻き戻さないよう、最後に取得した settings 全体を保持 */
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
-  /* Phase 28: 自分のロール（viewer は列並び替え不可） */
-  const [myRole, setMyRole] = useState<'admin' | 'editor' | 'viewer' | null>(null);
+  /* Phase 28: 自分のロール（viewer は列並び替え不可）。
+     Phase 61-7: /api/me の独自 fetch を撤廃し、SSR 済みの useCurrentStaff() を使う。
+     これにより初期表示時にロール null でレンダされる一瞬のちらつきを解消。 */
+  const { staff: currentStaff } = useCurrentStaff();
+  const myRole: 'admin' | 'editor' | 'viewer' | null = currentStaff?.role ?? null;
 
   /* Phase 51: シフト追加モーダル。送迎表作成中に「この職員この日出勤できる」と気づいた時に
      シフト画面へ移動せずその場でシフトを追加する導線。
@@ -286,13 +290,8 @@ export default function TransportPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  /* Phase 28: ロール取得（列並び替えの権限判定） */
-  useEffect(() => {
-    void fetch('/api/me')
-      .then((r) => r.json())
-      .then((d) => setMyRole(d.staff?.role ?? null))
-      .catch(() => {});
-  }, []);
+  /* Phase 61-7: ロール取得は useCurrentStaff() (SSR 済み Context) に置換したため
+     独自 fetch('/api/me') は撤廃。 */
 
   /* Phase 26: ブラウザ離脱時（タブ閉じ・リロード）に未保存警告 */
   useEffect(() => {

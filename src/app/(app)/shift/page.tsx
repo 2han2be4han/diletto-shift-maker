@@ -22,6 +22,7 @@ import type {
   ScheduleEntryRow,
   StaffRole,
 } from '@/types';
+import { useCurrentStaff } from '@/components/layout/AppShell';
 
 /**
  * シフト表ページ（Supabase 接続）
@@ -76,18 +77,12 @@ export default function ShiftPage() {
   const [editMode, setEditMode] = useState(false);
 
   /* Phase 25: 自分の role（承認UI表示用）。
-     Phase 25-C-7a で出勤中制約を撤廃したため on_duty_admin は参照しない */
-  const [myRole, setMyRole] = useState<StaffRole | null>(null);
+     Phase 25-C-7a で出勤中制約を撤廃したため on_duty_admin は参照しない。
+     Phase 61-7: /api/me の独自 fetch を撤廃し、SSR 済みの useCurrentStaff() を使う。
+     これによりマウント直後のロール null 状態（viewer 向けUIが一瞬表示される現象）が消える。 */
+  const { staff: currentStaff } = useCurrentStaff();
+  const myRole: StaffRole | null = currentStaff?.role ?? null;
   const isAdmin = myRole === 'admin';
-
-  useEffect(() => {
-    void fetch('/api/me')
-      .then((r) => r.json())
-      .then((d) => {
-        setMyRole(d.staff?.role ?? null);
-      })
-      .catch(() => {});
-  }, []);
 
   /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント） */
   const childrenCountByDate = useMemo(() => {
@@ -115,28 +110,42 @@ export default function ShiftPage() {
       const lastDay = getDaysInMonth(new Date(year, month - 1));
       const to = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      const [sRes, eRes, rRes, aRes, cRes] = await Promise.all([
-        fetch('/api/staff'),
-        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
-        fetch(`/api/shift-requests?month=${monthStr}`),
-        fetch(`/api/shift-assignments?from=${from}&to=${to}`),
-        fetch(`/api/shift-request-comments?month=${monthStr}`),
-      ]);
+      /* Phase 61-4: batch API で 1 往復に集約。失敗時は旧 5 fetch にフォールバック。 */
+      let sArr: StaffRow[] = [];
+      let entries: ScheduleEntryRow[] = [];
+      let requests: ShiftRequestRow[] = [];
+      let assigns: ShiftAssignmentRow[] = [];
+      let comments: ShiftRequestCommentRow[] = [];
 
-      if (!sRes.ok) throw new Error('職員取得失敗');
-      if (!eRes.ok) throw new Error('利用予定取得失敗');
+      const batchRes = await fetch(`/api/shift-page-data?month=${monthStr}`);
+      if (batchRes.ok) {
+        const j = await batchRes.json();
+        sArr = (j.staff ?? []) as StaffRow[];
+        entries = (j.entries ?? []) as ScheduleEntryRow[];
+        requests = (j.requests ?? []) as ShiftRequestRow[];
+        assigns = (j.assignments ?? []) as ShiftAssignmentRow[];
+        comments = (j.comments ?? []) as ShiftRequestCommentRow[];
+      } else {
+        const [sRes, eRes, rRes, aRes, cRes] = await Promise.all([
+          fetch('/api/staff'),
+          fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+          fetch(`/api/shift-requests?month=${monthStr}`),
+          fetch(`/api/shift-assignments?from=${from}&to=${to}`),
+          fetch(`/api/shift-request-comments?month=${monthStr}`),
+        ]);
+        if (!sRes.ok) throw new Error('職員取得失敗');
+        if (!eRes.ok) throw new Error('利用予定取得失敗');
+        sArr = ((await sRes.json()).staff ?? []) as StaffRow[];
+        entries = ((await eRes.json()).entries ?? []) as ScheduleEntryRow[];
+        requests = rRes.ok ? (((await rRes.json()).requests ?? []) as ShiftRequestRow[]) : [];
+        assigns = aRes.ok ? (((await aRes.json()).assignments ?? []) as ShiftAssignmentRow[]) : [];
+        comments = cRes.ok ? (((await cRes.json()).comments ?? []) as ShiftRequestCommentRow[]) : [];
+      }
 
-      const { staff: sArr } = await sRes.json();
-      const { entries } = await eRes.json();
-      const rJson = rRes.ok ? await rRes.json() : { requests: [] };
-      const aJson = aRes.ok ? await aRes.json() : { assignments: [] };
-
-      setStaff(sArr ?? []);
-      setScheduleEntries(entries ?? []);
-      setShiftRequests(rJson.requests ?? []);
-      const cJson = cRes.ok ? await cRes.json() : { comments: [] };
-      setRequestComments(cJson.comments ?? []);
-      const assigns: ShiftAssignmentRow[] = aJson.assignments ?? [];
+      setStaff(sArr);
+      setScheduleEntries(entries);
+      setShiftRequests(requests);
+      setRequestComments(comments);
       setCells(
         assigns.map<ShiftCell>((a) => ({
           staff_id: a.staff_id,

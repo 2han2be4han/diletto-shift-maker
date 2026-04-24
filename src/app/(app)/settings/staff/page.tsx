@@ -259,21 +259,32 @@ export default function StaffSettingsPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [sRes, tRes] = await Promise.all([
-        fetch(`/api/staff${showRetired ? '?include_retired=1' : ''}`),
-        fetch('/api/tenant'),
-      ]);
-      if (!sRes.ok) throw new Error('職員の取得に失敗しました');
-      if (!tRes.ok) throw new Error('テナント情報の取得に失敗しました');
-      const { staff } = await sRes.json();
-      const { tenant } = await tRes.json();
-      setStaffList(staff ?? []);
-      const s: TenantSettings = tenant?.settings ?? {};
-      /* Phase 27-D (revised): 迎/送エリアを分離ソースで扱う。
-         旧 transport_areas のみのテナントは迎側のフォールバックにする */
-      setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
-      setDropoffAreas(s.dropoff_areas ?? []);
-      setQualificationTypes(s.qualification_types ?? []);
+      /* Phase 61-6: batch API で 1 往復。失敗時は旧 2 fetch にフォールバック */
+      const batchRes = await fetch(`/api/settings-staff-data${showRetired ? '?include_retired=1' : ''}`);
+      if (batchRes.ok) {
+        const j = await batchRes.json();
+        setStaffList(j.staff ?? []);
+        const s: TenantSettings = j.tenant?.settings ?? {};
+        setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
+        setDropoffAreas(s.dropoff_areas ?? []);
+        setQualificationTypes(s.qualification_types ?? []);
+      } else {
+        const [sRes, tRes] = await Promise.all([
+          fetch(`/api/staff${showRetired ? '?include_retired=1' : ''}`),
+          fetch('/api/tenant'),
+        ]);
+        if (!sRes.ok) throw new Error('職員の取得に失敗しました');
+        if (!tRes.ok) throw new Error('テナント情報の取得に失敗しました');
+        const { staff } = await sRes.json();
+        const { tenant } = await tRes.json();
+        setStaffList(staff ?? []);
+        const s: TenantSettings = tenant?.settings ?? {};
+        /* Phase 27-D (revised): 迎/送エリアを分離ソースで扱う。
+           旧 transport_areas のみのテナントは迎側のフォールバックにする */
+        setPickupAreas(s.pickup_areas ?? s.transport_areas ?? []);
+        setDropoffAreas(s.dropoff_areas ?? []);
+        setQualificationTypes(s.qualification_types ?? []);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました');
     } finally {

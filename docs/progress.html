@@ -861,9 +861,9 @@
             <tr><td>56-7</td><td>シフト表の今日列ヘッダハイライト（accent-pale 背景 + 左右 accent 縦線）</td><td>src/components/shift/ShiftGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>56-8</td><td>利用表の今日列ヘッダハイライト（同上）</td><td>src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>56-9</td><td>シフト/利用表: 当月表示時に今日列を画面内に自動スクロール</td><td>src/components/shift/ShiftGrid.tsx, src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>scrollIntoView 初回のみ</td></tr>
-            <tr><td>56-10</td><td>整合性チェック（別視点）: pendingChanges が selectedDate 変更で消えないこと / viewer ロールで編集導線が出ないこと / fetchAll の月単位取得が影響を受けないこと / MonthSelector の push 履歴で戻るボタンが正しく動くこと</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td>CLAUDE.md §3 準拠</td></tr>
+            <tr><td>56-10</td><td>整合性チェック（別視点）: pendingChanges が selectedDate 変更で消えないこと / viewer ロールで編集導線が出ないこと / fetchAll の月単位取得が影響を受けないこと / MonthSelector の push 履歴で戻るボタンが正しく動くこと</td><td>動作確認</td><td class="status-done">完了</td><td>100%</td><td>CLAUDE.md §3 準拠</td></tr>
             <tr><td>56-11</td><td>reference-map.md 更新（useTransportDate / isToday / todayStr の参照追加）</td><td>docs/reference-map.md</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
-            <tr><td>56-12</td><td>ローカル検証（npm run dev）: 月切替 / 不正 ?date / リロード / 戻る / 初回当月=今日 / 初回来月=月初 / 3画面今日視認 / pendingChanges 保持 / viewer 回帰無し</td><td>手動動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>56-12</td><td>ローカル検証（npm run dev）: 月切替 / 不正 ?date / リロード / 戻る / 初回当月=今日 / 初回来月=月初 / 3画面今日視認 / pendingChanges 保持 / viewer 回帰無し</td><td>手動動作確認</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
 
@@ -879,7 +879,7 @@
             <tr><td>57-6</td><td>送迎表: DateHeaderPicker 削除 → DateStepper+DatePopover に置換、Phase 56 の今日バッジも統合、週次印刷を header actions に移動</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>57-7</td><td>送迎表 dayStates を transportAssignments から派生</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>useMemo</td></tr>
             <tr><td>57-8</td><td>シフト/利用表/休み希望/weekly-transport: showMonthSelector を MonthStepper に置換、ページ固有アクションを header actions に</td><td>shift, schedule, request, weekly-transport</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
-            <tr><td>57-9</td><td>整合性チェック: URL ?month/?date 整合、pendingChanges 保持、viewer 制御、モバイル折り返し</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>57-9</td><td>整合性チェック: URL ?month/?date 整合、pendingChanges 保持、viewer 制御、モバイル折り返し</td><td>動作確認</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>57-10</td><td>reference-map.md 更新 + localhost:5000 検証</td><td>docs/*</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
@@ -896,8 +896,8 @@
             <tr><td>58-6</td><td>送迎表ヘッダーにバッジ（未完成/完成）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>58-7</td><td>シフト表ヘッダーにバッジ（未完成/完成）</td><td>src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
             <tr><td>58-8</td><td>利用表は祝日のみ反映。完成バッジは対象外（判定基準曖昧のため）</td><td>src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
-            <tr><td>58-9</td><td>整合性確認: 月切替で状態が追従、viewer ロールでも表示、祝日が日曜と色衝突しない</td><td>動作確認</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
-            <tr><td>58-10</td><td>reference-map.md / progress.html 更新</td><td>docs/*</td><td class="status-todo">未着手</td><td>0%</td><td></td></tr>
+            <tr><td>58-9</td><td>整合性確認: 月切替で状態が追従、viewer ロールでも表示、祝日が日曜と色衝突しない</td><td>動作確認</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
+            <tr><td>58-10</td><td>reference-map.md / progress.html 更新</td><td>docs/*</td><td class="status-done">完了</td><td>100%</td><td></td></tr>
         </tbody>
     </table>
 
@@ -1086,6 +1086,30 @@
             <tr><td>D-13</td><td>ローカル動作確認（ログイン→デモ起動→各ページ操作→終了）</td><td>—</td><td class="status-doing">進行中</td><td>80%</td><td>ユーザー確認フェーズ。npm run dev は port 5000 で稼働中。seed 2.0 で staff 6 / 児童 9 / 送迎割当/シフト変更申請/コメント入り</td></tr>
             <tr><td>D-14</td><td>docs/reference-map.md / docs/error-log.md 更新</td><td>docs/</td><td class="status-done">完了</td><td>100%</td><td>reference-map に §9 Phase D セクション追加、error-log に型エラー 2 件記録</td></tr>
             <tr><td>D-15</td><td>noindex meta + robots.txt（デモ画面のみクローラー除外）</td><td>(app)/layout.tsx, public/robots.txt</td><td class="status-done">完了</td><td>100%</td><td>(app)/layout.tsx の generateMetadata で Cookie 検知時のみ robots: { index: false, follow: false }。robots.txt は触らず</td></tr>
+        </tbody>
+    </table>
+
+    <div class="phase-head">Phase 61: インポート月バグ修正 + 差分インポート + 読み込み高速化（2026-04-24 着手）</div>
+    <p>
+        <strong>背景</strong>:
+        (a) デイロボからコピペ時、4月画面で5月データを貼ると日付が画面の月に書き変わって4月に保存されていた（曜日未検証）。
+        (b) 再インポート時に <code>replaceRange</code> で planned エントリを全削除 → FK ON DELETE CASCADE で <strong>確定済み送迎も連鎖削除</strong>されていた（CLAUDE.md §6 違反）。
+        (c) Shift 6 fetch / Schedule 3 fetch / Settings 2-3 fetch で初期表示が遅い。Shift・Transport は <code>/api/me</code> を独自 useEffect 取得しておりロール判定遅延でviewer向けUIが一瞬見える。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>61-1</td><td>Excel貼付の曜日検証（案A: 厳格）: ヘッダー <code>1(水)</code> から曜日を捕捉し year/month/day 算出日と比較、不一致で中止</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>parseDateFromHeader / parseDate 両方</td></tr>
+            <tr><td>61-2</td><td>差分インポート API: <code>mode: 'diff'</code> を追加、adds/updates/unchanged ごとに個別適用、確定済み送迎紐付き entry は自動スキップ</td><td>src/app/api/schedule-entries/route.ts</td><td class="status-done">完了</td><td>100%</td><td>既存 replaceRange は後方互換で残す</td></tr>
+            <tr><td>61-3</td><td>差分算出 + プレビュー表示: handleBulkImport で既存 entries と diff、プレビューに🟢新規/🟡変更/⚪同一/⚠️確定済み保護のバッジ表示</td><td>src/app/(app)/schedule/page.tsx, src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>プレビュー前に一度 schedule-entries GET が必要</td></tr>
+            <tr><td>61-4</td><td>batch API 新設: <code>/api/shift-page-data</code>（staff/schedule-entries/shift-requests/shift-assignments/shift-request-comments 5→1）</td><td>src/app/api/shift-page-data/route.ts, src/app/(app)/shift/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>transport-page-data と同じパターン、失敗時フォールバック付き</td></tr>
+            <tr><td>61-5</td><td>batch API 新設: <code>/api/schedule-page-data</code>（children/schedule-entries/tenant + 送迎確定ステータス 4→1）</td><td>src/app/api/schedule-page-data/route.ts, src/app/(app)/schedule/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>61-3 の差分表示でも使用</td></tr>
+            <tr><td>61-6</td><td>batch API 新設: <code>/api/settings-children-data</code>, <code>/api/settings-staff-data</code></td><td>src/app/api/settings-*/route.ts, 各 settings ページ</td><td class="status-done">完了</td><td>100%</td><td>3→1 / 2→1</td></tr>
+            <tr><td>61-7</td><td>ロールちらつき修正: Shift/Transport の独自 <code>/api/me</code> 取得を削除し <code>useCurrentStaff()</code>（SSR済み Context）に置換</td><td>src/app/(app)/shift/page.tsx, src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>Ctx はすでに AppShell で SSR staff 注入済み</td></tr>
+            <tr><td>61-8</td><td>ローカル動作確認（npm run dev）: (1) 4月画面で5月貼付→エラー表示 (2) 同データ再貼付→差分ゼロ (3) 1件追加→差分1件・確定済み送迎残存 (4) 各ページ初期表示の高速化</td><td>—</td><td class="status-doing">ユーザー確認待ち</td><td>80%</td><td>npm run build は成功。型チェック pass。検証項目: 曜日検証 / 差分算出 / 確定済み保護 / ロール非ちらつき / 各画面の読み込み速度</td></tr>
+            <tr><td>61-9</td><td>docs/reference-map.md / docs/error-log.md 更新</td><td>docs/</td><td class="status-done">完了</td><td>100%</td><td>新エンドポイント + ExcelPasteModal 改修記録</td></tr>
         </tbody>
     </table>
 

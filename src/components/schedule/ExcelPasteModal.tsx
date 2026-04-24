@@ -21,6 +21,21 @@ import { parseChildName } from '@/lib/utils/parseChildName';
  * 例: "迎 13:20\n送 16:00" のようなTSV形式になる。
  */
 
+/** Phase 61-3: 差分インポート用に受け取る既存 entry の最小情報 */
+export type ExistingEntrySummary = {
+  id: string;
+  child_id: string;
+  date: string;
+  pickup_time: string | null;
+  dropoff_time: string | null;
+  pickup_method: 'pickup' | 'self';
+  dropoff_method: 'dropoff' | 'self';
+  pickup_mark: string | null;
+  dropoff_mark: string | null;
+};
+
+export type DiffClass = 'added' | 'modified' | 'unchanged' | 'protected';
+
 type ExcelPasteModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -31,6 +46,12 @@ type ExcelPasteModalProps = {
   existingChildNames?: string[];
   /** Phase 22: 登録完了後に呼ばれる再取得コールバック */
   onChildrenRegistered?: () => Promise<void> | void;
+  /** Phase 61-3: 既存 entry（差分算出用）。child_name → id 解決は別途 children 配列で */
+  existingEntries?: ExistingEntrySummary[];
+  /** Phase 61-3: 確定済み送迎が紐づく schedule_entry_id の集合 */
+  confirmedTransportEntryIds?: Set<string>;
+  /** Phase 61-3: 児童名 → child_id 解決マップ（未登録判定ではなく diff 計算用） */
+  childNameToId?: Map<string, string>;
 };
 
 export default function ExcelPasteModal({
@@ -41,6 +62,9 @@ export default function ExcelPasteModal({
   month,
   existingChildNames = [],
   onChildrenRegistered,
+  existingEntries = [],
+  confirmedTransportEntryIds,
+  childNameToId,
 }: ExcelPasteModalProps) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedScheduleEntry[]>([]);
@@ -50,12 +74,18 @@ export default function ExcelPasteModal({
   const handleParse = () => {
     setError('');
     try {
-      const entries = parseExcelClipboard(rawText, year, month);
-      if (entries.length === 0) {
+      const result = parseExcelClipboard(rawText, year, month);
+      if (result.weekdayMismatch) {
+        /* Phase 61-1: 貼付データのヘッダー曜日と現在画面の月から算出した曜日が一致しない
+           → 別の月のデータを貼付している可能性。中止してユーザーに誘導する */
+        setError(result.weekdayMismatch);
+        return;
+      }
+      if (result.entries.length === 0) {
         setError('有効なデータが見つかりませんでした。Excelの利用予定表をヘッダー行・児童名列を含めてコピーしてください。');
         return;
       }
-      setParsed(entries);
+      setParsed(result.entries);
       setStep('preview');
     } catch {
       setError('データの解析に失敗しました。Excelからそのままコピーしたデータか確認してください。');
@@ -151,6 +181,9 @@ export default function ExcelPasteModal({
             onBack={() => setStep('paste')}
             onConfirm={handleConfirm}
             onRequestRegister={() => setRegisterOpen(true)}
+            existingEntries={existingEntries}
+            confirmedTransportEntryIds={confirmedTransportEntryIds}
+            childNameToId={childNameToId}
           />
         )}
       </div>
@@ -183,6 +216,9 @@ function ExcelGridPreview({
   onBack,
   onConfirm,
   onRequestRegister,
+  existingEntries = [],
+  confirmedTransportEntryIds,
+  childNameToId,
 }: {
   parsed: ParsedScheduleEntry[];
   onParsedChange: (entries: ParsedScheduleEntry[]) => void;
@@ -191,6 +227,9 @@ function ExcelGridPreview({
   onBack: () => void;
   onConfirm: () => void;
   onRequestRegister: () => void;
+  existingEntries?: ExistingEntrySummary[];
+  confirmedTransportEntryIds?: Set<string>;
+  childNameToId?: Map<string, string>;
 }) {
   const [editingCell, setEditingCell] = useState<{ child: string; date: string } | null>(null);
 
@@ -200,6 +239,76 @@ function ExcelGridPreview({
   /* 児童×日付のマップを構築 */
   const cellMap = new Map<string, ParsedScheduleEntry>();
   parsed.forEach((e) => cellMap.set(`${e.child_name}_${e.date}`, e));
+
+  /* Phase 61-3: 差分算出。
+     - added: 既存に同 child_id × date なし
+     - modified: 既存あり、かつ時刻 or method or mark のいずれかが異なる
+     - unchanged: 完全一致
+     - protected: 既存あり、かつ紐づく送迎が is_confirmed=true（更新スキップ） */
+  const existingByKey = new Map<string, ExistingEntrySummary>();
+  for (const e of existingEntries) existingByKey.set(`${e.child_id}_${e.date}`, e);
+
+  const diffClassByCell = new Map<string, DiffClass>();
+  /* 既存集合から見た「削除される日」も検出（インポート範囲内の既存で、貼付に現れない entry） */
+  const importedDateRange = (() => {
+    if (dates.length === 0) return null;
+    return { from: dates[0], to: dates[dates.length - 1] };
+  })();
+  const importedKeys = new Set<string>();
+
+  for (const entry of parsed) {
+    const childId = childNameToId?.get(entry.child_name);
+    if (!childId) {
+      diffClassByCell.set(`${entry.child_name}_${entry.date}`, 'added');
+      continue;
+    }
+    const key = `${childId}_${entry.date}`;
+    importedKeys.add(key);
+    const existing = existingByKey.get(key);
+    if (!existing) {
+      diffClassByCell.set(`${entry.child_name}_${entry.date}`, 'added');
+      continue;
+    }
+    if (confirmedTransportEntryIds?.has(existing.id)) {
+      diffClassByCell.set(`${entry.child_name}_${entry.date}`, 'protected');
+      continue;
+    }
+    const same =
+      (existing.pickup_time ?? null) === (entry.pickup_time ?? null) &&
+      (existing.dropoff_time ?? null) === (entry.dropoff_time ?? null) &&
+      existing.pickup_method === (entry.pickup_method ?? 'pickup') &&
+      existing.dropoff_method === (entry.dropoff_method ?? 'dropoff') &&
+      (existing.pickup_mark ?? null) === (entry.pickup_mark ?? null) &&
+      (existing.dropoff_mark ?? null) === (entry.dropoff_mark ?? null);
+    diffClassByCell.set(
+      `${entry.child_name}_${entry.date}`,
+      same ? 'unchanged' : 'modified'
+    );
+  }
+
+  /* 削除対象（貼付に現れない既存 entry） */
+  const removeEntries: ExistingEntrySummary[] = [];
+  if (importedDateRange && childNameToId) {
+    const childIdToName = new Map(Array.from(childNameToId.entries()).map(([n, id]) => [id, n]));
+    for (const e of existingEntries) {
+      if (e.date < importedDateRange.from || e.date > importedDateRange.to) continue;
+      const name = childIdToName.get(e.child_id);
+      if (!name) continue;
+      const key = `${e.child_id}_${e.date}`;
+      if (!importedKeys.has(key)) removeEntries.push(e);
+    }
+  }
+
+  /* 差分カウント */
+  const diffCounts = {
+    added: 0,
+    modified: 0,
+    unchanged: 0,
+    protected: 0,
+    removed: removeEntries.length,
+    removedProtected: removeEntries.filter((e) => confirmedTransportEntryIds?.has(e.id)).length,
+  };
+  for (const c of diffClassByCell.values()) diffCounts[c]++;
 
   /* セル編集 */
   const handleCellUpdate = (
@@ -241,6 +350,43 @@ function ExcelGridPreview({
         <Badge variant="info">{childNames.length}名</Badge>
         <span className="text-xs" style={{ color: 'var(--ink-3)' }}>セルをクリックして時間を修正できます</span>
       </div>
+
+      {/* Phase 61-3: 差分サマリ */}
+      {existingEntries.length > 0 && (
+        <div
+          className="flex items-center gap-2 flex-wrap px-3 py-2 text-xs"
+          style={{
+            background: 'var(--accent-pale)',
+            borderRadius: '6px',
+            color: 'var(--ink-2)',
+          }}
+        >
+          <strong style={{ color: 'var(--ink)' }}>差分:</strong>
+          <span className="px-2 py-0.5 rounded" style={{ background: '#d4f4dd', color: '#166534' }}>
+            🟢 新規 {diffCounts.added}
+          </span>
+          <span className="px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#92400e' }}>
+            🟡 変更 {diffCounts.modified}
+          </span>
+          <span className="px-2 py-0.5 rounded" style={{ background: '#f3f4f6', color: '#6b7280' }}>
+            ⚪ 同一 {diffCounts.unchanged}
+          </span>
+          {diffCounts.protected > 0 && (
+            <span className="px-2 py-0.5 rounded" style={{ background: '#fee2e2', color: '#991b1b' }}>
+              ⚠ 送迎確定済みのためスキップ {diffCounts.protected}
+            </span>
+          )}
+          {diffCounts.removed > 0 && (
+            <span className="px-2 py-0.5 rounded" style={{ background: '#fecaca', color: '#7f1d1d' }}>
+              🔴 削除 {diffCounts.removed}
+              {diffCounts.removedProtected > 0 && `（うち確定済み ${diffCounts.removedProtected} 件は残存）`}
+            </span>
+          )}
+          {diffCounts.added === 0 && diffCounts.modified === 0 && diffCounts.removed === 0 && (
+            <span style={{ color: 'var(--ink-3)' }}>既存データと完全一致しています</span>
+          )}
+        </div>
+      )}
 
       {/* Phase 22: 未登録児童の警告 */}
       {unknownChildNames.length > 0 && (
@@ -344,6 +490,13 @@ function ExcelGridPreview({
                   const entry = cellMap.get(`${childName}_${date}`);
                   const isEditing = editingCell?.child === childName && editingCell?.date === date;
                   const { isWeekend } = formatDay(date);
+                  /* Phase 61-3: 差分クラスによるセル背景 */
+                  const dc = diffClassByCell.get(`${childName}_${date}`);
+                  const diffBg =
+                    dc === 'added' ? '#d4f4dd' :
+                    dc === 'modified' ? '#fef3c7' :
+                    dc === 'protected' ? '#fee2e2' :
+                    null;
 
                   return (
                     <td
@@ -352,9 +505,15 @@ function ExcelGridPreview({
                       style={{
                         borderBottom: '1px solid var(--rule)',
                         borderRight: '1px solid var(--rule)',
-                        background: isWeekend ? 'rgba(0,0,0,0.02)' : 'transparent',
+                        background: diffBg ?? (isWeekend ? 'rgba(0,0,0,0.02)' : 'transparent'),
                         position: 'relative',
                       }}
+                      title={
+                        dc === 'added' ? '新規' :
+                        dc === 'modified' ? '変更あり' :
+                        dc === 'protected' ? '送迎確定済みのため更新スキップ' :
+                        dc === 'unchanged' ? '変更なし' : undefined
+                      }
                       onClick={() => setEditingCell(entry ? { child: childName, date } : null)}
                     >
                       {entry?.area_label ? (
@@ -454,25 +613,34 @@ function ExcelGridPreview({
  * これを正しくパースして、児童×日付の利用予定に変換する。
  * ================================================================ */
 
+/**
+ * Phase 61-1: 貼付結果と曜日不一致エラーを返す。
+ * weekdayMismatch に文字列が入っていれば、貼付データは別の月のものと判定。
+ */
+type ParseResult = {
+  entries: ParsedScheduleEntry[];
+  weekdayMismatch: string | null;
+};
+
 function parseExcelClipboard(
   raw: string,
   year: number,
   month: number
-): ParsedScheduleEntry[] {
+): ParseResult {
   /* Phase 22: NFKC 正規化で Unicode 互換文字（⽒→氏、⾦→金 等）を統一。
      Excelから貼ったときに出る CJK 部首フォームを通常字に変換 */
   const normalized = raw.normalize('NFKC');
   const rows = parseTsvWithQuotes(normalized);
-  if (rows.length < 2) return [];
+  if (rows.length < 2) return { entries: [], weekdayMismatch: null };
 
   /* 1行目をヘッダーとして日付を抽出 */
   const headerRow = rows[0];
-  const dateColumns: { colIndex: number; dateStr: string }[] = [];
+  const dateColumns: { colIndex: number; dateStr: string; headerDow: string | null }[] = [];
 
   for (let i = 1; i < headerRow.length; i++) {
-    const dateStr = parseDateFromHeader(headerRow[i], year, month);
-    if (dateStr) {
-      dateColumns.push({ colIndex: i, dateStr });
+    const parsed = parseDateFromHeader(headerRow[i], year, month);
+    if (parsed) {
+      dateColumns.push({ colIndex: i, dateStr: parsed.dateStr, headerDow: parsed.headerDow });
     }
   }
 
@@ -480,6 +648,12 @@ function parseExcelClipboard(
   if (dateColumns.length === 0) {
     return parseVerticalFormat(rows, year, month);
   }
+
+  /* Phase 61-1: 曜日検証（案A: 厳格）。
+     ヘッダーに曜日が含まれる日付のうち、算出した日付の曜日と
+     ヘッダーの曜日が食い違うセルが 1 つでもあれば、別の月のデータと判定。 */
+  const mismatch = detectWeekdayMismatch(dateColumns, year, month);
+  if (mismatch) return { entries: [], weekdayMismatch: mismatch };
 
   /* 横型パース: 各行 = 1児童、各列 = 1日 */
   const entries: ParsedScheduleEntry[] = [];
@@ -509,7 +683,53 @@ function parseExcelClipboard(
     }
   }
 
-  return entries;
+  return { entries, weekdayMismatch: null };
+}
+
+/**
+ * Phase 61-1: ヘッダーに含まれる曜日と、year/month/day から算出される曜日を照合。
+ * 不一致があれば、推定される実際の月を添えてエラーメッセージを返す。
+ */
+function detectWeekdayMismatch(
+  dateColumns: { dateStr: string; headerDow: string | null }[],
+  year: number,
+  month: number
+): string | null {
+  const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+  const samples = dateColumns.filter((c) => c.headerDow);
+  if (samples.length === 0) return null;
+
+  const mismatches = samples.filter((c) => {
+    const d = new Date(c.dateStr);
+    return DOW[d.getDay()] !== c.headerDow;
+  });
+  if (mismatches.length === 0) return null;
+
+  /* 実際の月を推定: ±6 ヶ月ずらして全セルの曜日が一致する月を探す */
+  let inferred: { year: number; month: number } | null = null;
+  for (let offset = -6; offset <= 6; offset++) {
+    if (offset === 0) continue;
+    const base = new Date(year, month - 1 + offset, 1);
+    const candY = base.getFullYear();
+    const candM = base.getMonth() + 1;
+    const allMatch = samples.every((s) => {
+      const sDay = parseInt(s.dateStr.slice(-2), 10);
+      const candDate = new Date(candY, candM - 1, sDay);
+      /* 日がその月に存在しない場合は候補外 */
+      if (candDate.getMonth() + 1 !== candM) return false;
+      return DOW[candDate.getDay()] === s.headerDow;
+    });
+    if (allMatch) {
+      inferred = { year: candY, month: candM };
+      break;
+    }
+  }
+
+  const current = `${year}年${month}月`;
+  if (inferred) {
+    return `貼り付けたデータは ${inferred.year}年${inferred.month}月 のものです。現在は ${current} の画面を開いています。${inferred.year}年${inferred.month}月の画面で貼り付け直してください。`;
+  }
+  return `貼り付けたデータのヘッダー曜日と ${current} の曜日が一致しません（例: ${mismatches[0].dateStr} はヘッダー「${mismatches[0].headerDow}」だが実際は「${DOW[new Date(mismatches[0].dateStr).getDay()]}」）。正しい月の画面で貼り付けてください。`;
 }
 
 /**
@@ -666,17 +886,37 @@ function parseCellValue(cell: string): {
   return { pickup, dropoff, pickup_method, dropoff_method, note: null };
 }
 
-/** ヘッダーから日付を抽出: "1(水)", "営 1(水)", "休 5(日)", "4/1" */
-function parseDateFromHeader(header: string, year: number, month: number): string | null {
+/** ヘッダーから日付を抽出: "1(水)", "営 1(水)", "休 5(日)", "4/1"
+ *  Phase 61-1: 曜日 (headerDow) も一緒に返して、呼出側で検証できるようにする */
+function parseDateFromHeader(
+  header: string,
+  year: number,
+  month: number
+): { dateStr: string; headerDow: string | null } | null {
   if (!header || !header.trim()) return null;
   const cleaned = header.trim();
 
-  /* "営 1(水)" "休 5(日)" "1(水)" パターン */
-  const match = cleaned.match(/(\d{1,2})\s*[\(（]/);
+  /* "営 1(水)" "休 5(日)" "1(水)" パターン。曜日もキャプチャ */
+  const match = cleaned.match(/(\d{1,2})\s*[\(（]\s*([日月火水木金土])/);
   if (match) {
     const d = parseInt(match[1], 10);
     if (d >= 1 && d <= 31) {
-      return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return {
+        dateStr: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        headerDow: match[2],
+      };
+    }
+  }
+
+  /* 曜日なしの "1(" パターン（旧形式互換） */
+  const noDow = cleaned.match(/(\d{1,2})\s*[\(（]/);
+  if (noDow) {
+    const d = parseInt(noDow[1], 10);
+    if (d >= 1 && d <= 31) {
+      return {
+        dateStr: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        headerDow: null,
+      };
     }
   }
 
@@ -685,19 +925,23 @@ function parseDateFromHeader(header: string, year: number, month: number): strin
   if (numMatch) {
     const d = parseInt(numMatch[1], 10);
     if (d >= 1 && d <= 31) {
-      return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return {
+        dateStr: `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        headerDow: null,
+      };
     }
   }
 
   return null;
 }
 
-/** 縦型フォーマット: 児童名 \t 日付 \t 迎え \t 送り */
+/** 縦型フォーマット: 児童名 \t 日付 \t 迎え \t 送り
+ *  Phase 61-1: 戻り値を ParseResult に統一。縦型では曜日検証対象なし */
 function parseVerticalFormat(
   rows: string[][],
   year: number,
   month: number
-): ParsedScheduleEntry[] {
+): ParseResult {
   const entries: ParsedScheduleEntry[] = [];
 
   for (const row of rows) {
@@ -724,7 +968,7 @@ function parseVerticalFormat(
     }
   }
 
-  return entries;
+  return { entries, weekdayMismatch: null };
 }
 
 /** 児童名のクリーンアップ:

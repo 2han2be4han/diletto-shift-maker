@@ -200,6 +200,72 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
     return json({ staff: me, on_duty_admin: true });
   }
 
+  /* ----------- Phase 61: batch API（page-data 系） -----------
+     本番 API と同じ形式で集約データを返す。個別 API と同じ state を合成して返すだけ。 */
+  if (pathname === '/api/schedule-page-data' && method === 'GET') {
+    const from = q.get('from');
+    const to = q.get('to');
+    const entries = filterRange(state.schedule_entries, from, to).sort((a, b) => a.date.localeCompare(b.date));
+    const children = [...state.children].sort(
+      (a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999)
+    );
+    const tenant = state.tenants[0];
+    const entryIds = new Set(entries.map((e) => e.id));
+    const confirmedTransportEntryIds = Array.from(
+      new Set(
+        state.transport_assignments
+          .filter((t) => t.is_confirmed && entryIds.has(t.schedule_entry_id))
+          .map((t) => t.schedule_entry_id)
+      )
+    );
+    return json({ children, entries, tenant, confirmedTransportEntryIds });
+  }
+
+  if (pathname === '/api/shift-page-data' && method === 'GET') {
+    const month = q.get('month') ?? '';
+    if (!/^\d{4}-\d{2}$/.test(month)) return bad('month=YYYY-MM が必要です');
+    const [y, mo] = month.split('-').map(Number);
+    const last = new Date(y, mo, 0).getDate();
+    const from = `${month}-01`;
+    const to = `${month}-${String(last).padStart(2, '0')}`;
+    const staff = [...state.staff]
+      .filter((s) => s.is_active)
+      .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name));
+    const entries = filterRange(state.schedule_entries, from, to).sort((a, b) => a.date.localeCompare(b.date));
+    const requests = state.shift_requests.filter((r) => r.month === month);
+    const assignments = filterRange(state.shift_assignments, from, to).sort((a, b) => a.date.localeCompare(b.date));
+    const comments = state.shift_request_comments.filter((c) => c.month === month);
+    const me = state.staff.find((s) => s.id === DEMO_STAFF_ID_ME) ?? null;
+    return json({
+      staff,
+      entries,
+      requests,
+      assignments,
+      comments,
+      me: me ? { role: me.role, id: me.id, tenant_id: me.tenant_id } : null,
+    });
+  }
+
+  if (pathname === '/api/settings-children-data' && method === 'GET') {
+    const children = [...state.children].sort(
+      (a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999)
+    );
+    const tenant = state.tenants[0];
+    const staff = [...state.staff]
+      .filter((s) => s.is_active)
+      .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name));
+    return json({ children, tenant, staff });
+  }
+
+  if (pathname === '/api/settings-staff-data' && method === 'GET') {
+    const includeRetired = q.get('include_retired') === '1';
+    const staff = [...state.staff]
+      .filter((s) => includeRetired || s.is_active)
+      .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999) || a.name.localeCompare(b.name));
+    const tenant = state.tenants[0];
+    return json({ staff, tenant });
+  }
+
   /* ----------- /api/tenant ----------- */
   if (pathname === '/api/tenant' && method === 'GET') {
     return json({ tenant: state.tenants[0] });

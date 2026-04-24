@@ -43,12 +43,20 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const entries: Array<Record<string, unknown>> = Array.isArray(body?.entries) ? body.entries : [];
-  if (entries.length === 0) return NextResponse.json({ error: 'entries が空です' }, { status: 400 });
 
-  /* Phase 47 (④): PDF 再インポート時の「マージ追記」を防ぐためのレンジ上書きモード。
-     replaceRange={from,to} が指定されたら、そのレンジ内の planned エントリを先に削除してから upsert。
-     - 出欠記録済み (attendance_status != 'planned') の行は履歴保護のため削除しない
-     - tenant_id は requireRole から取得する値を使い、リクエスト側からの上書きを許さない */
+  /* Phase 61-2: 差分モード。mode:'diff' のときは entries（最終状態）と
+     removes（削除対象 entry_id 一覧）を受け取り、確定済み送迎が紐づく行は保護する。
+     従来の replaceRange は後方互換のため残す。 */
+  const mode = body?.mode === 'diff' ? 'diff' : 'replace';
+  const removes: string[] = Array.isArray(body?.removes)
+    ? (body.removes as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+
+  if (entries.length === 0 && removes.length === 0) {
+    return NextResponse.json({ error: 'entries または removes が必要です' }, { status: 400 });
+  }
+
+  /* Phase 47 (④): replaceRange モード用。*/
   const replaceRange =
     body?.replaceRange && typeof body.replaceRange === 'object'
       ? {
@@ -73,17 +81,100 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient();
 
-  if (replaceRange?.from && replaceRange?.to) {
-    /* レンジ上書き: planned のみ削除（出欠記録済みは残す）。
-       関連 transport_assignments は schedule_entry_id の FK ON DELETE CASCADE を前提とする。 */
-    const { error: delErr } = await supabase
+  if (mode === 'diff') {
+    /* Phase 61-2: 差分モード。
+       - removes: 指定された entry_id のみ削除。ただし
+         (a) 出欠記録済み (attendance_status != 'planned') は保護
+         (b) 確定済み送迎 (transport_assignments.is_confirmed=true) が紐づくものも保護
+       - entries（adds/updates）: upsert（onConflict: tenant_id,child_id,date）
+       - 同 entry に確定済み送迎が紐づく場合、upsert により schedule_entry 自体は
+         内容更新されるが id は保持され、FK cascade は発動しない。 */
+    const skippedIds: string[] = [];
+
+    if (removes.length > 0) {
+      /* 確定済み送迎が紐づく entry_id を先に列挙 */
+      const { data: protectedRows, error: protErr } = await supabase
+        .from('transport_assignments')
+        .select('schedule_entry_id')
+        .in('schedule_entry_id', removes)
+        .eq('is_confirmed', true);
+      if (protErr) return NextResponse.json({ error: `保護判定失敗: ${protErr.message}` }, { status: 500 });
+      const protectedSet = new Set((protectedRows ?? []).map((r) => r.schedule_entry_id as string));
+
+      /* 出欠記録済みも保護 */
+      const { data: attendedRows, error: attErr } = await supabase
+        .from('schedule_entries')
+        .select('id')
+        .in('id', removes)
+        .eq('tenant_id', gate.staff.tenant_id)
+        .not('attendance_status', 'is', null)
+        .neq('attendance_status', 'planned');
+      if (attErr) return NextResponse.json({ error: `出欠判定失敗: ${attErr.message}` }, { status: 500 });
+      for (const r of attendedRows ?? []) protectedSet.add(r.id as string);
+
+      const deletable = removes.filter((id) => !protectedSet.has(id));
+      skippedIds.push(...removes.filter((id) => protectedSet.has(id)));
+
+      if (deletable.length > 0) {
+        const { error: delErr } = await supabase
+          .from('schedule_entries')
+          .delete()
+          .in('id', deletable)
+          .eq('tenant_id', gate.staff.tenant_id);
+        if (delErr) return NextResponse.json({ error: `差分削除失敗: ${delErr.message}` }, { status: 500 });
+      }
+    }
+
+    if (rows.length === 0) {
+      return NextResponse.json({ entries: [], skippedIds });
+    }
+
+    const { data, error } = await supabase
       .from('schedule_entries')
-      .delete()
+      .upsert(rows, { onConflict: 'tenant_id,child_id,date' })
+      .select();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ entries: data, skippedIds });
+  }
+
+  /* 従来の replace モード */
+  if (entries.length === 0) {
+    return NextResponse.json({ error: 'entries が空です' }, { status: 400 });
+  }
+
+  if (replaceRange?.from && replaceRange?.to) {
+    /* Phase 61-2: replaceRange でも確定済み送迎を保護。
+       - 出欠記録済み (attendance_status != 'planned') は保護
+       - 確定済み送迎が紐づく entry も保護
+       - 残りの planned entry のみ削除 */
+    const { data: rangeEntries, error: rErr } = await supabase
+      .from('schedule_entries')
+      .select('id')
       .eq('tenant_id', gate.staff.tenant_id)
       .gte('date', replaceRange.from)
       .lte('date', replaceRange.to)
       .or('attendance_status.is.null,attendance_status.eq.planned');
-    if (delErr) return NextResponse.json({ error: `レンジ削除失敗: ${delErr.message}` }, { status: 500 });
+    if (rErr) return NextResponse.json({ error: `レンジ走査失敗: ${rErr.message}` }, { status: 500 });
+
+    const rangeIds = (rangeEntries ?? []).map((r) => r.id as string);
+    if (rangeIds.length > 0) {
+      const { data: protectedRows, error: protErr } = await supabase
+        .from('transport_assignments')
+        .select('schedule_entry_id')
+        .in('schedule_entry_id', rangeIds)
+        .eq('is_confirmed', true);
+      if (protErr) return NextResponse.json({ error: `保護判定失敗: ${protErr.message}` }, { status: 500 });
+      const protectedSet = new Set((protectedRows ?? []).map((r) => r.schedule_entry_id as string));
+      const deletable = rangeIds.filter((id) => !protectedSet.has(id));
+      if (deletable.length > 0) {
+        const { error: delErr } = await supabase
+          .from('schedule_entries')
+          .delete()
+          .in('id', deletable)
+          .eq('tenant_id', gate.staff.tenant_id);
+        if (delErr) return NextResponse.json({ error: `レンジ削除失敗: ${delErr.message}` }, { status: 500 });
+      }
+    }
   }
 
   const { data, error } = await supabase

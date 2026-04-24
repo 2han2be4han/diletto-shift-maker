@@ -114,6 +114,10 @@ export default function SchedulePage() {
   const [pickupAreas, setPickupAreas] = useState<AreaLabel[]>([]);
   const [dropoffAreas, setDropoffAreas] = useState<AreaLabel[]>([]);
   const [cells, setCells] = useState<CellData[]>([]);
+  /* Phase 61-3: 差分インポート用に「確定済み送迎が紐づく entry_id」を保持 */
+  const [confirmedTransportEntryIds, setConfirmedTransportEntryIds] = useState<Set<string>>(new Set());
+  /* Phase 61-3: 生エントリも保持して handleBulkImport の diff 算出に使う */
+  const [rawEntries, setRawEntries] = useState<ScheduleEntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -144,28 +148,41 @@ export default function SchedulePage() {
       const lastDay = getDaysInMonth(new Date(year, month - 1));
       const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      const [cRes, eRes, tRes] = await Promise.all([
-        fetch('/api/children'),
-        fetch(`/api/schedule-entries?from=${from}&to=${to}`),
-        fetch('/api/tenant'),
-      ]);
+      /* Phase 61-5: batch API で一括取得。失敗時は旧 3 fetch フォールバック。 */
+      let ch: ChildRow[] = [];
+      let entries: ScheduleEntryRow[] = [];
+      let settings: TenantSettings = {};
+      let confirmedIds: string[] = [];
 
-      if (!cRes.ok) throw new Error('児童の取得に失敗しました');
-      if (!eRes.ok) throw new Error('利用予定の取得に失敗しました');
-
-      const { children: ch } = await cRes.json();
-      const { entries } = await eRes.json();
-      /* Phase 28: tenant エリアを取得してマーク推論に使う */
-      if (tRes.ok) {
-        const tJson = await tRes.json();
-        const settings: TenantSettings = tJson.tenant?.settings ?? {};
-        setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
-        setDropoffAreas(settings.dropoff_areas ?? []);
+      const batchRes = await fetch(`/api/schedule-page-data?from=${from}&to=${to}`);
+      if (batchRes.ok) {
+        const j = await batchRes.json();
+        ch = (j.children ?? []) as ChildRow[];
+        entries = (j.entries ?? []) as ScheduleEntryRow[];
+        settings = (j.tenant?.settings ?? {}) as TenantSettings;
+        confirmedIds = (j.confirmedTransportEntryIds ?? []) as string[];
+      } else {
+        const [cRes, eRes, tRes] = await Promise.all([
+          fetch('/api/children'),
+          fetch(`/api/schedule-entries?from=${from}&to=${to}`),
+          fetch('/api/tenant'),
+        ]);
+        if (!cRes.ok) throw new Error('児童の取得に失敗しました');
+        if (!eRes.ok) throw new Error('利用予定の取得に失敗しました');
+        ch = (await cRes.json()).children ?? [];
+        entries = (await eRes.json()).entries ?? [];
+        if (tRes.ok) settings = ((await tRes.json()).tenant?.settings ?? {}) as TenantSettings;
       }
 
-      setChildren((ch as ChildRow[]).filter((c) => c.is_active));
+      /* Phase 28: tenant エリアを取得してマーク推論に使う */
+      setPickupAreas(settings.pickup_areas ?? settings.transport_areas ?? []);
+      setDropoffAreas(settings.dropoff_areas ?? []);
+
+      setChildren(ch.filter((c) => c.is_active));
+      setRawEntries(entries);
+      setConfirmedTransportEntryIds(new Set(confirmedIds));
       setCells(
-        (entries as ScheduleEntryRow[]).map<CellData>((e) => ({
+        entries.map<CellData>((e) => ({
           entry_id: e.id,
           child_id: e.child_id,
           date: e.date,
@@ -340,9 +357,16 @@ export default function SchedulePage() {
     }
   };
 
+  const childNameToIdMap = useMemo(
+    () => new Map(children.map((c) => [c.name, c.id])),
+    [children]
+  );
+
   const handleBulkImport = async (entries: ParsedScheduleEntry[]) => {
-    /* 名前 → child_id 解決 */
-    const nameToId = new Map(children.map((c) => [c.name, c.id]));
+    /* Phase 61-3: 差分インポート。
+       - 既存 entries と突合して adds/updates と removes を算出
+       - 確定済み送迎が紐づく entry は API 側で自動スキップされる（is_confirmed 保護） */
+    const nameToId = childNameToIdMap;
     const rows = entries
       .filter((e) => nameToId.has(e.child_name))
       .map((e) => ({
@@ -360,22 +384,43 @@ export default function SchedulePage() {
       alert('児童名が一致しませんでした。児童管理で名前を登録してください。');
       return;
     }
-    /* Phase 47 (④): PDF 内に含まれる日付レンジを replaceRange として送る。
-       同レンジの planned エントリは API 側で削除されてから upsert されるため、
-       「同月 2 回インポートで前回データが残る」マージ追記バグが解消する。 */
+
     const dates = rows.map((r) => r.date).filter((d): d is string => !!d).sort();
-    const replaceRange =
-      dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null;
+    if (dates.length === 0) {
+      alert('有効な日付を含む行がありませんでした');
+      return;
+    }
+    const rangeFrom = dates[0];
+    const rangeTo = dates[dates.length - 1];
+
+    /* 削除対象: 既存の planned で、インポート範囲内 かつ 貼付に現れない entry */
+    const importedKeys = new Set(rows.map((r) => `${r.child_id}_${r.date}`));
+    const removes = rawEntries
+      .filter(
+        (e) =>
+          e.date >= rangeFrom &&
+          e.date <= rangeTo &&
+          !importedKeys.has(`${e.child_id}_${e.date}`) &&
+          (e.attendance_status == null || e.attendance_status === 'planned')
+      )
+      .map((e) => e.id);
+
     const res = await fetch('/api/schedule-entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: rows, replaceRange }),
+      body: JSON.stringify({ mode: 'diff', entries: rows, removes }),
     });
     if (!res.ok) {
       alert('インポートに失敗しました: ' + ((await res.json()).error ?? ''));
       return;
     }
-    alert(`${rows.length}件の利用予定を登録しました`);
+    const j = await res.json();
+    const skipped = Array.isArray(j.skippedIds) ? j.skippedIds.length : 0;
+    alert(
+      skipped > 0
+        ? `${rows.length}件を反映しました（${skipped}件は送迎確定済みのため保護）`
+        : `${rows.length}件の利用予定を登録しました`
+    );
     await fetchAll();
   };
 
@@ -526,6 +571,19 @@ export default function SchedulePage() {
         month={month}
         existingChildNames={children.map((c) => c.name)}
         onChildrenRegistered={fetchAll}
+        existingEntries={rawEntries.map((e) => ({
+          id: e.id,
+          child_id: e.child_id,
+          date: e.date,
+          pickup_time: e.pickup_time,
+          dropoff_time: e.dropoff_time,
+          pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
+          dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
+          pickup_mark: e.pickup_mark ?? null,
+          dropoff_mark: e.dropoff_mark ?? null,
+        }))}
+        confirmedTransportEntryIds={confirmedTransportEntryIds}
+        childNameToId={childNameToIdMap}
       />
 
       <PdfImportModal

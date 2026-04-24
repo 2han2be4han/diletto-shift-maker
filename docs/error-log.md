@@ -93,3 +93,27 @@
 - **原因**: NotificationType は `'comment_pending' | 'comment_approved' | 'comment_rejected' | 'generic'` の 4 値限定。seed に想像の種別を入れてしまった。
 - **解決方法**: 該当 2 件は `generic` に、承認待ちは `comment_pending` に修正。`target_type` 側は `string | null` なので用途別文字列を入れても型エラーなし（拡張したい情報はそちらへ）。
 - **再発防止**: 新しい種別 notification を作る前に types/index.ts の該当 union を確認。必要なら type を拡張するが CLAUDE.md §6 で既存型の変更禁止なので、追加 union の是非をユーザーに相談してから。
+
+---
+## [Phase 61] PDF/Excel コピペインポートで「画面の月に日付が書き換わって保存」
+
+- **発生日**: 2026-04-24（ユーザー報告）
+- **発生箇所**: `src/components/schedule/ExcelPasteModal.tsx` `parseDateFromHeader` / `parseDate`
+- **エラー内容（現象）**: 4月画面でデイロボから5月のデータをコピペすると、5月のデータが4月として保存されていた。
+- **原因**: ヘッダー `1(水)` `2(木)` ... から「日」の数字だけ取り出し、画面のURL `?month=YYYY-MM` の year/month と単純結合していた。曜日の検証が一切ないため、別月のデータを貼っても当該月の日付として書き込まれていた。
+- **解決方法**: `parseDateFromHeader` の正規表現で曜日 `(日月火水木金土)` もキャプチャ。`detectWeekdayMismatch` でヘッダー曜日と算出日付の曜日を照合し、不一致があれば ±6 ヶ月ずらして実際の月を推定 → エラー表示。
+- **再発防止**: 日付パース系は必ず曜日・文字表現など冗長情報を突き合わせる。ユーザー入力源が複数あるときは「片方だけ信じない」を原則とする。
+
+---
+## [Phase 61] schedule_entries 再インポートで確定済み送迎が連鎖削除されていた
+
+- **発生日**: 2026-04-24（調査で発覚）
+- **発生箇所**: `src/app/api/schedule-entries/route.ts` の `replaceRange` 削除 + `supabase/migrations/0001_initial_schema.sql:115` の FK ON DELETE CASCADE
+- **エラー内容（現象）**: 4月のスケジュールを98%同じ内容で再インポートすると、`replaceRange` で4月 planned entries を全削除 → FK cascade で `transport_assignments` が全件削除 → 確定済み送迎まで消失。CLAUDE.md §6 の「確定済み送迎の自動上書き禁止」に違反。
+- **原因**: `replaceRange` が粗すぎる（日付レンジ単位で全 planned を破壊）。確定済み送迎が紐づく entry の保護ロジックがなかった。
+- **解決方法**:
+  1. POST に `mode: 'diff'` を追加。`entries`（adds/updates）と `removes[]`（削除対象 entry_id）を個別に受け取る差分モード。
+  2. `removes` 側では、削除前に `transport_assignments.is_confirmed=true` と `schedule_entries.attendance_status != 'planned'` を検索して保護。保護された id は `skippedIds` としてレスポンスに含める。
+  3. `replaceRange` モードでも同じ保護ロジックを追加（後方互換）。
+  4. クライアント `handleBulkImport` を差分モードで送信するように切替。プレビュー時に差分ハイライト（🟢新規 / 🟡変更 / ⚪同一 / ⚠保護 / 🔴削除）。
+- **再発防止**: テーブル間 FK CASCADE を設計するときは「削除の起点をどこで絞るか」を明記。`is_confirmed` のような業務上の保護フラグを使うレコードを CASCADE 範囲に含める場合は、必ず削除前に保護判定を噛ませる。

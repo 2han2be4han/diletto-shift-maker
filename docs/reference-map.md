@@ -798,3 +798,49 @@
 - sp_demo Cookie を持たないリクエストは middleware / layout の Cookie 判定で **早期に分岐を抜け、従来の Supabase 経路を素通し**する
 - DemoProvider は layout の demo 分岐内でしか mount されないため、window.fetch patch は非デモユーザーでは発生しない
 - PdfImportModal / BillingPage / Sidebar signout / settings/staff invite のガードはすべて `isDemoClient()` で条件分岐しており、sessionStorage に demo state が無い本番ユーザーでは false になるため従来挙動
+
+---
+
+## §10. Phase 61: インポート月バグ修正 + 差分インポート + batch API 高速化（2026-04-24）
+
+### 61-1 曜日検証（案A: 厳格）
+| ファイル | 参照内容 |
+|---|---|
+| `src/components/schedule/ExcelPasteModal.tsx` | `parseDateFromHeader` が `(日月火水木金土)` もキャプチャ。`parseExcelClipboard` の戻り値を `ParseResult` に変更し `weekdayMismatch` を返す。`detectWeekdayMismatch` で ±6 ヶ月ずらして実際の月を推定 |
+
+### 61-2 差分インポート + 確定済み送迎保護
+| ファイル | 参照内容 |
+|---|---|
+| `src/app/api/schedule-entries/route.ts` | POST に `mode: 'diff'` を追加。`removes[]` で個別削除、`transport_assignments.is_confirmed=true` が紐づく entry は自動スキップして `skippedIds` を返す。`replaceRange` も確定済み送迎保護を追加 |
+| `src/app/(app)/schedule/page.tsx` | `handleBulkImport` が diff モードで送信（adds/updates + removes）。`rawEntries` と `confirmedTransportEntryIds` を state 保持 |
+
+### 61-3 差分プレビュー UI
+| ファイル | 参照内容 |
+|---|---|
+| `src/components/schedule/ExcelPasteModal.tsx` | `ExistingEntrySummary`、`DiffClass` を export。`ExcelGridPreview` が差分クラス計算 + バッジ表示 + セル背景色（added=緑 / modified=黄 / protected=赤）|
+| `src/app/(app)/schedule/page.tsx` | `existingEntries` / `confirmedTransportEntryIds` / `childNameToId` を props で渡す |
+
+### 61-4 / 61-5 / 61-6 batch API 新設
+| 新規ファイル | 集約内容 |
+|---|---|
+| `src/app/api/schedule-page-data/route.ts` | children + schedule_entries + tenant + confirmedTransportEntryIds（3→1 fetch） |
+| `src/app/api/shift-page-data/route.ts` | staff + schedule_entries + shift_requests + shift_assignments + shift_request_comments + me（6→1 fetch） |
+| `src/app/api/settings-children-data/route.ts` | children + tenant + staff（3→1 fetch） |
+| `src/app/api/settings-staff-data/route.ts` | staff + tenant（2→1 fetch） |
+| 適用先 page.tsx | `src/app/(app)/schedule/page.tsx`、`src/app/(app)/shift/page.tsx`、`src/app/(app)/settings/children/page.tsx`、`src/app/(app)/settings/staff/page.tsx`（失敗時は旧 fetch にフォールバック） |
+
+### 61-7 ロールちらつき修正
+| ファイル | 参照内容 |
+|---|---|
+| `src/app/(app)/shift/page.tsx` | `fetch('/api/me')` の useEffect を削除 → `useCurrentStaff()` Context を使用 |
+| `src/app/(app)/transport/page.tsx` | 同上 |
+
+### デモモード対応
+| ファイル | 内容 |
+|---|---|
+| `src/lib/demo/demoBackend.ts` | 新 4 つの batch エンドポイントにハンドラ追加（`/api/schedule-page-data`、`/api/shift-page-data`、`/api/settings-children-data`、`/api/settings-staff-data`）|
+
+### 影響範囲
+- `transport_assignments` の `is_confirmed` 列 → 再インポート時に参照される（削除保護）
+- `schedule_entries.attendance_status` → 出欠記録済み行は削除対象外
+- FK `transport_assignments.schedule_entry_id` ON DELETE CASCADE → 削除対象を絞ることで確定送迎を守る
