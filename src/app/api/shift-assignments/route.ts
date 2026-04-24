@@ -16,10 +16,13 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient();
 
-  /* Phase 60: select('*') 廃止。dto=transport 時は軽量化 */
+  /* Phase 60: select('*') 廃止。dto=transport 時は軽量化。
+     Phase 61-fix: dto=transport でも segment_order / note / is_confirmed を必ず含める。
+     送迎表の「シフト追加」で nextSegmentOrder を正しく算出するために必要。
+     （bdbecda で segment_order 欠落 → 2 回目以降の追加が既存セグメントを上書きする退行が発生していた） */
   const dto = request.nextUrl.searchParams.get('dto');
   const cols = dto === 'transport'
-    ? 'id, staff_id, date, start_time, end_time, assignment_type'
+    ? 'id, staff_id, date, start_time, end_time, assignment_type, segment_order, note, is_confirmed'
     : 'id, tenant_id, staff_id, date, start_time, end_time, assignment_type, is_confirmed, created_at, segment_order, note';
 
   let q = supabase.from('shift_assignments').select(cols).order('date');

@@ -70,10 +70,50 @@ export default function ExcelPasteModal({
   const [parsed, setParsed] = useState<ParsedScheduleEntry[]>([]);
   const [error, setError] = useState('');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
+  /* Phase 62-B: 1児童モード。通常モードでは複数児童まとめて貼付、1児童モードでは
+     デイロボから 1 児童だけ行選択コピーした縦リスト（30日分、空行=空日）を貼付する。 */
+  const [mode, setMode] = useState<'bulk' | 'single'>('bulk');
+  const [singleChildName, setSingleChildName] = useState<string>('');
 
   const handleParse = () => {
     setError('');
     try {
+      if (mode === 'single') {
+        /* Phase 62-B: 1児童モード。縦リストを 30 日ぶん走査してパース */
+        if (!singleChildName) {
+          setError('対象の児童を選択してください。');
+          return;
+        }
+        const singleResult = parseSingleChildVertical(rawText, year, month, singleChildName);
+        if (singleResult.error) {
+          setError(singleResult.error);
+          return;
+        }
+        if (singleResult.entries.length === 0) {
+          setError('有効なセルが見つかりませんでした。30 日分の縦リスト（空日は空行）を貼り付けてください。');
+          return;
+        }
+        setParsed(singleResult.entries);
+        setStep('preview');
+        return;
+      }
+
+      /* Phase 62-A: タブなし貼付を検知して Excel 経由に誘導 */
+      const hasTab = rawText.includes('\t');
+      if (!hasTab && rawText.trim().length > 0) {
+        const lineCount = rawText.split('\n').filter((l) => l.trim()).length;
+        if (lineCount >= 10) {
+          setError(
+            'タブ区切りが検出できませんでした。\n' +
+              'デイロボからブラウザで直接コピーするとタブが抜け、日付と児童の対応が取れません。\n' +
+              '\n対処方法:\n' +
+              '  ① デイロボの Excel 出力ボタンから Excel を開く → 該当範囲を選択してコピー → ここに貼付（推奨）\n' +
+              '  ② もしくは「1児童モード」に切替え、児童を選んでから縦リストを貼付（30日分・空日は空行）',
+          );
+          return;
+        }
+      }
+
       const result = parseExcelClipboard(rawText, year, month);
       if (result.weekdayMismatch) {
         /* Phase 61-1: 貼付データのヘッダー曜日と現在画面の月から算出した曜日が一致しない
@@ -103,6 +143,7 @@ export default function ExcelPasteModal({
     setParsed([]);
     setError('');
     setStep('paste');
+    /* Phase 62: mode / singleChildName は保持（同じモードで連続入力しやすく） */
   };
 
   const childNames = [...new Set(parsed.map((e) => e.child_name))];
@@ -120,41 +161,111 @@ export default function ExcelPasteModal({
       <div className="flex flex-col gap-4">
         {step === 'paste' && (
           <>
-            <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
-              Excelの利用予定表を<strong>ヘッダー行と児童名列を含めて</strong>範囲選択し、
-              コピー（Ctrl+C）してから下に貼り付け（Ctrl+V）してください。
-            </p>
-
-            {/* フォーマット説明 */}
-            <div
-              className="px-3 py-2 text-xs"
-              style={{ background: 'var(--accent-pale)', borderRadius: '6px', color: 'var(--ink-2)' }}
-            >
-              <strong>対応フォーマット:</strong>
-              <br />• 横型（1行目が日付、各セルに「迎 13:20 / 送 16:00」）
-              <br />• 縦型（児童名・日付・迎え・送り の列）
-              <br />• セル内改行があるExcelデータもそのまま対応
+            {/* Phase 62: モード切替タブ */}
+            <div className="flex gap-1 text-xs">
+              <button
+                onClick={() => { setMode('bulk'); setError(''); }}
+                className="px-3 py-1.5 rounded-t"
+                style={{
+                  background: mode === 'bulk' ? 'var(--accent)' : 'var(--surface)',
+                  color: mode === 'bulk' ? '#fff' : 'var(--ink-2)',
+                  fontWeight: mode === 'bulk' ? 600 : 400,
+                  borderBottom: mode === 'bulk' ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                }}
+              >
+                一括モード（Excel経由）
+              </button>
+              <button
+                onClick={() => { setMode('single'); setError(''); }}
+                className="px-3 py-1.5 rounded-t"
+                style={{
+                  background: mode === 'single' ? 'var(--accent)' : 'var(--surface)',
+                  color: mode === 'single' ? '#fff' : 'var(--ink-2)',
+                  fontWeight: mode === 'single' ? 600 : 400,
+                  borderBottom: mode === 'single' ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                }}
+              >
+                1児童モード（デイロボ直接貼付）
+              </button>
             </div>
 
-            <textarea
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              placeholder={'Excelからコピーしたデータを貼り付けてください...\n\n例:\n氏名\t1(水)\t2(木)\t3(金)\n川島舞桜\t迎 13:20 送 16:00\t...\n'}
-              rows={12}
-              className="w-full px-3 py-3 text-xs outline-none resize-y"
-              style={{
-                background: 'var(--bg)',
-                color: 'var(--ink)',
-                border: '1px solid var(--rule)',
-                borderRadius: '6px',
-                fontFamily: 'monospace',
-                lineHeight: '1.6',
-              }}
-            />
+            {mode === 'bulk' ? (
+              <>
+                <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
+                  <strong>Excel で開いてから</strong>ヘッダー行と児童名列を含めて範囲選択しコピー（Ctrl+C）、
+                  ここに貼付（Ctrl+V）してください。
+                </p>
+                <div
+                  className="px-3 py-2 text-xs"
+                  style={{ background: 'var(--accent-pale)', borderRadius: '6px', color: 'var(--ink-2)' }}
+                >
+                  <strong>対応フォーマット:</strong>
+                  <br />• 横型（1行目が日付、各セルに「迎 13:20 / 送 16:00」）
+                  <br />• 縦型（児童名・日付・迎え・送り の列）
+                  <br />• セル内改行がある Excel データもそのまま対応
+                  <br />
+                  <strong style={{ color: 'var(--red)' }}>※ デイロボ Web 画面から直接コピーするとタブが失われます。</strong>
+                  その場合は「1児童モード」を利用してください。
+                </div>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder={'Excel からコピーしたデータを貼り付けてください...\n\n例:\n氏名\t1(水)\t2(木)\t3(金)\n川島舞桜\t迎 13:20 送 16:00\t...\n'}
+                  rows={12}
+                  className="w-full px-3 py-3 text-xs outline-none resize-y"
+                  style={{
+                    background: 'var(--bg)', color: 'var(--ink)',
+                    border: '1px solid var(--rule)', borderRadius: '6px',
+                    fontFamily: 'monospace', lineHeight: '1.6',
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
+                  デイロボ Web 画面から <strong>1 児童の行だけ</strong>選択してコピーし、ここに貼付してください。
+                </p>
+                <div
+                  className="px-3 py-2 text-xs"
+                  style={{ background: 'var(--accent-pale)', borderRadius: '6px', color: 'var(--ink-2)' }}
+                >
+                  <strong>入力ルール（30 日分）:</strong>
+                  <br />• 1 日分 = <code>迎HH:MM\n送HH:MM</code>（2 行）or <code>定・休 / 追・休 / 欠</code>（1 行）
+                  <br />• <strong>行けない日は空行で空ける</strong>ことで日付が正しく並びます
+                  <br />• セル内の改行は維持したまま貼付すればOK（★ マーク等の飾りは自動で無視）
+                </div>
+                <label className="text-xs font-medium" style={{ color: 'var(--ink)' }}>
+                  対象児童
+                  <select
+                    value={singleChildName}
+                    onChange={(e) => setSingleChildName(e.target.value)}
+                    className="ml-2 px-2 py-1 text-xs outline-none rounded"
+                    style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--rule)' }}
+                  >
+                    <option value="">-- 選択してください --</option>
+                    {existingChildNames.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder={'デイロボから 1 児童の行だけ選択してコピーしたものを貼付...\n\n例（30 日分縦に）:\n迎11:20\n送16:00\n迎11:20\n送16:00\n\n\n定・休\n...\n'}
+                  rows={14}
+                  className="w-full px-3 py-3 text-xs outline-none resize-y"
+                  style={{
+                    background: 'var(--bg)', color: 'var(--ink)',
+                    border: '1px solid var(--rule)', borderRadius: '6px',
+                    fontFamily: 'monospace', lineHeight: '1.6',
+                  }}
+                />
+              </>
+            )}
 
             {error && (
               <p
-                className="text-xs font-medium px-3 py-2"
+                className="text-xs font-medium px-3 py-2 whitespace-pre-line"
                 style={{ color: 'var(--red)', background: 'var(--red-pale)', borderRadius: '4px' }}
               >
                 {error}
@@ -999,6 +1110,109 @@ function parseDate(str: string | undefined, year: number, month: number): string
     if (d >= 1 && d <= 31) return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
   return null;
+}
+
+/**
+ * Phase 62-B: 1児童用の縦リストパーサー。
+ *
+ * 仕様:
+ *  - 児童名は呼出側で確定済み
+ *  - 入力は「1 日分 = 1 or 2 行」の縦リスト
+ *     - 1 行パターン: 「定・休」「追・休」「欠」「迎/送片方のみ」
+ *     - 2 行パターン: 「迎HH:MM\n送HH:MM」「HH:MM\n送HH:MM」「迎HH:MM\n16:30」「HH:MM\nHH:MM」
+ *  - 空日（児童が来ない日）は **空行 1 行** で表現
+ *  - 30 日分（月によっては 28/29/31）を順に走査して ParsedScheduleEntry[] を生成
+ *  - 途中でセル数が月の日数を超えた場合はエラー
+ */
+function parseSingleChildVertical(
+  raw: string,
+  year: number,
+  month: number,
+  childName: string,
+): { entries: ParsedScheduleEntry[]; error: string | null } {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const normalized = raw.normalize('NFKC').replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+
+  /* 前後の空行を除去（ユーザーが意図せず入れやすい） */
+  let start = 0;
+  while (start < lines.length && !lines[start].trim()) start++;
+  let end = lines.length;
+  while (end > start && !lines[end - 1].trim()) end--;
+  const trimmed = lines.slice(start, end);
+
+  /* 1 日 1 セルずつ前方から読む。空行 1 行は「空日」として 1 日進める。 */
+  const entries: ParsedScheduleEntry[] = [];
+  let dayIdx = 1;  // 1..daysInMonth
+  let i = 0;
+
+  const yyyymm = `${year}-${String(month).padStart(2, '0')}`;
+  const dateStr = (d: number) => `${yyyymm}-${String(d).padStart(2, '0')}`;
+
+  const isTimeLine = (s: string) =>
+    /^(★)?迎?\d{1,2}:\d{2}$/.test(s) ||
+    /^\d{1,2}:\d{2}$/.test(s);
+  const isDropoffLine = (s: string) =>
+    /^送?\d{1,2}:\d{2}$/.test(s);
+
+  while (i < trimmed.length && dayIdx <= daysInMonth) {
+    const line = trimmed[i].trim();
+
+    /* 空行 = 空日。次の日へ進める */
+    if (line === '') {
+      dayIdx++;
+      i++;
+      continue;
+    }
+
+    /* 単独ステータス（1 行で 1 セル） */
+    if (line === '定・休' || line === '追・休' || line === '欠') {
+      /* 欠=欠席 / 定休・追休 は利用しない。送迎も不要なので entries に入れない
+         でも、将来の出欠連携のために一応 area_label として残す案もあるが
+         現状 handleBulkImport は time がないとスキップするので skip で問題なし。 */
+      dayIdx++;
+      i++;
+      continue;
+    }
+
+    /* 時間セル（1 行 or 2 行） */
+    if (isTimeLine(line)) {
+      const nxt = i + 1 < trimmed.length ? trimmed[i + 1].trim() : '';
+      const isPair = nxt !== '' && isDropoffLine(nxt);
+      const cellValue = isPair ? `${line}\n${nxt}` : line;
+      const parsed = parseCellValue(cellValue);
+      if (parsed.pickup || parsed.dropoff || parsed.note) {
+        entries.push({
+          child_name: childName,
+          date: dateStr(dayIdx),
+          pickup_time: parsed.pickup,
+          dropoff_time: parsed.dropoff,
+          pickup_method: parsed.pickup_method,
+          dropoff_method: parsed.dropoff_method,
+          area_label: parsed.note,
+        });
+      }
+      dayIdx++;
+      i += isPair ? 2 : 1;
+      continue;
+    }
+
+    /* どれにも当てはまらない行（ノイズ）はエラー */
+    return {
+      entries: [],
+      error: `解析できない行があります（${dayIdx} 日目付近）: "${line.slice(0, 30)}"`,
+    };
+  }
+
+  /* 読みきる前に月を超えた → 入力が多すぎる */
+  if (i < trimmed.length) {
+    return {
+      entries: [],
+      error: `${year}年${month}月は ${daysInMonth} 日までですが、それ以上の入力があります。30 日分だけ貼り付けてください。`,
+    };
+  }
+
+  return { entries, error: null };
 }
 
 /** 時間文字列をパース */

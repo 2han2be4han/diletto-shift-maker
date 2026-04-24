@@ -1113,6 +1113,27 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 62: デイロボ直接貼付対応 + 送迎シフト追加退行修正（2026-04-24 着手）</div>
+    <p>
+        <strong>背景</strong>:
+        (a) デイロボ Web 画面から直接コピーした貼付はタブが欠落し、既存の TSV パーサー（ExcelPasteModal）で解析不能。
+        253 セル（row-major, 空日省略）のままでは日付と児童の対応が取れない。
+        (b) <code>bdbecda</code> コミットで <code>transport-page-data</code> および <code>shift-assignments?dto=transport</code> の SELECT から
+        <code>segment_order</code> が欠落し、送迎表「シフト追加」の <code>nextSegmentOrder</code> 計算が常に 0 固定になる。
+        2 回目以降の追加で UPSERT CONFLICT が起き既存セグメントを上書きする退行が発生していた。
+    </p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>62-A</td><td>タブなし貼付を自動検知 → Excel 経由の手順＋1児童モードへ誘導するエラー表示</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>10行以上かつタブ0 でトリガー</td></tr>
+            <tr><td>62-B</td><td>1児童モード（デイロボ直接貼付）: 児童選択 + 30日分縦リスト（空行=空日）をパース</td><td>src/components/schedule/ExcelPasteModal.tsx</td><td class="status-done">完了</td><td>100%</td><td>parseSingleChildVertical 追加。定・休/追・休/欠 は 1行で1日扱い</td></tr>
+            <tr><td>62-fix</td><td>送迎→シフト追加の退行修正: transport-page-data と shift-assignments?dto=transport に segment_order / note / is_confirmed を追加</td><td>src/app/api/transport-page-data/route.ts, src/app/api/shift-assignments/route.ts</td><td class="status-done">完了</td><td>100%</td><td>bdbecda で発生した UPSERT 上書き退行を解消</td></tr>
+            <tr><td>62-verify</td><td>ローカル動作確認（ユーザー側）: (1) Excel 経由の一括貼付 (2) デイロボ直接貼付の1児童モード (3) 送迎表からシフト追加 → シフト表反映</td><td>—</td><td class="status-doing">ユーザー確認待ち</td><td>80%</td><td>型・build・lint 全 pass</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

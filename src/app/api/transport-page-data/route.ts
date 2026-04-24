@@ -35,9 +35,13 @@ export async function GET(request: NextRequest) {
       return q;
     })(),
     (async () => {
+      /* Phase 61-fix: segment_order を必ず含める。
+         送迎表の「シフト追加」が既存セグメントの segment_order を読んで
+         次の採番を決めるため。欠落すると 2 回目以降の追加で UPSERT CONFLICT が起き
+         既存セグメントを上書きしてしまう（bdbecda で発生していた退行）。 */
       let q = supabase
         .from('shift_assignments')
-        .select('id, staff_id, date, start_time, end_time, assignment_type')
+        .select('id, staff_id, date, start_time, end_time, assignment_type, segment_order, note, is_confirmed')
         .order('date');
       if (from) q = q.gte('date', from);
       if (to) q = q.lte('date', to);
