@@ -1117,7 +1117,7 @@ function SortableChildBadge({
           <span
             key={i}
             className="font-black whitespace-nowrap"
-            style={{ color: col.text, fontSize: '1.25rem', lineHeight: 1.15 }}
+            style={{ color: 'var(--ink)', fontSize: '1.25rem', lineHeight: 1.15 }}
           >
             {line}
           </span>
