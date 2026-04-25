@@ -42,14 +42,14 @@ import { isDateOutOfRange } from '@/lib/date/dateLimit';
 import { useCurrentStaff } from '@/components/layout/AppShell';
 
 /** 児童名をマーク円内で 2 行表示するために分割。
-    空白区切りがあればそこで分ける。無ければ文字列中央で分ける。2 文字以下は 1 行のまま。 */
+    空白区切りがあればそこで分ける。無ければ「先頭 2 文字 / 残り」で分ける（姓 2 文字 + 名 を想定）。
+    2 文字以下は 1 行のまま。 */
 function splitChildName(name: string): string[] {
   const t = (name ?? '').trim();
   const parts = t.split(/\s+/);
   if (parts.length >= 2) return [parts[0], parts.slice(1).join('')];
   if (t.length <= 2) return [t];
-  const mid = Math.ceil(t.length / 2);
-  return [t.slice(0, mid), t.slice(mid)];
+  return [t.slice(0, 2), t.slice(2)];
 }
 
 /** 児童管理 (settings/children) の getGradeRowBg と揃えた色分け。
@@ -91,6 +91,8 @@ type TransportSlot = {
     /** Phase 38: emoji と並べてバッジ上に表示する場所名 (例: '自宅', '知多ガラス') */
     areaName: string | null;
     grade: GradeType;
+    /** 保護者送迎で 1 ブロックに集約した際にバッジ上へ表示する時刻 */
+    time?: string;
   }>;
   staffIds: string[];
   isUnassigned: boolean;
@@ -250,7 +252,7 @@ export default function DailyOutputPage() {
           direction: 'pickup',
           areaLabels: spec.pickup.areaLabel ? [spec.pickup.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
-          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type, time: isSelf ? fmtTime(entry.pickup_time) : undefined }],
           staffIds: isSelf ? [] : pickupStaffIds,
           /* 保護者送迎は「未割当」扱いしない（担当欄に「👪 保護者」を表示する）。
              Phase 43: ta が無い (transport_assignment 未生成) ケースも未割当扱い */
@@ -279,7 +281,7 @@ export default function DailyOutputPage() {
           direction: 'dropoff',
           areaLabels: spec.dropoff.areaLabel ? [spec.dropoff.areaLabel] : [],
           areaIds: areaId ? [areaId] : [],
-          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type }],
+          children: [{ id: child.id, name: child.name, areaEmoji: emoji, areaName, grade: child.grade_type, time: isSelf ? fmtTime(entry.dropoff_time) : undefined }],
           staffIds: isSelf ? [] : dropoffStaffIds,
           /* Phase 43: ta が無い場合も未割当扱い */
           isUnassigned:
@@ -301,11 +303,12 @@ export default function DailyOutputPage() {
     for (const s of list) {
       const hasStaff = s.staffIds.length > 0;
       const staffKey = s.isSelfTransport
-        ? `P:${s.areaLabels.join('|')}`
+        ? `P` /* 保護者送迎は時刻・エリアに関わらず direction ごとに 1 ブロックへ集約 */
         : hasStaff
           ? `S:${[...s.staffIds].sort().join(',')}`
           : `U:${s.areaLabels.join('|')}`;
-      const key = `${s.time}|${s.direction}|${staffKey}`;
+      const timeKey = s.isSelfTransport ? '' : s.time;
+      const key = `${timeKey}|${s.direction}|${staffKey}`;
       const existing = grouped.get(key);
       if (existing) {
         existing.children.push(...s.children);
@@ -329,6 +332,14 @@ export default function DailyOutputPage() {
     }
 
     const result = Array.from(grouped.values());
+    /* 保護者送迎ブロックは時刻表示を持たない（個々の児童に時刻を付与するため）。
+       子要素は時刻昇順で並べる。 */
+    for (const slot of result) {
+      if (slot.isSelfTransport) {
+        slot.time = '';
+        slot.children.sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+      }
+    }
     result.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
 
     /* Phase 35: 学習記憶を適用。signature ヒットした児童は memory の display_order 昇順、
@@ -350,8 +361,16 @@ export default function DailyOutputPage() {
     return result;
   }, [children, entries, transportAssignments, pickupAreas, dropoffAreas, areaEmojiByLabel, areaIdByLabel, orderMemory]);
 
-  const pickupSlots = useMemo(() => slots.filter((s) => s.direction === 'pickup'), [slots]);
-  const dropoffSlots = useMemo(() => slots.filter((s) => s.direction === 'dropoff'), [slots]);
+  const pickupSlots = useMemo(() => slots.filter((s) => s.direction === 'pickup' && !s.isSelfTransport), [slots]);
+  const dropoffSlots = useMemo(() => slots.filter((s) => s.direction === 'dropoff' && !s.isSelfTransport), [slots]);
+  const pickupSelfSlot = useMemo(
+    () => slots.find((s) => s.direction === 'pickup' && s.isSelfTransport) ?? null,
+    [slots],
+  );
+  const dropoffSelfSlot = useMemo(
+    () => slots.find((s) => s.direction === 'dropoff' && s.isSelfTransport) ?? null,
+    [slots],
+  );
 
   /* ---- 出勤者一覧: 職員管理と同じ並び（staff API が display_order ASC NULLS LAST, name でソート済）
      Phase 50: 分割シフト対応。同一職員に複数セグメントがある場合、start/end を " / " 区切りで連結表示。 */
@@ -543,7 +562,7 @@ export default function DailyOutputPage() {
       />
 
       {/* Phase 58-fix: 日次出力も送迎表と同じ DateStepper に統一（土日祝色付き・祝日名併記） */}
-      <div className="px-6 pt-3" data-tour="daily-date-stepper">
+      <div className="px-6 pt-3 print-hide" data-tour="daily-date-stepper">
         <DateStepper value={date} onChange={setDate} />
       </div>
 
@@ -645,42 +664,38 @@ export default function DailyOutputPage() {
                   </div>
                 ) : (
                   <>
-                    {/* 迎セクション: 上下に太線。3 列レイアウト (col1=1件, col2=2件まで, col3=5件まで) */}
+                    {/* 迎セクション: 上下に太線。3 列レイアウト + 保護者送迎は右端に集約 */}
                     <DirectionSection
                       heading="迎（来所）"
-                      count={pickupSlots.length}
+                      count={pickupSlots.length + (pickupSelfSlot ? 1 : 0)}
                       accent="var(--accent)"
                     >
-                      {pickupSlots.length === 0 ? (
-                        <EmptyDirection label="迎" />
-                      ) : (
-                        <ThreeColGrid
-                          slots={pickupSlots}
-                          staffNameById={staffNameById}
-                          keyPrefix="p"
-                          direction="pickup"
-                          onReorderChildren={persistChildOrder}
-                        />
-                      )}
+                      <DirectionBody
+                        regularSlots={pickupSlots}
+                        selfSlot={pickupSelfSlot}
+                        staffNameById={staffNameById}
+                        keyPrefix="p"
+                        direction="pickup"
+                        emptyLabel="迎"
+                        onReorderChildren={persistChildOrder}
+                      />
                     </DirectionSection>
 
-                    {/* 送セクション: 上下に太線。3 列レイアウト (同上) */}
+                    {/* 送セクション: 上下に太線。3 列レイアウト + 保護者送迎は右端に集約 */}
                     <DirectionSection
                       heading="送（退所）"
-                      count={dropoffSlots.length}
+                      count={dropoffSlots.length + (dropoffSelfSlot ? 1 : 0)}
                       accent="var(--green)"
                     >
-                      {dropoffSlots.length === 0 ? (
-                        <EmptyDirection label="送" />
-                      ) : (
-                        <ThreeColGrid
-                          slots={dropoffSlots}
-                          staffNameById={staffNameById}
-                          keyPrefix="d"
-                          direction="dropoff"
-                          onReorderChildren={persistChildOrder}
-                        />
-                      )}
+                      <DirectionBody
+                        regularSlots={dropoffSlots}
+                        selfSlot={dropoffSelfSlot}
+                        staffNameById={staffNameById}
+                        keyPrefix="d"
+                        direction="dropoff"
+                        emptyLabel="送"
+                        onReorderChildren={persistChildOrder}
+                      />
                     </DirectionSection>
                   </>
                 )}
@@ -807,6 +822,40 @@ function EmptyDirection({ label }: { label: string }) {
   );
 }
 
+/** 通常便を 3 列グリッドで描き、保護者送迎ブロックがあれば「最終行の一番右 (col 3)」に配置する。
+ *  通常便ゼロ・自家用送迎のみのケースもサポート。 */
+function DirectionBody({
+  regularSlots,
+  selfSlot,
+  staffNameById,
+  keyPrefix,
+  direction,
+  emptyLabel,
+  onReorderChildren,
+}: {
+  regularSlots: TransportSlot[];
+  selfSlot: TransportSlot | null;
+  staffNameById: Map<string, string>;
+  keyPrefix: string;
+  direction: 'pickup' | 'dropoff';
+  emptyLabel: string;
+  onReorderChildren: (signature: string, orderedChildIds: string[]) => void;
+}) {
+  if (regularSlots.length === 0 && !selfSlot) {
+    return <EmptyDirection label={emptyLabel} />;
+  }
+  return (
+    <ThreeColGrid
+      slots={regularSlots}
+      selfSlot={selfSlot}
+      staffNameById={staffNameById}
+      keyPrefix={keyPrefix}
+      direction={direction}
+      onReorderChildren={onReorderChildren}
+    />
+  );
+}
+
 /** 方向別のブロック配置ルール:
  *   迎え: 1 / 1 / 2 / 3 / 3 / 3... （1 行目 1件、2 行目 1件、3 行目 2件、4 行目以降 3件ずつ）
  *   送り: 2 / 3 / 3 / 3...         （1 行目 2件、2 行目以降 3件ずつ） */
@@ -832,17 +881,29 @@ function slotCell(i: number, direction: 'pickup' | 'dropoff'): { col: number; ro
 
 function ThreeColGrid({
   slots,
+  selfSlot,
   staffNameById,
   keyPrefix,
   direction,
   onReorderChildren,
 }: {
   slots: TransportSlot[];
+  selfSlot?: TransportSlot | null;
   staffNameById: Map<string, string>;
   keyPrefix: string;
   direction: 'pickup' | 'dropoff';
   onReorderChildren: (signature: string, orderedChildIds: string[]) => void;
 }) {
+  /* 通常便の grid 配置を先に決定し、保護者送迎は「最終行の col 3」に置く。
+     最終行の col 3 が既に通常便で埋まっていたら次の行の col 3 へずらす。 */
+  const positions = slots.map((_, i) => slotCell(i, direction));
+  const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
+  const selfRow = selfSlot
+    ? positions.some((p) => p.col === 3 && p.row === maxRow)
+      ? maxRow + 1
+      : Math.max(maxRow, 1)
+    : 0;
+
   return (
     <div
       className="grid gap-x-6 gap-y-5"
@@ -853,7 +914,7 @@ function ThreeColGrid({
       }}
     >
       {slots.map((s, i) => {
-        const pos = slotCell(i, direction);
+        const pos = positions[i];
         return (
           <div
             key={`${keyPrefix}-${s.time}-${s.areaLabels.join(',')}-${i}`}
@@ -863,6 +924,14 @@ function ThreeColGrid({
           </div>
         );
       })}
+      {selfSlot && (
+        <div
+          key={`${keyPrefix}-self`}
+          style={{ gridColumn: 3, gridRow: selfRow }}
+        >
+          <TransportBlock slot={selfSlot} staffNameById={staffNameById} onReorderChildren={onReorderChildren} />
+        </div>
+      )}
     </div>
   );
 }
@@ -911,33 +980,30 @@ function TransportBlock({
       }}
     >
       {/* Phase 38: ヘッダーは「時刻 発 + 担当者チップ」(旧: 場所名)。
-          場所名は児童バッジ上部に併記する形に移動した。 */}
+          場所名は児童バッジ上部に併記する形に移動した。
+          保護者送迎は direction ごとに 1 ブロックへ集約するため、ヘッダーは「👪 保護者送迎」のみ。
+          時刻は各児童バッジ上に個別表示する。 */}
       <div
         className="px-3 py-2 flex items-center gap-2 flex-wrap"
         style={{ borderBottom: '1.5px solid var(--ink-2)' }}
       >
-        <span className="text-2xl font-black leading-none" style={{ color: headerColor }}>
-          {slot.time}
-        </span>
-        <span className="text-base font-black" style={{ color: headerColor }}>
-          発
-        </span>
-        {/* 担当者表示 */}
-        <div className="flex flex-wrap gap-1.5 ml-1">
-          {slot.isSelfTransport ? (
-            <span
-              className="text-base font-black px-2 py-0.5 whitespace-nowrap"
-              style={{
-                background: 'var(--white)',
-                border: '2px dashed var(--ink-3)',
-                borderRadius: '4px',
-                color: 'var(--ink-2)',
-              }}
-              title="保護者による送迎のため、担当職員の割り当ては不要です"
-            >
-              👪 保護者
+        {slot.isSelfTransport ? (
+          <span className="text-xl font-black leading-none" style={{ color: 'var(--ink)' }}>
+            👪 保護者送迎
+          </span>
+        ) : (
+          <>
+            <span className="text-3xl font-black leading-none" style={{ color: headerColor }}>
+              {slot.time}
             </span>
-          ) : slot.isUnassigned ? (
+            <span className="text-lg font-black" style={{ color: headerColor }}>
+              発
+            </span>
+          </>
+        )}
+        {/* 担当者表示 (保護者送迎はヘッダーに集約済みなのでスキップ) */}
+        <div className="flex flex-wrap gap-1.5 ml-1">
+          {slot.isSelfTransport ? null : slot.isUnassigned ? (
             <span className="text-base font-black" style={{ color: 'var(--red)' }}>
               ⚠ 担当未割当
             </span>
@@ -945,14 +1011,14 @@ function TransportBlock({
             slot.staffIds.map((id) => (
               <span
                 key={id}
-                className="text-base font-black staff-box whitespace-nowrap"
+                className="text-lg font-black staff-box whitespace-nowrap"
                 style={{
                   background: 'var(--white)',
                   border: '2px solid var(--ink-2)',
                   borderRadius: '4px',
                   color: 'var(--ink)',
-                  minWidth: '56px',
-                  padding: '2px 10px',
+                  minWidth: '72px',
+                  padding: '4px 14px',
                   textAlign: 'center',
                 }}
               >
@@ -983,7 +1049,7 @@ function TransportBlock({
 function SortableChildBadge({
   child,
 }: {
-  child: { id: string; name: string; grade: GradeType; areaEmoji: string | null; areaName: string | null };
+  child: { id: string; name: string; grade: GradeType; areaEmoji: string | null; areaName: string | null; time?: string };
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: child.id,
@@ -1003,11 +1069,10 @@ function SortableChildBadge({
     background: col.bg,
     border: `2px solid ${col.border}`,
     borderRadius: '999px',
-    /* Phase 43: 文字を大きくしたのでバッジも 64→76 に拡大 */
-    minWidth: '76px',
-    minHeight: '76px',
+    minWidth: '92px',
+    minHeight: '92px',
     lineHeight: '1.15',
-    padding: '6px 8px',
+    padding: '8px 10px',
     cursor: 'grab',
   };
   return (
@@ -1019,7 +1084,21 @@ function SortableChildBadge({
       {...attributes}
       {...listeners}
     >
-      {(child.areaEmoji || child.areaName) && (
+      {child.time ? (
+        /* 保護者送迎で 1 ブロックに集約された場合、時刻を「発」付きでバッジ上部に個別表示 */
+        <span
+          aria-label="送迎時刻"
+          className="leading-none whitespace-nowrap text-center"
+          style={{
+            fontSize: '1.05rem',
+            marginBottom: '4px',
+            color: 'var(--ink)',
+            fontWeight: 800,
+          }}
+        >
+          {child.time}
+        </span>
+      ) : (child.areaEmoji || child.areaName) ? (
         <span
           aria-label="送迎エリア"
           className="leading-none whitespace-nowrap text-center"
@@ -1032,13 +1111,13 @@ function SortableChildBadge({
         >
           {child.areaEmoji ?? ''} {child.areaName ?? ''}
         </span>
-      )}
+      ) : null}
       <div className="flex flex-col items-center justify-center" style={badgeStyle}>
         {nameLines.map((line, i) => (
           <span
             key={i}
             className="font-black whitespace-nowrap"
-            style={{ color: col.text, fontSize: '1.05rem', lineHeight: 1.15 }}
+            style={{ color: col.text, fontSize: '1.25rem', lineHeight: 1.15 }}
           >
             {line}
           </span>
