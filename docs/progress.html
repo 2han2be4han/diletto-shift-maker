@@ -1134,6 +1134,19 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 63: 送迎表 確定解除（保存ボタン兼用）</div>
+    <p>確定済みの日が編集不能で詰まる問題を解消。「この日の送迎を保存」ボタンを <code>confirmed</code> 時に「✏️ 確定を編集」へ切替、押すと当日の <code>is_confirmed</code> を一括 false に戻す。viewer は従来通り非表示。</p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>63-1</td><td>handleUnconfirmDay 追加（当日の transport_assignments を is_confirmed=false で POST → fetchAll）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>既存 POST が is_confirmed を受けるので API 追加不要</td></tr>
+            <tr><td>63-2</td><td>「この日の送迎を保存」ボタンを confirmed 時に「✏️ 確定を編集」へ切替（onClick / disabled / label）</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>1 ボタンで兼用。viewer は非表示維持。tsc pass</td></tr>
+            <tr><td>63-3</td><td>整合性確認: confirmed→解除→再生成/手動編集/再確定が一連で動くか手動チェック</td><td>—</td><td class="status-doing">ユーザー確認待ち</td><td>50%</td><td>ローカル起動でユーザー確認</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

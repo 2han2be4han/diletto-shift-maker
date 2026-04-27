@@ -949,6 +949,38 @@ export default function TransportPage() {
     await fetchAll();
   };
 
+  /**
+   * Phase 63: 表示中の 1 日だけ確定解除。
+   * 「この日の送迎を保存」ボタンが confirmed 時に「✏️ 確定を編集」へ切り替わって呼ばれる。
+   * 当日の transport_assignments を is_confirmed=false で再 POST するだけ。
+   * pickup/dropoff の担当はそのまま残るので、編集再開後に必要箇所だけ手直しできる。
+   */
+  const handleUnconfirmDay = async () => {
+    if (!selectedDate) return;
+    if (!confirm('この日の送迎表の確定を解除して編集モードに戻しますか？')) return;
+    const dayEntryIds = new Set(
+      scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id),
+    );
+    const targets = transportAssignments.filter(
+      (t) => dayEntryIds.has(t.schedule_entry_id) && t.is_confirmed,
+    );
+    if (targets.length === 0) return;
+    await fetch('/api/transport-assignments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assignments: targets.map((t) => ({
+          schedule_entry_id: t.schedule_entry_id,
+          pickup_staff_ids: t.pickup_staff_ids,
+          dropoff_staff_ids: t.dropoff_staff_ids,
+          is_unassigned: t.is_unassigned,
+          is_confirmed: false,
+        })),
+      }),
+    });
+    await fetchAll();
+  };
+
   return (
     <>
       {/* 21st.dev 風トーストのスライドイン用アニメーション。
@@ -1342,6 +1374,20 @@ export default function TransportPage() {
                     ),
                 );
                 const showSaved = pendingCountForDay === 0 && currentDayLocked && !saving;
+                /* Phase 63: confirmed の日は同じボタン位置を「✏️ 確定を編集」に切替。
+                   押すと当日のみ is_confirmed=false に戻り、通常の編集→保存→再確定フローに復帰する。 */
+                if (confirmed) {
+                  return (
+                    <Button
+                      data-tour="transport-unconfirm-day"
+                      variant="secondary"
+                      onClick={handleUnconfirmDay}
+                      disabled={saving}
+                    >
+                      ✏️ 確定を編集
+                    </Button>
+                  );
+                }
                 return (
                   <Button
                     data-tour="transport-save-day"
