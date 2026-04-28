@@ -50,6 +50,9 @@ type ShiftGridProps = {
   onCellClick: (staffId: string, date: string) => void;
   /** 日付(YYYY-MM-DD) → 児童数（カバレッジ判定・10人超閾値用）。省略可 */
   childrenCountByDate?: Map<string, number>;
+  /** Phase 64: 日付(YYYY-MM-DD) → キャンセル待ち児童数。利用人数とは別カウントとして
+      ヘッダに「待 N」バッジで表示する。省略可。 */
+  childrenWaitlistCountByDate?: Map<string, number>;
   /** Phase 36: 休み希望コメント。該当セルに ⚠ 赤マーク + tooltip 表示 */
   requestComments?: ShiftRequestCommentRow[];
 };
@@ -71,6 +74,7 @@ export default function ShiftGrid({
   warnings,
   onCellClick,
   childrenCountByDate,
+  childrenWaitlistCountByDate,
   requestComments,
 }: ShiftGridProps) {
   /* Phase 36: コメント map (staffId_date → text) */
@@ -246,13 +250,27 @@ export default function ShiftGrid({
                 >
                   <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>{DOW_SHORT[d.dow]}</div>
                   <div style={{ fontSize: '0.85rem' }}>{d.day}</div>
-                  {/* Phase 48: 日別の利用者数（schedule_entries ベース） */}
+                  {/* Phase 48: 日別の利用者数（schedule_entries ベース）。
+                      Phase 64: キャンセル待ちは別カウント「待 N」を併記（あれば）。 */}
                   {(() => {
                     const childCount = childrenCountByDate?.get(d.dateStr) ?? 0;
-                    if (childCount === 0) return null;
+                    const waitlistCount = childrenWaitlistCountByDate?.get(d.dateStr) ?? 0;
+                    if (childCount === 0 && waitlistCount === 0) return null;
                     return (
                       <div style={{ fontSize: '0.6rem', color: 'var(--ink-3)', fontWeight: 400, lineHeight: 1 }}>
-                        {childCount}人
+                        {childCount > 0 && <span>{childCount}人</span>}
+                        {waitlistCount > 0 && (
+                          <span
+                            style={{
+                              marginLeft: childCount > 0 ? '3px' : '0',
+                              color: 'var(--ink-2)',
+                              fontWeight: 600,
+                            }}
+                            title={`キャンセル待ち ${waitlistCount} 名`}
+                          >
+                            待{waitlistCount}
+                          </span>
+                        )}
                       </div>
                     );
                   })()}

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       .order('name', { ascending: true }),
     supabase
       .from('schedule_entries')
-      .select('id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, attendance_status, created_at')
+      .select('id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, attendance_status, waitlist_order, created_at')
       .gte('date', from)
       .lte('date', to)
       .order('date'),

@@ -133,11 +133,12 @@ export default function WeeklyTransportPrintPage() {
 
       setStaff(sJson.staff ?? []);
       setChildren(cJson.children ?? []);
-      /* 欠席 (absent)・お休み (leave または時刻両方 null) は印刷対象外 */
+      /* 欠席 (absent)・お休み (leave または時刻両方 null)・Phase 64: キャンセル待ち (waitlist) は印刷対象外 */
       setScheduleEntries(
         ((eJson.entries ?? []) as ScheduleEntryRow[]).filter((e) => {
           if (e.attendance_status === 'absent') return false;
           if (e.attendance_status === 'leave') return false;
+          if (e.attendance_status === 'waitlist') return false;
           if (!e.pickup_time && !e.dropoff_time) return false;
           return true;
         }),

@@ -188,11 +188,18 @@ export default function DailyOutputPage() {
     void fetchAll();
   }, [fetchAll]);
 
-  /* AreaLabel → emoji 引き */
-  const allAreas = useMemo(
-    () => [...pickupAreas, ...dropoffAreas],
-    [pickupAreas, dropoffAreas],
-  );
+  /* AreaLabel → emoji 引き。
+     テナント共通エリアに加えて、児童ごとの custom_pickup_areas / custom_dropoff_areas
+     （個別エリア）も合流させる。これがないと個別エリアのラベルが lookup miss して
+     絵文字が表示されない（テナントには存在しないラベルのため）。 */
+  const allAreas = useMemo(() => {
+    const all: AreaLabel[] = [...pickupAreas, ...dropoffAreas];
+    for (const c of children) {
+      if (Array.isArray(c.custom_pickup_areas)) all.push(...c.custom_pickup_areas);
+      if (Array.isArray(c.custom_dropoff_areas)) all.push(...c.custom_dropoff_areas);
+    }
+    return all;
+  }, [pickupAreas, dropoffAreas, children]);
   const areaEmojiByLabel = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of allAreas) {
@@ -212,6 +219,30 @@ export default function DailyOutputPage() {
     return m;
   }, [allAreas]);
 
+  /* Phase 64: 当日のキャンセル待ち児童（最下部 1 行に集約表示）。
+     順番 (waitlist_order) 昇順、null は末尾、同番号は児童管理の並び順。 */
+  const waitlistChildren = useMemo(() => {
+    const childById = new Map(children.map((c) => [c.id, c]));
+    const childOrderById = new Map(children.map((c, idx) => [c.id, idx]));
+    const list = entries
+      .filter((e) => e.attendance_status === 'waitlist')
+      .map((e) => ({
+        scheduleEntryId: e.id,
+        childId: e.child_id,
+        childName: childById.get(e.child_id)?.name ?? '(不明)',
+        waitlistOrder: e.waitlist_order ?? null,
+      }));
+    list.sort((a, b) => {
+      const oa = a.waitlistOrder ?? 999;
+      const ob = b.waitlistOrder ?? 999;
+      if (oa !== ob) return oa - ob;
+      const ca = childOrderById.get(a.childId) ?? Number.MAX_SAFE_INTEGER;
+      const cb = childOrderById.get(b.childId) ?? Number.MAX_SAFE_INTEGER;
+      return ca - cb;
+    });
+    return list;
+  }, [entries, children]);
+
   /* ---- 送迎スロットをタイムライン順に組み立て ---- */
   const slots: TransportSlot[] = useMemo(() => {
     const childById = new Map(children.map((c) => [c.id, c]));
@@ -225,6 +256,7 @@ export default function DailyOutputPage() {
     for (const entry of entries) {
       if (entry.attendance_status === 'absent') continue;
       if (entry.attendance_status === 'leave') continue;
+      if (entry.attendance_status === 'waitlist') continue; /* Phase 64: キャンセル待ちは下部集約行へ */
       if (!entry.pickup_time && !entry.dropoff_time) continue; /* 旧データ互換のお休み除外 */
 
       const child = childById.get(entry.child_id);
@@ -435,13 +467,14 @@ export default function DailyOutputPage() {
   );
 
   /* 利用児童数: 当日 entries のうち「実際に来所する」児童のユニーク数。
-     欠席 (attendance_status='absent')・お休み (attendance_status='leave' または times 両方 null) を除外。
-     お休みは国保連請求対象外、欠席は請求対象だが当日は来所しない。どちらも「利用児童」にカウントしない。 */
+     欠席 (absent)・お休み (leave / times 両方 null)・Phase 64: キャンセル待ち (waitlist) は除外。
+     waitlist は「利用に変える」操作で present になって初めて 1 名としてカウントされる運用。 */
   const activeChildCount = useMemo(() => {
     const ids = new Set<string>();
     for (const e of entries) {
       if (e.attendance_status === 'absent') continue;
       if (e.attendance_status === 'leave') continue;
+      if (e.attendance_status === 'waitlist') continue;
       if (!e.pickup_time && !e.dropoff_time) continue;
       ids.add(e.child_id);
     }
@@ -651,6 +684,9 @@ export default function DailyOutputPage() {
                     </div>
                     <div className="text-base font-bold mt-1" style={{ color: 'var(--ink)' }}>
                       出勤者 {onDuty.length}名・利用児童 {activeChildCount}名
+                      {waitlistChildren.length > 0 && (
+                        <>・<span style={{ color: 'var(--ink-2)' }}>キャンセル待ち {waitlistChildren.length}名</span></>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -740,25 +776,45 @@ export default function DailyOutputPage() {
                   )}
                 </section>
 
-                <section>
-                  <h3
-                    className="text-base font-black pb-1 mb-2"
-                    style={{ color: 'var(--ink)', borderBottom: '2.5px solid var(--ink)' }}
-                  >
-                    休憩
-                  </h3>
-                  <div
-                    className="p-3 rounded text-sm font-semibold"
-                    style={{
-                      border: '1px dashed var(--rule)',
-                      color: 'var(--ink-2)',
-                      minHeight: '70px',
-                      lineHeight: '1.5',
-                    }}
-                  >
-                    休憩時間をずらす
-                  </div>
-                </section>
+                {/* Phase 64: シフト（本日の出勤）の直下にキャンセル待ちセクションを縦並びで配置。
+                    各児童を「① ○○」「② △△」で 1 行ずつ表示する。 */}
+                {waitlistChildren.length > 0 && (
+                  <section>
+                    <h3
+                      className="text-base font-black pb-1 mb-2"
+                      style={{ color: 'var(--ink)', borderBottom: '2.5px solid var(--ink)' }}
+                    >
+                      キャンセル待ち
+                    </h3>
+                    <ul className="flex flex-col">
+                      {waitlistChildren.map((w) => {
+                        const orderMark = w.waitlistOrder
+                          ? '①②③④⑤⑥⑦⑧⑨⑩'.charAt(w.waitlistOrder - 1)
+                          : '－';
+                        return (
+                          <li
+                            key={w.scheduleEntryId}
+                            className="flex items-center gap-3 py-1.5"
+                            style={{ borderBottom: '1px dashed var(--rule)' }}
+                          >
+                            <span
+                              className="text-base font-black whitespace-nowrap"
+                              style={{ color: 'var(--ink-2)', minWidth: '1.2em' }}
+                            >
+                              {orderMark}
+                            </span>
+                            <span
+                              className="text-base font-black whitespace-nowrap"
+                              style={{ color: 'var(--ink)' }}
+                            >
+                              {w.childName}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
               </div>
             </div>
           </div>

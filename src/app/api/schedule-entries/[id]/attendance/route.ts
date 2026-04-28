@@ -5,11 +5,14 @@ import type { AttendanceStatus } from '@/types';
 
 /**
  * PATCH /api/schedule-entries/:id/attendance
- *   body: { status: AttendanceStatus }
+ *   body: { status: AttendanceStatus, waitlist_order?: number | null }
  *
  * Phase 25: 全ログイン済み職員（viewer 含む）が児童の出欠を更新可。
  * 内部で Postgres RPC update_schedule_entry_attendance を呼ぶことで、
  * tenant 一致チェック・履歴記録（attendance_audit_logs）を自動化。
+ *
+ * Phase 64: status='waitlist' の場合のみ waitlist_order (1〜10) を併送。
+ * status が waitlist 以外の場合は RPC 側で waitlist_order を NULL に強制する。
  */
 const VALID_STATUSES: AttendanceStatus[] = [
   'planned',
@@ -18,6 +21,7 @@ const VALID_STATUSES: AttendanceStatus[] = [
   'late',
   'early_leave',
   'leave',
+  'waitlist',
 ];
 
 export async function PATCH(
@@ -41,10 +45,26 @@ export async function PATCH(
     );
   }
 
+  /* Phase 64: waitlist_order の検証。null/undefined は許容（順番未指定）。
+     waitlist 以外で order が指定されても RPC 側で NULL に強制されるので警告のみ。 */
+  let waitlistOrder: number | null = null;
+  const rawOrder = body?.waitlist_order;
+  if (status === 'waitlist' && rawOrder != null) {
+    const n = Number(rawOrder);
+    if (!Number.isInteger(n) || n < 1 || n > 10) {
+      return NextResponse.json(
+        { error: 'キャンセル待ちの順番は 1〜10 で指定してください' },
+        { status: 400 },
+      );
+    }
+    waitlistOrder = n;
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc('update_schedule_entry_attendance', {
     p_entry_id: id,
     p_status: status,
+    p_waitlist_order: waitlistOrder,
   });
 
   if (error) {

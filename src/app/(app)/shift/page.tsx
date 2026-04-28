@@ -84,10 +84,25 @@ export default function ShiftPage() {
   const myRole: StaffRole | null = currentStaff?.role ?? null;
   const isAdmin = myRole === 'admin';
 
-  /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント） */
+  /* カバレッジ判定用: 日付 → 児童数（schedule_entries から日別カウント）。
+     Phase 64: 欠席 (absent) / お休み (leave) / キャンセル待ち (waitlist) は来所しないので除外。
+     waitlist は「利用に変える」で present に昇格して初めてカウントに加わる。 */
   const childrenCountByDate = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of scheduleEntries) {
+      if (e.attendance_status === 'absent') continue;
+      if (e.attendance_status === 'leave') continue;
+      if (e.attendance_status === 'waitlist') continue;
+      m.set(e.date, (m.get(e.date) ?? 0) + 1);
+    }
+    return m;
+  }, [scheduleEntries]);
+
+  /* Phase 64: 日別キャンセル待ち児童数。グリッドヘッダに「待 N」バッジで併記する。 */
+  const childrenWaitlistCountByDate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of scheduleEntries) {
+      if (e.attendance_status !== 'waitlist') continue;
       m.set(e.date, (m.get(e.date) ?? 0) + 1);
     }
     return m;
@@ -500,6 +515,7 @@ export default function ShiftPage() {
               warnings={warnings}
               onCellClick={handleCellClick}
               childrenCountByDate={childrenCountByDate}
+              childrenWaitlistCountByDate={childrenWaitlistCountByDate}
               requestComments={requestComments}
             />
           </div>

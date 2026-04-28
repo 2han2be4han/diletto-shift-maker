@@ -428,6 +428,7 @@ export function buildSeedState(): DemoState {
         attendance_status: 'planned',
         attendance_updated_at: null,
         attendance_updated_by: null,
+        waitlist_order: null,
         created_at: nowIso,
       });
     });

@@ -547,6 +547,7 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
           attendance_status: existing?.attendance_status ?? 'planned',
           attendance_updated_at: existing?.attendance_updated_at ?? null,
           attendance_updated_by: existing?.attendance_updated_by ?? null,
+          waitlist_order: existing?.waitlist_order ?? null,
           created_at: existing?.created_at ?? nowIso(),
         };
         if (existing) {
@@ -573,29 +574,42 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
     const m = matchPath(pathname, '/api/schedule-entries/[id]/attendance');
     if (m.matched && method === 'PATCH') {
       const id = m.params.id;
-      const b = (body ?? {}) as { status?: string };
-      const validStatuses = ['planned', 'present', 'absent', 'late', 'early_leave', 'leave'];
+      const b = (body ?? {}) as { status?: string; waitlist_order?: number | null };
+      const validStatuses = ['planned', 'present', 'absent', 'late', 'early_leave', 'leave', 'waitlist'];
       if (!b.status || !validStatuses.includes(b.status)) return bad('不正な出欠ステータスです');
+      /* Phase 64: waitlist_order の検証。waitlist 以外では強制 NULL。 */
+      let nextOrder: number | null = null;
+      if (b.status === 'waitlist' && b.waitlist_order != null) {
+        const n = Number(b.waitlist_order);
+        if (!Number.isInteger(n) || n < 1 || n > 10) {
+          return bad('キャンセル待ちの順番は 1〜10 で指定してください');
+        }
+        nextOrder = n;
+      }
       let updated: ScheduleEntryRow | undefined;
       mutateDemoState((s) => {
         const e = s.schedule_entries.find((x) => x.id === id);
         if (!e) return;
         const old = e.attendance_status;
         e.attendance_status = b.status as ScheduleEntryRow['attendance_status'];
+        e.waitlist_order = nextOrder;
         e.attendance_updated_at = nowIso();
         e.attendance_updated_by = DEMO_STAFF_ID_ME;
-        s.attendance_audit_logs.push({
-          id: genId('aal'),
-          tenant_id: DEMO_TENANT_ID,
-          schedule_entry_id: id,
-          entry_date: e.date,
-          child_id: e.child_id,
-          old_status: old,
-          new_status: e.attendance_status,
-          changed_by_staff_id: DEMO_STAFF_ID_ME,
-          changed_by_name: 'デモ太郎',
-          changed_at: nowIso(),
-        });
+        /* Phase 64: status 変更時のみ履歴を残す（order だけの変更では log を膨らませない）。 */
+        if (old !== e.attendance_status) {
+          s.attendance_audit_logs.push({
+            id: genId('aal'),
+            tenant_id: DEMO_TENANT_ID,
+            schedule_entry_id: id,
+            entry_date: e.date,
+            child_id: e.child_id,
+            old_status: old,
+            new_status: e.attendance_status,
+            changed_by_staff_id: DEMO_STAFF_ID_ME,
+            changed_by_name: 'デモ太郎',
+            changed_at: nowIso(),
+          });
+        }
         updated = e;
       });
       if (!updated) return json({ error: 'エントリが見つかりません' }, 404);

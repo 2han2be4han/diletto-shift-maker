@@ -1147,6 +1147,22 @@
         </tbody>
     </table>
 
+    <div class="phase-head">Phase 64: キャンセル待ち (waitlist) 出欠ステータス追加（2026-04-28 着手）</div>
+    <p>「出席 / お休み / 欠席」に加え「キャンセル待ち」を新設。①〜⑩ の順番付き。送迎表は下部 1 行に集約（担当割当不可）、確認モーダル経由で「利用に変える」と即時 present 切替＋利用予定にも反映。日次出力にも 1 行集約。</p>
+    <table>
+        <thead>
+            <tr><th>#</th><th>タスク</th><th>対象ファイル</th><th>ステータス</th><th>完了率</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>64-1</td><td>migration 0041: CHECK 制約に 'waitlist' 追加 / waitlist_order 列 (1〜10) / RPC 拡張</td><td>supabase/migrations/0041_attendance_waitlist.sql</td><td class="status-done">完了</td><td>100%</td><td>uniq 制約なし（兄弟①許可）。本番 DB 適用済み</td></tr>
+            <tr><td>64-1b</td><td>型 + API 検証 + 取得カラム: AttendanceStatus 拡張、waitlist_order 追加、各ページの SELECT に追加、demoBackend も対応</td><td>src/types/index.ts, src/app/api/schedule-entries/**, schedule-page-data, transport-page-data, shift-page-data, src/lib/demo/demoBackend.ts</td><td class="status-done">完了</td><td>100%</td><td>tsc pass</td></tr>
+            <tr><td>64-2</td><td>利用予定 UI: 4 ボタン化 + ①〜⑩ 順番ピッカー + セル「キャ待 ②」表示 + 「この利用時間でキャンセル待ち」表記 + 日付色バグ修正（土=青/日=赤）</td><td>src/app/(app)/schedule/page.tsx, src/components/schedule/ScheduleGrid.tsx</td><td class="status-done">完了</td><td>100%</td><td>ブラウザ動作確認済み</td></tr>
+            <tr><td>64-3</td><td>送迎表: waitlist は通常テーブルから除外し下部 1 行集約「① 〇〇」、利用に変える確認モーダル + present への昇格 API</td><td>src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>担当割当 disabled、印刷影響回避でブロック化なし、ブラウザ動作確認済み</td></tr>
+            <tr><td>64-4</td><td>日次出力: シフトの下に「キャンセル待ち: ① 〇〇 ／ ② △△」1 行 + 利用児童カウントから waitlist 除外。週次送迎は単純に除外フィルタのみ</td><td>src/app/(app)/output/daily/page.tsx, src/app/(app)/output/weekly-transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>ブラウザ動作確認済み</td></tr>
+            <tr><td>64-5</td><td>整合性確認: PDF/Excel インポートは attendance_status を送らないので waitlist 上書きされず、removes でも 'planned' 以外は保護。generateTransport は呼び出し元 (transport/page.tsx) で waitlist を除外</td><td>src/app/api/schedule-entries/route.ts, src/app/(app)/transport/page.tsx</td><td class="status-done">完了</td><td>100%</td><td>追加コード変更なし（既存ロジックで吸収）</td></tr>
+        </tbody>
+    </table>
+
     <h2>判断保留 / ユーザー確認事項</h2>
     <ul>
         <li><strong>Supabase プロジェクト</strong>: 接続先の URL / API キー情報（ユーザーが Vercel or .env.local に設定）</li>

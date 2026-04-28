@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     (async () => {
       let q = supabase
         .from('schedule_entries')
-        .select('id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, pickup_mark, dropoff_mark, is_confirmed, attendance_status, attendance_updated_at, attendance_updated_by, created_at')
+        .select('id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, pickup_mark, dropoff_mark, is_confirmed, attendance_status, attendance_updated_at, attendance_updated_by, waitlist_order, created_at')
         .order('date');
       if (from) q = q.gte('date', from);
       if (to) q = q.lte('date', to);

@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
   /* Phase 60: select('*') 廃止。dto=transport 時は軽量化 */
   const dto = request.nextUrl.searchParams.get('dto');
   const cols = dto === 'transport'
-    ? 'id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, attendance_status'
-    : 'id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, pickup_mark, dropoff_mark, is_confirmed, attendance_status, attendance_updated_at, attendance_updated_by, created_at';
+    ? 'id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, attendance_status, waitlist_order'
+    : 'id, tenant_id, child_id, date, pickup_time, dropoff_time, pickup_method, dropoff_method, pickup_mark, dropoff_mark, is_confirmed, attendance_status, attendance_updated_at, attendance_updated_by, waitlist_order, created_at';
 
   let q = supabase.from('schedule_entries').select(cols).order('date');
   if (from) q = q.gte('date', from);

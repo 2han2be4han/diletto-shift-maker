@@ -33,7 +33,9 @@ type ScheduleCellData = {
   note: string | null; // 追・休、定・休 など
   /** Phase 42: セルに状態バッジを出すための追加項目 */
   entry_id?: string | null;
-  attendance_status?: 'planned' | 'present' | 'absent' | 'late' | 'early_leave' | 'leave';
+  attendance_status?: 'planned' | 'present' | 'absent' | 'late' | 'early_leave' | 'leave' | 'waitlist';
+  /** Phase 64: キャンセル待ちの順番 (1〜10)。waitlist 以外は null。 */
+  waitlist_order?: number | null;
 };
 
 type ScheduleGridProps = {
@@ -82,16 +84,28 @@ export default function ScheduleGrid({
     cellMap.set(`${c.child_id}_${c.date}`, c);
   });
 
-  /* 各日の利用人数 */
+  /* 各日の利用人数（Phase 64: waitlist は別カウントとして独立表示するため除外）。
+     waitlist は次の dailyWaitlistCounts に集計され、表の最下部の専用行に出る。 */
   const dailyCounts = new Map<string, number>();
+  const dailyWaitlistCounts = new Map<string, number>();
   dates.forEach((d) => {
     let count = 0;
+    let waitlistCount = 0;
     children.forEach((child) => {
       const cell = cellMap.get(`${child.id}_${d.dateStr}`);
-      if (cell && (cell.pickup_time || cell.dropoff_time)) count++;
+      if (!cell) return;
+      if (cell.attendance_status === 'waitlist') {
+        waitlistCount++;
+        return;
+      }
+      if (cell.pickup_time || cell.dropoff_time) count++;
     });
     dailyCounts.set(d.dateStr, count);
+    dailyWaitlistCounts.set(d.dateStr, waitlistCount);
   });
+  /* Phase 64: 月内に 1 件でも waitlist があれば下部に「キャンセル待ち」行を出す。
+     0 のままなら行ごと表示しない（縦の圧迫を防ぐ）。 */
+  const hasAnyWaitlist = Array.from(dailyWaitlistCounts.values()).some((n) => n > 0);
 
   /* Phase 56: 今日列の視覚ハイライト + マウント時の自動スクロール */
   const today = todayStr();
@@ -164,7 +178,15 @@ export default function ScheduleGrid({
                     minWidth: '80px',
                     ...getDowStyle(d.dow, holiday),
                     background: isTodayCol ? 'var(--accent-pale-solid)' : getStickyBg(d.dow),
-                    color: isTodayCol ? 'var(--accent)' : holiday ? 'var(--red)' : undefined,
+                    /* Phase 64: 土=青 / 日(祝)=赤 を全テキストに統一適用。
+                       以前は `color: undefined` で getDowStyle の色を打ち消していた。 */
+                    color: isTodayCol
+                      ? 'var(--accent)'
+                      : (holiday || d.dow === 0)
+                        ? 'var(--red)'
+                        : d.dow === 6
+                          ? 'var(--accent)'
+                          : undefined,
                     boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
                   }}
                   title={titleBits.join('\n') || undefined}
@@ -208,15 +230,18 @@ export default function ScheduleGrid({
                    - 未入力: entry が存在しない（cell == null or entry_id == null）
                    - 欠席: attendance_status='absent'
                    - お休み: attendance_status='leave'、または entry あり / times 両方 null（旧データ互換）
+                   - キャンセル待ち: attendance_status='waitlist' (Phase 64)
                    - 出席: times あり */
                 const hasEntry = !!cell && (cell.entry_id ?? null) !== null;
                 const isAbsent = cell?.attendance_status === 'absent';
                 const isLeave = cell?.attendance_status === 'leave';
-                const isOff = isLeave || (hasEntry && !hasTimes && !isAbsent);
+                const isWaitlist = cell?.attendance_status === 'waitlist';
+                const isOff = isLeave || (hasEntry && !hasTimes && !isAbsent && !isWaitlist);
 
                 /* セル背景: 状態によって淡くハイライト */
                 let bg = getCellBg(d.dow);
                 if (isAbsent) bg = 'var(--red-pale)';
+                else if (isWaitlist) bg = 'rgba(0,0,0,0.06)';
                 else if (isOff) bg = 'rgba(0,0,0,0.04)';
 
                 const isTodayCol = d.dateStr === today;
@@ -238,7 +263,10 @@ export default function ScheduleGrid({
                     onClick={() => !isRestricted && onCellClick(child.id, d.dateStr)}
                     title={
                       isRestricted ? '閲覧制限により表示できません' :
-                      isAbsent ? '欠席' : isOff ? 'お休み' : hasTimes ? '出席' : '未入力（クリックで編集）'
+                      isAbsent ? '欠席' :
+                      isWaitlist ? `キャンセル待ち${cell?.waitlist_order ? ` ${cell.waitlist_order}番` : ''}` :
+                      isOff ? 'お休み' :
+                      hasTimes ? '出席' : '未入力（クリックで編集）'
                     }
                   >
                     {isRestricted ? (
@@ -258,6 +286,24 @@ export default function ScheduleGrid({
                       >
                         欠席
                       </span>
+                    ) : isWaitlist ? (
+                      /* Phase 64: キャンセル待ち。順番があれば「キャ待 ②」、無ければ「キャ待」。
+                         時刻もあれば下に出して「この時間でキャンセル待ち」が直感的に伝わるようにする。 */
+                      <div className="flex flex-col gap-0 leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        <span className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>
+                          キャ待{cell?.waitlist_order ? ` ${'①②③④⑤⑥⑦⑧⑨⑩'.charAt(cell.waitlist_order - 1)}` : ''}
+                        </span>
+                        {cell?.pickup_time && (
+                          <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                            {formatHM(cell.pickup_time)}
+                          </span>
+                        )}
+                        {cell?.dropoff_time && (
+                          <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                            {formatHM(cell.dropoff_time)}
+                          </span>
+                        )}
+                      </div>
                     ) : isOff ? (
                       <span
                         className="text-xs font-bold"
@@ -341,6 +387,48 @@ export default function ScheduleGrid({
               );
             })}
           </tr>
+
+          {/* Phase 64: キャンセル待ち合計行。月内に 1 件でも waitlist があれば表示。
+              ・利用数とは独立した行として並べ、視覚的にも完全に分離
+              ・印刷時も sticky を解除して通常行として描画される（schedule/page.tsx の印刷 CSS で対応） */}
+          {hasAnyWaitlist && (
+            <tr>
+              <td
+                className="sticky left-0 bottom-0 z-50 px-4 py-2 font-bold whitespace-nowrap"
+                style={{
+                  background: 'var(--bg)',
+                  borderTop: '1px dashed var(--rule-strong)',
+                  borderRight: '2px solid var(--rule-strong)',
+                  color: 'var(--ink-2)',
+                  fontSize: '0.78rem',
+                  boxShadow: '4px -2px 4px rgba(0,0,0,0.02)',
+                }}
+              >
+                キャンセル待ち
+              </td>
+              {dates.map((d) => {
+                const count = dailyWaitlistCounts.get(d.dateStr) || 0;
+                const isTodayCol = d.dateStr === today;
+                return (
+                  <td
+                    key={d.dateStr}
+                    className="sticky bottom-0 z-40 px-1 py-1.5 text-center font-bold"
+                    style={{
+                      borderTop: '1px dashed var(--rule-strong)',
+                      borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
+                      borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
+                      color: count > 0 ? 'var(--ink-2)' : 'var(--ink-3)',
+                      fontSize: '0.78rem',
+                      background: isTodayCol ? 'var(--accent-pale-solid)' : getStickyBg(d.dow),
+                      boxShadow: '0 -2px 3px rgba(0,0,0,0.02)',
+                    }}
+                  >
+                    {count > 0 ? count : ''}
+                  </td>
+                );
+              })}
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

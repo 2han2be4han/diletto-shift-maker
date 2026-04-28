@@ -261,11 +261,14 @@ export default function TransportPage() {
          - 欠席 (attendance_status='absent'): お金は発生するが送迎は不要
          - お休み (attendance_status='leave'): 送迎も不要
          - times 両方 null（旧データ互換のお休み扱い）
-         どれも送迎担当を割り当てる必要がない entry なので /transport から弾く。 */
+         どれも送迎担当を割り当てる必要がない entry なので /transport から弾く。
+         - Phase 64: waitlist (キャンセル待ち) は times の有無に関わらず保持。
+           下部の集約行に出すため除外しない。 */
       setScheduleEntries(
         ((eJson.entries ?? []) as ScheduleEntryRow[]).filter((e) => {
           if (e.attendance_status === 'absent') return false;
           if (e.attendance_status === 'leave') return false;
+          if (e.attendance_status === 'waitlist') return true;
           if (!e.pickup_time && !e.dropoff_time) return false;
           return true;
         }),
@@ -310,9 +313,12 @@ export default function TransportPage() {
   );
   /* Phase 28: 送り先住所の home_address フォールバックは resolveEntryTransportSpec 内で吸収済み */
 
-  /* UI 用エントリ構築: selectedDate の schedule_entries を列挙し、transport_assignments と結合 */
+  /* UI 用エントリ構築: selectedDate の schedule_entries を列挙し、transport_assignments と結合。
+     Phase 64: waitlist (キャンセル待ち) は通常の送迎テーブルに混ぜず、別の集約に回す。 */
   const currentDayEntries: UiTransportEntry[] = useMemo(() => {
-    const scheduleIds = scheduleEntries.filter((e) => e.date === selectedDate).map((e) => e.id);
+    const scheduleIds = scheduleEntries
+      .filter((e) => e.date === selectedDate && e.attendance_status !== 'waitlist')
+      .map((e) => e.id);
     const entryById = new Map(scheduleEntries.map((e) => [e.id, e]));
     const assignByEntry = new Map(transportAssignments.map((t) => [t.schedule_entry_id, t]));
     const childById = new Map(children.map((c) => [c.id, c]));
@@ -377,6 +383,67 @@ export default function TransportPage() {
     });
     return rows;
   }, [selectedDate, scheduleEntries, transportAssignments, childNameMap, children, pickupAreas, dropoffAreas, pendingChanges]);
+
+  /* Phase 64: 当日のキャンセル待ち児童。送迎表の下部に集約表示する。
+     順番 (waitlist_order) を昇順、null は末尾、同番号は児童管理の並び順。 */
+  type WaitlistDayEntry = {
+    scheduleEntryId: string;
+    childId: string;
+    childName: string;
+    pickupTime: string | null;
+    dropoffTime: string | null;
+    waitlistOrder: number | null;
+  };
+  const currentDayWaitlist: WaitlistDayEntry[] = useMemo(() => {
+    const childOrderById = new Map(children.map((c, idx) => [c.id, idx]));
+    const rows = scheduleEntries
+      .filter((e) => e.date === selectedDate && e.attendance_status === 'waitlist')
+      .map<WaitlistDayEntry>((e) => ({
+        scheduleEntryId: e.id,
+        childId: e.child_id,
+        childName: childNameMap.get(e.child_id) ?? '(不明)',
+        pickupTime: e.pickup_time,
+        dropoffTime: e.dropoff_time,
+        waitlistOrder: e.waitlist_order ?? null,
+      }));
+    rows.sort((a, b) => {
+      const oa = a.waitlistOrder ?? 999;
+      const ob = b.waitlistOrder ?? 999;
+      if (oa !== ob) return oa - ob;
+      const ca = childOrderById.get(a.childId) ?? Number.MAX_SAFE_INTEGER;
+      const cb = childOrderById.get(b.childId) ?? Number.MAX_SAFE_INTEGER;
+      return ca - cb;
+    });
+    return rows;
+  }, [selectedDate, scheduleEntries, childNameMap, children]);
+
+  /* Phase 64: 「利用に変える」確認モーダル用 state */
+  const [convertTarget, setConvertTarget] = useState<WaitlistDayEntry | null>(null);
+  const [converting, setConverting] = useState(false);
+
+  /* キャンセル待ち → 出席 の昇格。
+     status='present' に切り替え、waitlist_order は RPC 側で NULL に強制される。
+     fetchAll で利用予定/送迎表/日次出力の全画面に反映される。 */
+  const handleConvertWaitlistToPresent = async (target: WaitlistDayEntry) => {
+    setConverting(true);
+    try {
+      const res = await fetch(
+        `/api/schedule-entries/${target.scheduleEntryId}/attendance`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'present', waitlist_order: null }),
+        },
+      );
+      if (!res.ok) throw new Error((await res.json()).error ?? '切り替えに失敗しました');
+      setConvertTarget(null);
+      await fetchAll();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '切り替えに失敗しました');
+    } finally {
+      setConverting(false);
+    }
+  };
 
   /**
    * Phase 28 修正: 未割当は「現在の状態」から都度計算する。
@@ -588,7 +655,10 @@ export default function TransportPage() {
       for (let i = 0; i < targetDates.length; i++) {
         const date = targetDates[i];
         setGenerateProgress({ current: i + 1, total: targetDates.length });
-        const entriesForDate = scheduleEntries.filter((e) => e.date === date);
+        /* Phase 64: waitlist (キャンセル待ち) は割当対象外なので生成入力から除外 */
+        const entriesForDate = scheduleEntries.filter(
+          (e) => e.date === date && e.attendance_status !== 'waitlist',
+        );
 
         const genRes = await fetch('/api/transport/generate', {
           method: 'POST',
@@ -1038,26 +1108,46 @@ export default function TransportPage() {
       <div className="px-2 py-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            {/* 送迎表の当日利用人数（schedule_entries ベース、欠席・お休みは除外） */}
+            {/* 送迎表の当日利用人数（schedule_entries ベース、欠席・お休み・キャンセル待ちは除外）。
+                Phase 64: キャンセル待ちは独立した「⏳ 待 N」バッジで併記する。 */}
             {(() => {
               const dayEntries = scheduleEntries.filter(
                 (e) =>
                   e.date === selectedDate &&
                   e.attendance_status !== 'absent' &&
-                  e.attendance_status !== 'leave',
+                  e.attendance_status !== 'leave' &&
+                  e.attendance_status !== 'waitlist',
               );
+              const waitlistCount = scheduleEntries.filter(
+                (e) => e.date === selectedDate && e.attendance_status === 'waitlist',
+              ).length;
               return (
-                <span
-                  className="text-xs font-semibold px-2 py-1 rounded"
-                  style={{
-                    background: 'var(--bg)',
-                    color: 'var(--ink-2)',
-                    border: '1px solid var(--rule)',
-                  }}
-                  title="この日の利用児童数（欠席除く）"
-                >
-                  🧒 利用 {dayEntries.length}人
-                </span>
+                <>
+                  <span
+                    className="text-xs font-semibold px-2 py-1 rounded"
+                    style={{
+                      background: 'var(--bg)',
+                      color: 'var(--ink-2)',
+                      border: '1px solid var(--rule)',
+                    }}
+                    title="この日の利用児童数（欠席・キャンセル待ち除く）"
+                  >
+                    🧒 利用 {dayEntries.length}人
+                  </span>
+                  {waitlistCount > 0 && (
+                    <span
+                      className="text-xs font-semibold px-2 py-1 rounded"
+                      style={{
+                        background: 'var(--bg)',
+                        color: 'var(--ink-2)',
+                        border: '1px dashed var(--rule-strong)',
+                      }}
+                      title="この日のキャンセル待ち児童数"
+                    >
+                      ⏳ 待 {waitlistCount}人
+                    </span>
+                  )}
+                </>
               );
             })()}
             {/* Phase 55: 当日の出勤スタッフ数（シフトに入っていて end_time が設定されている職員） */}
@@ -1355,6 +1445,67 @@ export default function TransportPage() {
               }
             />
             </div>
+
+            {/* Phase 64: キャンセル待ちの集約行（送迎表の下部に 1 行）。
+                ブロックを大きく作ると印刷崩れの原因になるため、極力コンパクトに。
+                担当割当はできない（出席に切り替えてから割り当てる運用）。 */}
+            {currentDayWaitlist.length > 0 && (
+              <div
+                className="mt-3 px-4 py-3 rounded flex items-center flex-wrap gap-x-4 gap-y-2"
+                style={{
+                  background: 'rgba(0,0,0,0.04)',
+                  border: '1px solid var(--rule)',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <span
+                  className="font-bold whitespace-nowrap"
+                  style={{ color: 'var(--ink-2)' }}
+                >
+                  キャンセル待ち
+                </span>
+                {currentDayWaitlist.map((w) => {
+                  const orderMark = w.waitlistOrder
+                    ? '①②③④⑤⑥⑦⑧⑨⑩'.charAt(w.waitlistOrder - 1)
+                    : '－';
+                  const timeRange = w.pickupTime || w.dropoffTime
+                    ? `${w.pickupTime ? w.pickupTime.slice(0, 5) : '?'}〜${w.dropoffTime ? w.dropoffTime.slice(0, 5) : '?'}`
+                    : null;
+                  return (
+                    <span
+                      key={w.scheduleEntryId}
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      <span style={{ color: 'var(--ink-2)', fontWeight: 700 }}>{orderMark}</span>
+                      <span>{w.childName}</span>
+                      {timeRange && (
+                        <span style={{ color: 'var(--ink-3)', fontSize: '0.78rem' }}>
+                          ({timeRange})
+                        </span>
+                      )}
+                      {myRole !== 'viewer' && (
+                        <button
+                          type="button"
+                          onClick={() => setConvertTarget(w)}
+                          className="ml-1 text-xs font-semibold px-2 py-0.5 rounded transition-colors"
+                          style={{
+                            background: 'var(--white)',
+                            color: 'var(--accent)',
+                            border: '1px solid var(--accent)',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-pale)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--white)'; }}
+                          title="この児童を本日の利用 (出席) に切り替えます"
+                        >
+                          利用に変える
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Phase 26: 日ごとの保存ボタン（Phase 55b: viewer には非表示） */}
             <div className="flex items-center justify-end gap-3 mt-4">
@@ -1681,6 +1832,65 @@ export default function TransportPage() {
               );
             })()
           )}
+        </Modal>
+      )}
+
+      {/* Phase 64: キャンセル待ち → 利用 (出席) への切り替え確認モーダル。
+          ・確定すると attendance_status='present' に変更され、利用予定/送迎表/日次出力に即時反映
+          ・送迎担当は未割当のままなので、切替後に手動で割り当てる運用 */}
+      {convertTarget && (
+        <Modal
+          isOpen={true}
+          onClose={() => (converting ? null : setConvertTarget(null))}
+          title="キャンセル待ち → 利用 への切替"
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm" style={{ color: 'var(--ink)', lineHeight: 1.6 }}>
+              <span className="font-bold">{convertTarget.childName}</span> さんを本日の{' '}
+              <span className="font-bold" style={{ color: 'var(--green)' }}>利用 (出席)</span>{' '}
+              に切り替えます。
+            </p>
+
+            <div
+              className="px-3 py-2 rounded text-sm"
+              style={{
+                background: 'var(--bg)',
+                border: '1px solid var(--rule)',
+                color: 'var(--ink-2)',
+              }}
+            >
+              <div className="flex flex-col gap-1">
+                <div>
+                  利用時間:{' '}
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                    {convertTarget.pickupTime ? convertTarget.pickupTime.slice(0, 5) : '?'}
+                    {' 〜 '}
+                    {convertTarget.dropoffTime ? convertTarget.dropoffTime.slice(0, 5) : '?'}
+                  </span>
+                </div>
+                <div className="text-xs" style={{ color: 'var(--ink-3)' }}>
+                  切替後は送迎担当が未割当の状態になります。送迎表で担当を割り当ててください。
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end mt-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConvertTarget(null)}
+                disabled={converting}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleConvertWaitlistToPresent(convertTarget)}
+                disabled={converting}
+              >
+                {converting ? '切替中...' : '利用に変える'}
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </>

@@ -88,9 +88,14 @@ export function generateShiftAssignments(
     }
   }
 
-  /* 日ごとの利用人数を集計 */
+  /* 日ごとの利用人数を集計。
+     Phase 64: absent / leave / waitlist は来所しないのでカウント除外。
+     必要職員数の判定にこれらを含めると過剰見積もりになり、シフトが過剰生成される。 */
   const dailyChildCount = new Map<string, number>();
   for (const entry of scheduleEntries) {
+    if (entry.attendance_status === 'absent') continue;
+    if (entry.attendance_status === 'leave') continue;
+    if (entry.attendance_status === 'waitlist') continue;
     const count = dailyChildCount.get(entry.date) || 0;
     dailyChildCount.set(entry.date, count + 1);
   }

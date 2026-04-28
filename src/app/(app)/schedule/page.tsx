@@ -23,7 +23,7 @@ import type {
 } from '@/types';
 import { GRADE_LABELS } from '@/lib/utils/parseChildName';
 
-/* Phase 25: 出欠ラベル */
+/* Phase 25/64: 出欠ラベル */
 const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
   planned: '予定',
   present: '出席',
@@ -31,6 +31,7 @@ const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
   late: '遅刻',
   early_leave: '早退',
   leave: 'お休み',
+  waitlist: 'キャンセル待ち',
 };
 const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
   planned: 'var(--ink-3)',
@@ -39,6 +40,7 @@ const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
   late: 'var(--gold)',
   early_leave: 'var(--accent)',
   leave: 'var(--ink-3)',
+  waitlist: 'var(--ink-3)',  /* Phase 64: グレー寄せ */
 };
 
 /**
@@ -59,6 +61,8 @@ type CellData = {
   pickup_method: 'self' | 'pickup';
   dropoff_method: 'self' | 'dropoff';
   attendance_status: AttendanceStatus;
+  /** Phase 64: キャンセル待ちの順番 (1〜10)。waitlist 以外は null。 */
+  waitlist_order: number | null;
   note: string | null;
 };
 
@@ -130,6 +134,8 @@ export default function SchedulePage() {
      ルール: 「欠席 (absent) 以外は時間入力可能」 */
   /* Phase 25: 当日の出欠記録（DB永続） */
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('planned');
+  /* Phase 64: キャンセル待ちの順番 (1〜10)。waitlist 以外は null。 */
+  const [waitlistOrder, setWaitlistOrder] = useState<number | null>(null);
   const [attendanceBusy, setAttendanceBusy] = useState(false);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceAuditLogRow[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -192,6 +198,7 @@ export default function SchedulePage() {
           pickup_method: e.pickup_method === 'self' ? 'self' : 'pickup',
           dropoff_method: e.dropoff_method === 'self' ? 'self' : 'dropoff',
           attendance_status: e.attendance_status ?? 'planned',
+          waitlist_order: e.waitlist_order ?? null,
           note: null,
         }))
       );
@@ -229,6 +236,7 @@ export default function SchedulePage() {
     setPickupMethod(cellData?.pickup_method || 'pickup');
     setDropoffMethod(cellData?.dropoff_method || 'dropoff');
     setAttendanceStatus(cellData?.attendance_status ?? 'planned');
+    setWaitlistOrder(cellData?.waitlist_order ?? null);
     setAttendanceLogs([]);
     setLogsOpen(false);
     setSelectedCell({ childId, date });
@@ -238,7 +246,10 @@ export default function SchedulePage() {
      Phase 40: entry が存在しない（空セル）日に出欠ボタンを押した場合、
      先に空 entry (times=null) を auto-create してから attendance を更新する。
      旧仕様の「先に時間を保存してください」アラートを撤廃し、1 操作で完結させる。 */
-  const handleAttendanceChange = async (next: AttendanceStatus) => {
+  const handleAttendanceChange = async (
+    next: AttendanceStatus,
+    nextOrder: number | null = null,
+  ) => {
     if (!selectedCell) return;
     const cell = cells.find(
       (c) => c.child_id === selectedCell.childId && c.date === selectedCell.date,
@@ -280,23 +291,30 @@ export default function SchedulePage() {
         if (!entryId) throw new Error('作成した利用予定の id を取得できませんでした');
       }
 
+      /* Phase 64: waitlist 以外では order を強制 NULL（RPC でも同様にガードしているがクライアント側でも揃える）。 */
+      const orderToSend = next === 'waitlist' ? nextOrder : null;
+
       const res = await fetch(
         `/api/schedule-entries/${entryId}/attendance`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: next }),
+          body: JSON.stringify({ status: next, waitlist_order: orderToSend }),
         },
       );
       if (!res.ok) throw new Error((await res.json()).error ?? '更新失敗');
       setAttendanceStatus(next);
+      setWaitlistOrder(orderToSend);
       const finalEntryId = entryId;
+      const finalOrder = orderToSend;
       setCells((prev) => {
         /* 既存セル更新、または新規作成された entry を反映 */
         const exists = prev.some((c) => c.entry_id === finalEntryId);
         if (exists) {
           return prev.map((c) =>
-            c.entry_id === finalEntryId ? { ...c, attendance_status: next } : c,
+            c.entry_id === finalEntryId
+              ? { ...c, attendance_status: next, waitlist_order: finalOrder }
+              : c,
           );
         }
         /* fetchAll で確実に同期 */
@@ -505,10 +523,12 @@ export default function SchedulePage() {
               .schedule-print-root thead th > div:nth-child(1) { font-size: 6.5pt !important; }
               .schedule-print-root thead th > div:nth-child(2) { font-size: 9pt !important; font-weight: 700 !important; }
               .schedule-print-root thead th > div:nth-child(3) { font-size: 7pt !important; }
-              /* sticky は印刷時に解除しないと位置がずれる（特に利用数行 = bottom-0） */
+              /* sticky は印刷時に解除しないと位置がずれる
+                 (利用数行・キャンセル待ち行ともに bottom-0 で sticky になっているため) */
               .schedule-print-root thead th,
               .schedule-print-root tbody td,
-              .schedule-print-root tbody tr:last-child td {
+              .schedule-print-root tbody tr:last-child td,
+              .schedule-print-root tbody tr:nth-last-child(2) td {
                 position: static !important;
                 box-shadow: none !important;
               }
@@ -610,9 +630,23 @@ export default function SchedulePage() {
         {selectedCell && selectedChild && (
           <div className="flex flex-col gap-5">
             {/* 時間/送迎 UI は「欠席／お休み以外」で表示。
-                attendanceStatus に統一して旧 attendance state の二重管理を撤廃。 */}
+                Phase 64: キャンセル待ちでも時刻入力可（利用に切替時に時刻が引き継がれる）。 */}
             {attendanceStatus !== 'absent' && attendanceStatus !== 'leave' && (
               <>
+                {/* Phase 64: キャンセル待ち時の注意書き。職員が時刻を見て「来所済み？」と混乱しないように
+                    「この時間でキャンセル待ち」を明示する。 */}
+                {attendanceStatus === 'waitlist' && (
+                  <div
+                    className="px-3 py-2 rounded text-xs font-semibold"
+                    style={{
+                      background: 'rgba(0,0,0,0.05)',
+                      color: 'var(--ink-2)',
+                      border: '1px dashed var(--rule-strong)',
+                    }}
+                  >
+                    この利用時間でキャンセル待ちです{waitlistOrder ? `（順番: ${waitlistOrder} 番）` : ''}
+                  </div>
+                )}
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--ink-2)' }}>
                     来所予定時間
@@ -655,15 +689,15 @@ export default function SchedulePage() {
               </>
             )}
 
-            {/* 出欠ボタンは 3 種類。
-                お休み (leave) と 欠席 (absent) は挙動は同じ（時刻 null / 送迎除外）が
-                別ステータスとして独立保存・表示する。 */}
+            {/* 出欠ボタンは 4 種類。
+                Phase 64: キャンセル待ち (waitlist) を追加。grey 寄せの色で出席系と差別化。 */}
             <div className="flex flex-col gap-2 pt-3 mt-1" style={{ borderTop: '1px solid var(--rule)' }}>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {([
                   { label: '出席', value: 'present' as AttendanceStatus, color: 'var(--green)' },
                   { label: 'お休み', value: 'leave' as AttendanceStatus, color: 'var(--ink-3)' },
                   { label: '欠席', value: 'absent' as AttendanceStatus, color: 'var(--red)' },
+                  { label: 'キャンセル待ち', value: 'waitlist' as AttendanceStatus, color: '#6b7280' },
                 ]).map((opt) => {
                   const on = attendanceStatus === opt.value;
                   return (
@@ -671,8 +705,13 @@ export default function SchedulePage() {
                       key={opt.value}
                       type="button"
                       disabled={attendanceBusy}
-                      onClick={() => handleAttendanceChange(opt.value)}
-                      className="py-3 text-base font-bold rounded transition-all"
+                      onClick={() => {
+                        /* Phase 64: キャンセル待ちに切り替えた時は既存の order を維持。
+                           それ以外に切り替えた時は order=null を送る（RPC でも強制 NULL）。 */
+                        const carryOrder = opt.value === 'waitlist' ? waitlistOrder : null;
+                        handleAttendanceChange(opt.value, carryOrder);
+                      }}
+                      className="py-3 text-sm font-bold rounded transition-all"
                       style={{
                         background: on ? opt.color : 'var(--bg)',
                         color: on ? '#fff' : 'var(--ink-2)',
@@ -686,6 +725,54 @@ export default function SchedulePage() {
                   );
                 })}
               </div>
+
+              {/* Phase 64: キャンセル待ちの順番ピッカー (1〜10、5×2 グリッド)。
+                  status='waitlist' の時のみ表示。タップで即時保存（出欠ボタンと同じ UX）。 */}
+              {attendanceStatus === 'waitlist' && (
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>
+                    順番（同じ番号が複数いてもOK：兄弟など）
+                  </label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
+                      const on = waitlistOrder === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          disabled={attendanceBusy}
+                          onClick={() => handleAttendanceChange('waitlist', n)}
+                          className="py-2 text-base font-bold rounded transition-all"
+                          style={{
+                            background: on ? '#6b7280' : 'var(--bg)',
+                            color: on ? '#fff' : 'var(--ink-2)',
+                            border: `2px solid ${on ? '#6b7280' : 'var(--rule-strong)'}`,
+                            opacity: attendanceBusy ? 0.6 : 1,
+                            cursor: attendanceBusy ? 'wait' : 'pointer',
+                          }}
+                        >
+                          {'①②③④⑤⑥⑦⑧⑨⑩'.charAt(n - 1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {waitlistOrder != null && (
+                    <button
+                      type="button"
+                      disabled={attendanceBusy}
+                      onClick={() => handleAttendanceChange('waitlist', null)}
+                      className="text-xs font-semibold py-1.5 rounded"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--ink-3)',
+                        border: '1px dashed var(--rule-strong)',
+                      }}
+                    >
+                      順番をクリア
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 mt-2">

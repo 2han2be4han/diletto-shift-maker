@@ -198,23 +198,26 @@ export type ScheduleEntryRow = {
   /** Phase 28: お送りマーク（emoji+name）。テナント dropoff_areas から time/address を解決するキー。 */
   dropoff_mark: string | null;
   is_confirmed: boolean;
-  /** Phase 25: 出欠ステータス。planned=予定／present=出席／absent=欠席／late=遅刻／early_leave=早退 */
+  /** Phase 25/64: 出欠ステータス。planned=予定／present=出席／absent=欠席／late=遅刻／early_leave=早退／leave=お休み／waitlist=キャンセル待ち */
   attendance_status: AttendanceStatus;
   /** Phase 25: 出欠最終更新日時 */
   attendance_updated_at: string | null;
   /** Phase 25: 出欠最終更新者 staff.id */
   attendance_updated_by: string | null;
+  /** Phase 64: キャンセル待ちの順番 (1〜10)。waitlist 以外は null。同日内で重複可（兄弟想定）。 */
+  waitlist_order: number | null;
   created_at: string;
 };
 
-// ----- Phase 25: 出欠 -----
+// ----- Phase 25/64: 出欠 -----
 export type AttendanceStatus =
   | 'planned'      /* 予定（未確認） */
   | 'present'      /* 出席 */
   | 'absent'       /* 欠席 */
   | 'late'         /* 遅刻 */
   | 'early_leave'  /* 早退 */
-  | 'leave';       /* お休み（欠席と同じ扱いだが表示を区別） */
+  | 'leave'        /* お休み（欠席と同じ扱いだが表示を区別） */
+  | 'waitlist';    /* Phase 64: キャンセル待ち（送迎担当割当不可、利用に変える操作で present へ昇格） */
 
 export type AttendanceAuditLogRow = {
   id: string;
