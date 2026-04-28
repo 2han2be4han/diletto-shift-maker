@@ -638,6 +638,50 @@ async function dispatch({ method, url, body }: HandlerInput): Promise<Response> 
     return json({ assignments });
   }
   if (pathname === '/api/shift-assignments' && method === 'POST') {
+    /* Phase 65: replaceForDay モード。サーバ側で segment_order を 0..N に再採番。
+       (staff_id, date) の既存全セグメントを削除してから segments を INSERT する。 */
+    const b0 = (body ?? {}) as {
+      mode?: string;
+      staff_id?: string;
+      date?: string;
+      segments?: Array<Partial<ShiftAssignmentRow>>;
+      is_confirmed?: boolean;
+      assignments?: Array<Partial<ShiftAssignmentRow>>;
+    };
+    if (b0.mode === 'replaceForDay') {
+      const staff_id = String(b0.staff_id ?? '');
+      const date = String(b0.date ?? '');
+      const segs = Array.isArray(b0.segments) ? b0.segments : [];
+      const isConfirmed = Boolean(b0.is_confirmed ?? false);
+      if (!staff_id || !date) return bad('staff_id と date は必須です');
+      const inserted: ShiftAssignmentRow[] = [];
+      mutateDemoState((s) => {
+        /* 既存全セグメントを削除 */
+        s.shift_assignments = s.shift_assignments.filter(
+          (x) => !(x.tenant_id === DEMO_TENANT_ID && x.staff_id === staff_id && x.date === date),
+        );
+        /* segment_order=0..N で INSERT */
+        segs.forEach((seg, idx) => {
+          const row: ShiftAssignmentRow = {
+            id: genId('shift'),
+            tenant_id: DEMO_TENANT_ID,
+            staff_id,
+            date,
+            start_time: (seg.start_time as string | null) ?? null,
+            end_time: (seg.end_time as string | null) ?? null,
+            assignment_type: (seg.assignment_type as ShiftAssignmentType) ?? 'normal',
+            is_confirmed: isConfirmed,
+            segment_order: idx,
+            note: typeof seg.note === 'string' && seg.note.trim() ? seg.note.trim().slice(0, 40) : null,
+            created_at: nowIso(),
+          };
+          s.shift_assignments.push(row);
+          inserted.push(row);
+        });
+      });
+      return json({ assignments: inserted });
+    }
+
     const b = (body ?? {}) as { assignments?: Array<Partial<ShiftAssignmentRow>> };
     const assignments = Array.isArray(b.assignments) ? b.assignments : [];
     if (assignments.length === 0) return bad('assignments が空です');

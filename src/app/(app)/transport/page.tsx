@@ -8,6 +8,7 @@ import DateStepper from '@/components/ui/DateStepper';
 import type { DayState } from '@/components/ui/DatePopover';
 import MonthStatusBadge from '@/components/ui/MonthStatusBadge';
 import { buildPickerItems } from '@/components/transport/AddShiftStaffPicker';
+import { replaceShiftDay, type ShiftSegmentInput } from '@/lib/api/shiftAssignments';
 import { ja } from 'date-fns/locale';
 import Header from '@/components/layout/Header';
 import TransportDayView from '@/components/transport/TransportDayView';
@@ -937,51 +938,40 @@ export default function TransportPage() {
 
     setAddShiftModal((prev) => (prev ? { ...prev, saving: true, errorMsg: '' } : prev));
 
-    /* 既存セグメントから次の segment_order を決定。
-       'off'（休み）行はシフト生成が自動で作るダミーなので、シフト追加時は上書きする。
-       paid_leave / public_holiday は業務上の意味があるため残し、normal と同列で分割シフト扱い。 */
-    const existingSegments = shiftAssignments.filter(
-      (sa) =>
-        sa.staff_id === addShiftModal.staffId &&
-        sa.date === selectedDate &&
-        sa.assignment_type !== 'off',
-    );
-    const nextSegmentOrder =
-      existingSegments.length === 0
-        ? 0
-        : Math.max(...existingSegments.map((sa) => sa.segment_order ?? 0)) + 1;
+    /* Phase 65: 共通ヘルパー replaceShiftDay 経由で 1 日まるごと送信。
+       segment_order の採番はサーバ側で行うので、クライアントでの計算ロジックを廃止。
+       'off'（休み）行はシフト生成が作るダミーなので維持しない（送信前に除外）。
+       paid_leave / public_holiday は normal と同列で残す（分割の前後コマとして扱う）。 */
+    const staffId = addShiftModal.staffId;
+    const existingSegments = shiftAssignments
+      .filter((sa) => sa.staff_id === staffId && sa.date === selectedDate && sa.assignment_type !== 'off')
+      .sort((a, b) => (a.segment_order ?? 0) - (b.segment_order ?? 0));
 
-    try {
-      const res = await fetch('/api/shift-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assignments: [
-            {
-              staff_id: addShiftModal.staffId,
-              date: selectedDate,
-              start_time: addShiftModal.startTime,
-              end_time: addShiftModal.endTime,
-              assignment_type: 'normal',
-              is_confirmed: false,
-              segment_order: nextSegmentOrder,
-            },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? 'シフト追加に失敗しました');
-      }
-      setAddShiftModal(null);
-      await fetchAll();
-    } catch (err) {
+    const newSegment: ShiftSegmentInput = {
+      start_time: addShiftModal.startTime,
+      end_time: addShiftModal.endTime,
+      assignment_type: 'normal',
+      note: null,
+    };
+    const segments: ShiftSegmentInput[] = [
+      ...existingSegments.map<ShiftSegmentInput>((sa) => ({
+        start_time: sa.start_time,
+        end_time: sa.end_time,
+        assignment_type: sa.assignment_type,
+        note: sa.note ?? null,
+      })),
+      newSegment,
+    ];
+
+    const result = await replaceShiftDay(staffId, selectedDate, segments, false);
+    if (!result.ok) {
       setAddShiftModal((prev) =>
-        prev
-          ? { ...prev, saving: false, errorMsg: err instanceof Error ? err.message : 'シフト追加に失敗しました' }
-          : prev,
+        prev ? { ...prev, saving: false, errorMsg: result.error } : prev,
       );
+      return;
     }
+    setAddShiftModal(null);
+    await fetchAll();
   };
 
   /** 日付切替時のガード */

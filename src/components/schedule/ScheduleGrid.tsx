@@ -142,7 +142,7 @@ export default function ScheduleGrid({
     <div className="flex-1 overflow-auto border-2 rounded-xl" style={{ borderColor: 'var(--rule)', background: 'var(--white)' }}>
       <table
         className="w-full border-separate border-spacing-0"
-        style={{ minWidth: `${dates.length * 80 + 160}px`, fontSize: '0.85rem' }}
+        style={{ minWidth: `${dates.length * 56 + 160}px`, fontSize: '0.85rem' }}
       >
         <thead>
           <tr>
@@ -170,12 +170,12 @@ export default function ScheduleGrid({
                 <th
                   key={d.dateStr}
                   ref={isTodayCol ? todayHeaderRef : undefined}
-                  className="sticky top-0 z-30 px-1 py-1.5 text-center font-bold whitespace-nowrap"
+                  className="sticky top-0 z-30 px-0.5 py-1.5 text-center font-bold whitespace-nowrap"
                   style={{
                     borderBottom: '2px solid var(--rule-strong)',
                     borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
                     borderLeft: isTodayCol ? '2px solid var(--accent)' : undefined,
-                    minWidth: '80px',
+                    minWidth: '56px',
                     ...getDowStyle(d.dow, holiday),
                     background: isTodayCol ? 'var(--accent-pale-solid)' : getStickyBg(d.dow),
                     /* Phase 64: 土=青 / 日(祝)=赤 を全テキストに統一適用。
@@ -211,17 +211,18 @@ export default function ScheduleGrid({
                インライン background は CSS class より優先されるため、!important 付き Tailwind が必要。 */
             <tr key={child.id} className="group cursor-pointer transition-colors">
               <td
-                className="sticky left-0 z-20 px-4 py-3 font-semibold whitespace-nowrap group-hover:!bg-[var(--accent-pale-solid)] transition-colors"
+                className="sticky left-0 z-20 px-3 py-2 font-semibold whitespace-nowrap group-hover:!bg-[var(--accent-pale-solid)] transition-colors"
                 style={{
                   background: 'var(--white)',
                   borderBottom: '1px solid var(--rule)',
                   borderRight: '2px solid var(--rule-strong)',
                   color: 'var(--ink)',
                   boxShadow: '4px 0 6px rgba(0,0,0,0.02)',
+                  fontSize: '0.78rem',
                 }}
               >
                 <div className="group-hover:text-[var(--accent)] transition-colors">{child.name}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--ink-3)', marginTop: '2px' }}>{child.grade_label}</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--ink-3)', marginTop: '1px' }}>{child.grade_label}</div>
               </td>
               {dates.map((d) => {
                 const cell = cellMap.get(`${child.id}_${d.dateStr}`);
@@ -250,7 +251,7 @@ export default function ScheduleGrid({
                 return (
                   <td
                     key={d.dateStr}
-                    className={`px-1 py-1 text-center transition-colors ${!isRestricted ? 'cursor-pointer group-hover:!bg-[var(--accent-pale)]' : 'cursor-not-allowed'}`}
+                    className={`px-0.5 py-1 text-center transition-colors ${!isRestricted ? 'cursor-pointer group-hover:!bg-[var(--accent-pale)]' : 'cursor-not-allowed'}`}
                     style={{
                       borderBottom: '1px solid var(--rule)',
                       borderRight: isTodayCol ? '2px solid var(--accent)' : '1px solid var(--rule)',
@@ -288,50 +289,53 @@ export default function ScheduleGrid({
                       </span>
                     ) : isWaitlist ? (
                       /* Phase 64: キャンセル待ち。順番があれば「キャ待 ②」、無ければ「キャ待」。
-                         時刻もあれば下に出して「この時間でキャンセル待ち」が直感的に伝わるようにする。 */
+                         時刻もあれば下に出して「この時間でキャンセル待ち」が直感的に伝わるようにする。
+                         Phase 66: シフト表に合わせて時刻フォントを 0.68→0.62rem に圧縮。 */
                       <div className="flex flex-col gap-0 leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        <span className="text-xs font-bold" style={{ color: 'var(--ink-2)' }}>
+                        <span className="font-bold" style={{ color: 'var(--ink-2)', fontSize: '0.62rem' }}>
                           キャ待{cell?.waitlist_order ? ` ${'①②③④⑤⑥⑦⑧⑨⑩'.charAt(cell.waitlist_order - 1)}` : ''}
                         </span>
                         {cell?.pickup_time && (
-                          <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                          <span style={{ color: 'var(--ink-3)', fontSize: '0.62rem' }}>
                             {formatHM(cell.pickup_time)}
                           </span>
                         )}
                         {cell?.dropoff_time && (
-                          <span style={{ color: 'var(--ink-3)', fontSize: '0.68rem' }}>
+                          <span style={{ color: 'var(--ink-3)', fontSize: '0.62rem' }}>
                             {formatHM(cell.dropoff_time)}
                           </span>
                         )}
                       </div>
                     ) : isOff ? (
                       <span
-                        className="text-xs font-bold"
-                        style={{ color: 'var(--ink-3)' }}
+                        className="font-bold"
+                        style={{ color: 'var(--ink-3)', fontSize: '0.62rem' }}
                       >
                         お休み
                       </span>
                     ) : hasTimes ? (
+                      /* Phase 66: シフト表サイズ感に揃えるため時刻フォントを 0.72→0.66rem、
+                         記号と時刻の間のスペースを削って横幅を更に節約。 */
                       <div className="flex flex-col gap-0 leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {cell?.pickup_time && (
                           cell.pickup_method === 'self' ? (
-                            <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
-                              自 {formatHM(cell.pickup_time)}
+                            <span style={{ color: 'var(--ink-3)', fontSize: '0.66rem' }}>
+                              自{formatHM(cell.pickup_time)}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--accent)', fontSize: '0.72rem' }}>
-                              迎 {formatHM(cell.pickup_time)}
+                            <span style={{ color: 'var(--accent)', fontSize: '0.66rem' }}>
+                              迎{formatHM(cell.pickup_time)}
                             </span>
                           )
                         )}
                         {cell?.dropoff_time && (
                           cell.dropoff_method === 'self' ? (
-                            <span style={{ color: 'var(--ink-3)', fontSize: '0.72rem' }}>
-                              自 {formatHM(cell.dropoff_time)}
+                            <span style={{ color: 'var(--ink-3)', fontSize: '0.66rem' }}>
+                              自{formatHM(cell.dropoff_time)}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--green)', fontSize: '0.72rem' }}>
-                              送 {formatHM(cell.dropoff_time)}
+                            <span style={{ color: 'var(--green)', fontSize: '0.66rem' }}>
+                              送{formatHM(cell.dropoff_time)}
                             </span>
                           )
                         )}

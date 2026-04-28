@@ -12,6 +12,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import { generateShiftAssignments } from '@/lib/logic/generateShift';
+import { replaceShiftDay, type ShiftSegmentInput } from '@/lib/api/shiftAssignments';
 import ApprovalQueue from '@/components/shift/ApprovalQueue';
 import type {
   ShiftAssignmentType,
@@ -112,6 +113,14 @@ export default function ShiftPage() {
   const [startM, setStartM] = useState('00');
   const [endH, setEndH] = useState('17');
   const [endM, setEndM] = useState('00');
+  /* Phase 65: 分割シフト対応。最大 2 コマ。
+     - isSplit=false: start/end (上の 4 つ) を 1 コマ目として保存
+     - isSplit=true:  start/end を 1 コマ目、split2Start/split2End を 2 コマ目として保存 */
+  const [isSplit, setIsSplit] = useState(false);
+  const [split2StartH, setSplit2StartH] = useState('14');
+  const [split2StartM, setSplit2StartM] = useState('00');
+  const [split2EndH, setSplit2EndH] = useState('18');
+  const [split2EndM, setSplit2EndM] = useState('00');
   /* Phase 60: セル自由入力メモ（normal / public_holiday のみ） */
   const [editNote, setEditNote] = useState('');
 
@@ -293,59 +302,114 @@ export default function ShiftPage() {
   const handleCellClick = (staffId: string, date: string) => {
     /* Phase 26: 確定済みは editMode=true のときだけ編集可能 */
     if (confirmed && !editMode) return;
-    const cell = cells.find((c) => c.staff_id === staffId && c.date === date);
     const s = staff.find((x) => x.id === staffId);
-    if (cell) {
-      setEditType(cell.assignment_type);
-      if (cell.start_time) {
-        const [h, m] = cell.start_time.split(':');
-        setStartH(h); setStartM(m);
-      } else {
-        setStartH(s?.default_start_time?.split(':')[0] ?? '09');
-        setStartM(s?.default_start_time?.split(':')[1] ?? '00');
-      }
-      if (cell.end_time) {
-        const [h, m] = cell.end_time.split(':');
-        setEndH(h); setEndM(m);
-      } else {
-        setEndH(s?.default_end_time?.split(':')[0] ?? '17');
-        setEndM(s?.default_end_time?.split(':')[1] ?? '00');
-      }
+
+    /* Phase 65: 既存の normal セグメントを segment_order 順で取得。
+       2 つ以上あれば分割シフトとして復元、1 つなら単発、0 ならデフォルト値で開始。
+       off/public_holiday/paid_leave の行は分割対象外なので除外。 */
+    const allSegs = cells
+      .filter((c) => c.staff_id === staffId && c.date === date)
+      .sort((a, b) => (a.segment_order ?? 0) - (b.segment_order ?? 0));
+    const normalSegs = allSegs.filter((c) => c.assignment_type === 'normal');
+    const primaryCell = allSegs.find((c) => c.assignment_type !== 'off') ?? allSegs[0];
+
+    if (primaryCell) {
+      setEditType(primaryCell.assignment_type);
+      setEditNote(primaryCell.note ?? '');
     } else {
       setEditType('normal');
+      setEditNote('');
     }
-    setEditNote(cell?.note ?? '');
+
+    /* 1 コマ目の時刻 (normal の最初、なければ primary、なければデフォルト) */
+    const seg1 = normalSegs[0] ?? (primaryCell?.assignment_type === 'normal' ? primaryCell : null);
+    if (seg1?.start_time) {
+      const [h, m] = seg1.start_time.split(':');
+      setStartH(h); setStartM(m);
+    } else {
+      setStartH(s?.default_start_time?.split(':')[0] ?? '09');
+      setStartM(s?.default_start_time?.split(':')[1] ?? '00');
+    }
+    if (seg1?.end_time) {
+      const [h, m] = seg1.end_time.split(':');
+      setEndH(h); setEndM(m);
+    } else {
+      setEndH(s?.default_end_time?.split(':')[0] ?? '17');
+      setEndM(s?.default_end_time?.split(':')[1] ?? '00');
+    }
+
+    /* 2 コマ目: 既存に 2 件以上 normal があれば復元、なければデフォルト値 */
+    const seg2 = normalSegs[1];
+    if (seg2?.start_time && seg2?.end_time) {
+      const [h1, m1] = seg2.start_time.split(':');
+      const [h2, m2] = seg2.end_time.split(':');
+      setSplit2StartH(h1); setSplit2StartM(m1);
+      setSplit2EndH(h2); setSplit2EndM(m2);
+      setIsSplit(true);
+    } else {
+      setSplit2StartH('14'); setSplit2StartM('00');
+      setSplit2EndH('18'); setSplit2EndM('00');
+      setIsSplit(false);
+    }
+
     setEditingCell({ staffId, date });
   };
 
   const handleSave = async () => {
     if (!editingCell) return;
-    try {
-      const res = await fetch('/api/shift-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assignments: [{
-            staff_id: editingCell.staffId,
-            date: editingCell.date,
-            assignment_type: editType,
-            start_time: editType === 'normal' ? `${startH}:${startM}` : null,
-            end_time: editType === 'normal' ? `${endH}:${endM}` : null,
-            is_confirmed: confirmed,
-            /* Phase 60: normal / public_holiday / off のみメモを保存。paid_leave は null で上書き。 */
-            note:
-              (editType === 'normal' || editType === 'public_holiday' || editType === 'off') && editNote.trim()
-                ? editNote.trim()
-                : null,
-          }],
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? '保存失敗');
-      setEditingCell(null);
-      await fetchAll();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失敗');
+    /* Phase 65: replaceForDay 経由で 1 日まるごと置換。
+       segment_order の採番はサーバ側で行う（クライアント計算ロジックを廃止）。
+       これによりゴミセグメント (off + normal 同居など) も自動クリーンアップされる。 */
+    const noteForSave =
+      (editType === 'normal' || editType === 'public_holiday' || editType === 'off') && editNote.trim()
+        ? editNote.trim()
+        : null;
+
+    let segments: ShiftSegmentInput[];
+    if (editType === 'normal') {
+      const seg1Time = {
+        start: `${startH.padStart(2, '0')}:${startM.padStart(2, '0')}`,
+        end: `${endH.padStart(2, '0')}:${endM.padStart(2, '0')}`,
+      };
+      if (isSplit) {
+        const seg2Time = {
+          start: `${split2StartH.padStart(2, '0')}:${split2StartM.padStart(2, '0')}`,
+          end: `${split2EndH.padStart(2, '0')}:${split2EndM.padStart(2, '0')}`,
+        };
+        /* 開始時刻の早い方を 1 コマ目に。表示順を時系列で揃える。
+           メモは時系列の 1 コマ目に紐付ける。 */
+        const [first, second] = seg1Time.start <= seg2Time.start
+          ? [seg1Time, seg2Time]
+          : [seg2Time, seg1Time];
+        segments = [
+          { start_time: first.start, end_time: first.end, assignment_type: 'normal', note: noteForSave },
+          { start_time: second.start, end_time: second.end, assignment_type: 'normal', note: null },
+        ];
+      } else {
+        segments = [{
+          start_time: seg1Time.start,
+          end_time: seg1Time.end,
+          assignment_type: 'normal',
+          note: noteForSave,
+        }];
+      }
+    } else {
+      /* normal 以外 (公休/有給/休み) は時刻なしの 1 行のみ */
+      segments = [{
+        start_time: null,
+        end_time: null,
+        assignment_type: editType,
+        note: noteForSave,
+      }];
     }
+
+    const result = await replaceShiftDay(editingCell.staffId, editingCell.date, segments, confirmed);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    setEditingCell(null);
+    await fetchAll();
   };
 
   const editingStaff = editingCell ? staff.find((s) => s.id === editingCell.staffId) : null;
@@ -586,8 +650,23 @@ export default function ShiftPage() {
 
             {editType === 'normal' && (
               <div className="flex flex-col gap-4 mt-2 p-4 rounded-lg" style={{ background: 'var(--bg)' }}>
+                {/* Phase 65: 分割シフトトグル。最大 2 コマ。両方の時間を同時表示する。 */}
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isSplit}
+                    onChange={(e) => setIsSplit(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>
+                    分割シフト（午前・午後など 2 コマに分けて勤務）
+                  </span>
+                </label>
+
                 <div>
-                  <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>勤務時間</label>
+                  <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>
+                    {isSplit ? '1 コマ目' : '勤務時間'}
+                  </label>
                   <div className="flex items-center gap-2">
                     <input type="text" value={startH} onChange={(e) => setStartH(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                     <span className="font-bold">:</span>
@@ -598,6 +677,22 @@ export default function ShiftPage() {
                     <input type="text" value={endM} onChange={(e) => setEndM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
                   </div>
                 </div>
+
+                {/* Phase 65: 分割 ON のとき 2 コマ目を 1 コマ目と同時表示（張り出し用に両方見えてほしい） */}
+                {isSplit && (
+                  <div>
+                    <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--ink-2)' }}>2 コマ目</label>
+                    <div className="flex items-center gap-2">
+                      <input type="text" value={split2StartH} onChange={(e) => setSplit2StartH(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
+                      <span className="font-bold">:</span>
+                      <input type="text" value={split2StartM} onChange={(e) => setSplit2StartM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
+                      <span className="mx-2 text-gray-400">〜</span>
+                      <input type="text" value={split2EndH} onChange={(e) => setSplit2EndH(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
+                      <span className="font-bold">:</span>
+                      <input type="text" value={split2EndM} onChange={(e) => setSplit2EndM(e.target.value.slice(0,2))} className="w-12 text-center font-bold text-lg bg-transparent border-b-2 border-[var(--accent)] outline-none" />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

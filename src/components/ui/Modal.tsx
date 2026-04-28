@@ -47,10 +47,13 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ヘッダー */}
+        {/* ヘッダー (Phase 65: sticky 化。コンテンツが長くスクロールしてもタイトルと × ボタンが常に見える) */}
         <div
-          className="flex items-center justify-between px-6 py-4"
-          style={{ borderBottom: '1px solid var(--rule)' }}
+          className="flex items-center justify-between px-6 py-4 sticky top-0 z-10"
+          style={{
+            borderBottom: '1px solid var(--rule)',
+            background: 'var(--white)',
+          }}
         >
           <h2
             className="text-lg font-bold"
